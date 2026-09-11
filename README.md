@@ -81,9 +81,9 @@ Se uma etapa falhar, a SAGA executa operações compensatórias para reabrir o c
 | Integrante | GitHub |
 | --- | --- |
 | Gabriel Soares | [@gxbreus](https://github.com/gxbreus) |
-| Integrante a confirmar | GitHub a confirmar |
-| Integrante a confirmar | GitHub a confirmar |
-| Integrante a confirmar | GitHub a confirmar |
+| Gabriel Cantanhede | [@gabrlcant](https://github.com/gabrlcant) |
+| Gabriel Nakazato | [@Gabriel-Nakazato](https://github.com/Gabriel-Nakazato) |
+| Mateus Vitor Ferreira | [@mateus-vitor-ferreira-dev](https://github.com/mateus-vitor-ferreira-dev) |
 
 ## Execução local
 
