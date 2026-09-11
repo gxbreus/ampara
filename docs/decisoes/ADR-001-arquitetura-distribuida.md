@@ -1,19 +1,23 @@
-# ADR 001: Arquitetura distribuída por domínio
+# ADR 001: Arquitetura técnica preliminar
 
-- Status: aceita para a Parte 1
+- Status: preliminar para a Parte 1
 - Data: 2026-09-11
 
 ## Contexto
 
-A disciplina exige quatro microsserviços independentes, bancos separados, dois clientes e uma transação de negócio que atravesse ao menos três serviços.
+A apresentação em sala incluirá a arquitetura a pedido do professor. O sistema deve demonstrar quatro microsserviços independentes, um banco por serviço, dois clientes distintos e uma transação SAGA que atravesse ao menos três serviços.
 
 ## Decisão
 
-Separar o sistema em Identidade, Animais, Adoção e Notificações. Identidade usa Node.js, NestJS e PostgreSQL. Animais usa Python, FastAPI e MongoDB. Adoção usa Go e PostgreSQL e orquestra a SAGA. Notificações usa Python, FastAPI e Redis. Um API Gateway recebe as chamadas dos clientes e o RabbitMQ distribui eventos.
+- **Identidade:** Node.js/NestJS com PostgreSQL. Cadastro e autenticação de protetores, ONGs e adotantes.
+- **Animais:** Python/FastAPI com MongoDB. Cadastro de animais, fotos, status e localização.
+- **Adoção:** Go com PostgreSQL. Conduz o processo de adoção ponta a ponta e orquestra a SAGA.
+- **Notificações:** Python/FastAPI com Redis. Envio de notificações a cada etapa relevante.
+- **Clientes:** App Web para protetores e ONGs e App Mobile para adotantes.
+- **Comunicação:** API Gateway para roteamento e validação de JWT e RabbitMQ como barramento de eventos.
 
-## Consequências
+## SAGA
 
-- cada equipe de serviço controla seu modelo de dados;
-- falhas parciais exigem idempotência, retentativas e operações compensatórias;
-- consultas que combinem vários domínios não poderão depender de `JOIN` entre bancos;
-- contratos de API e eventos precisam de versionamento.
+O serviço de Adoção reserva o animal em Animais, valida o perfil do adotante em Identidade, publica um evento no RabbitMQ e aciona Notificações para avisar o protetor ou a ONG responsável.
+
+Se a solicitação for recusada ou expirar, a compensação libera a reserva do animal e Notificações avisa o adotante.
