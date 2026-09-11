@@ -1,4 +1,4 @@
-# Arquitetura da AjudaPet
+# Arquitetura da Ampara
 
 ## Visão geral
 
@@ -68,4 +68,3 @@ sequenceDiagram
 ```
 
 Em uma falha, cada serviço executa sua compensação. O fluxo pode restaurar a vaga, devolver o animal ao estado disponível e reabrir a ocorrência.
-

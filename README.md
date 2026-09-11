@@ -1,12 +1,14 @@
-# AjudaPet
+# Ampara
 
 Plataforma distribuída para coordenar ocorrências de animais perdidos ou abandonados, conectar cidadãos a protetores e ONGs e acompanhar o caso até o reencontro ou a adoção responsável.
+
+O nome **Ampara** representa a ação central da plataforma: oferecer proteção ao animal enquanto a rede organiza localização, acolhimento e adoção segura.
 
 ## Problema
 
 Informações sobre animais perdidos e abandonados costumam ficar espalhadas entre redes sociais, grupos de mensagens e contatos informais. Ao mesmo tempo, protetores e ONGs trabalham com capacidade limitada e sem um histórico compartilhado do atendimento.
 
-A AjudaPet propõe organizar esse fluxo sem transformar a solução em um simples cadastro. Cada ocorrência terá localização, responsável, mudanças de estado e um desfecho verificável.
+A Ampara propõe organizar esse fluxo sem transformar a solução em um simples cadastro. Cada ocorrência terá localização, responsável, mudanças de estado e um desfecho verificável.
 
 ## Impacto social
 
@@ -111,4 +113,3 @@ O desenvolvimento partirá da branch `develop`. Cada funcionalidade terá uma br
 - [Ministério da Saúde - Raiva Animal](https://www.gov.br/saude/pt-br/assuntos/saude-de-a-a-z/r/raiva/raiva-animal)
 - [Ciência Rural - Características demográficas de cães e gatos de Votorantim](https://www.scielo.br/j/cr/a/3DqtCTw7BYsnqtFqyqFWndn/?format=html)
 - [PubMed - Abundance, survival, recruitment and effectiveness of sterilization of free-roaming dogs](https://pubmed.ncbi.nlm.nih.gov/29091961/)
-
