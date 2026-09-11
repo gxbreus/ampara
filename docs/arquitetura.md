@@ -1,59 +1,48 @@
-# Arquitetura da Ampara
+# Arquitetura técnica preliminar da Ampara
 
-## Visão geral
+A arquitetura segue o slide final apresentado pelo grupo: quatro microsserviços independentes, um banco por serviço, dois clientes e uma SAGA orquestrada.
 
 ```mermaid
 flowchart TB
-    Mobile[Aplicativo mobile] --> Gateway[API Gateway]
-    Web[Painel web] --> Gateway
+    Web[App Web<br/>Protetores e ONGs] --> Gateway[API Gateway<br/>roteamento e validação de JWT]
+    Mobile[App Mobile<br/>Adotantes] --> Gateway
 
-    Gateway --> Identidade[Microsserviço de Identidade]
-    Gateway --> Animais[Microsserviço de Animais]
-    Gateway --> Adocao[Microsserviço de Adoção]
-    Gateway --> Notificacoes[Microsserviço de Notificações]
+    Gateway --> Identidade[Identidade<br/>Node.js / NestJS]
+    Gateway --> Animais[Animais<br/>Python / FastAPI]
+    Gateway --> Adocao[Adoção<br/>Go<br/>orquestrador SAGA]
+    Gateway --> Notificacoes[Notificações<br/>Python / FastAPI]
 
-    Identidade --> DB1[(PostgreSQL)]
-    Animais --> DB2[(MongoDB)]
-    Adocao --> DB3[(PostgreSQL)]
-    Notificacoes --> DB4[(Redis)]
+    Identidade --> PostgreSQLIdentidade[(PostgreSQL)]
+    Animais --> MongoDB[(MongoDB)]
+    Adocao --> PostgreSQLAdocao[(PostgreSQL)]
+    Notificacoes --> Redis[(Redis)]
 
-    Identidade <--> Eventos[RabbitMQ]
-    Animais <--> Eventos
-    Adocao <--> Eventos
-    Notificacoes <--> Eventos
+    Identidade <--> RabbitMQ[RabbitMQ<br/>barramento de eventos]
+    Animais <--> RabbitMQ
+    Adocao <--> RabbitMQ
+    Notificacoes <--> RabbitMQ
 ```
 
-## Responsabilidades
+## Microsserviços
 
-### Identidade
-
-Usa Node.js, NestJS e PostgreSQL. Mantém o cadastro, a autenticação e os perfis de protetores, ONGs e adotantes.
-
-### Animais
-
-Usa Python, FastAPI e MongoDB. Mantém cadastro, fotos, estado e localização. Também controla a reserva temporária durante uma solicitação de adoção.
-
-### Adoção
-
-Usa Go e PostgreSQL. Conduz o processo de adoção e atua como orquestrador da SAGA.
-
-### Notificações
-
-Usa Python, FastAPI e Redis. Envia avisos aos protetores, ONGs e adotantes nas etapas relevantes.
-
-## Comunicação
-
-- **API Gateway:** concentra roteamento e validação de JWT.
-- **REST:** consultas e comandos que exigem resposta imediata passam pelo gateway.
-- **Eventos:** mudanças relevantes são publicadas no RabbitMQ para reduzir o acoplamento entre serviços.
-- **Dados:** cada serviço possui banco e credenciais próprios. Não existem consultas diretas ao banco de outro domínio.
+| Microsserviço | Tecnologia | Banco próprio | Responsabilidade |
+| --- | --- | --- | --- |
+| **Identidade** | Node.js / NestJS | PostgreSQL | Cadastro e autenticação de protetores, ONGs e adotantes. |
+| **Animais** | Python / FastAPI | MongoDB | Cadastro de animais, fotos, status e localização. |
+| **Adoção** | Go | PostgreSQL | Conduz o processo de adoção ponta a ponta e orquestra a SAGA. |
+| **Notificações** | Python / FastAPI | Redis | Envio de notificações a cada etapa relevante. |
 
 ## Clientes
 
-- O aplicativo web permite que protetores e ONGs gerenciem animais e adoções.
-- O aplicativo mobile permite que adotantes busquem animais próximos, solicitem adoções e recebam notificações.
+- **App Web:** voltado a protetores e ONGs, para gestão de animais e adoções.
+- **App Mobile:** voltado a adotantes, com busca geolocalizada e notificações push.
 
-## SAGA de conclusão da adoção
+## Comunicação entre serviços
+
+- **API Gateway:** porta de entrada única, responsável pelo roteamento e pela validação de JWT.
+- **RabbitMQ:** barramento de eventos para a comunicação assíncrona entre os serviços.
+
+## Transação SAGA: processo de adoção
 
 ```mermaid
 sequenceDiagram
@@ -63,13 +52,15 @@ sequenceDiagram
     participant R as RabbitMQ
     participant N as Notificações
 
-    A->>AN: Reservar animal
+    A->>AN: Reservar o animal
     AN-->>A: Reserva confirmada
-    A->>I: Validar perfil do adotante
-    I-->>A: Perfil válido
-    A->>R: Publicar solicitação de adoção
+    A->>I: Validar o perfil do adotante
+    I-->>A: Perfil validado
+    A->>R: Publicar evento
     R->>N: Entregar evento
-    N-->>A: Avisar protetor ou ONG
+    N-->>A: Avisar o protetor ou a ONG
 ```
 
-Se a solicitação for recusada ou expirar, o orquestrador solicita que Animais libere a reserva e publica um evento para Notificações avisar o adotante.
+A solicitação de adoção atravessa quatro serviços: o serviço de Adoção reserva o animal junto ao serviço de Animais, valida o perfil do adotante junto ao serviço de Identidade e publica um evento no barramento. O serviço de Notificações avisa o protetor ou a ONG responsável para aprovação.
+
+Se a solicitação for recusada ou expirar, uma transação de compensação libera a reserva do animal e notifica o adotante, garantindo que nenhum animal fique preso a um pedido pendente indefinidamente.
