@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ampara-logo-branca-fundo.png" alt="Logo da Ampara: uma pata com a almofada central inspirada na letra A" width="150" />
+</p>
+
 # Ampara
 
 **Conectando protetores, ONGs e adotantes para dar um novo lar a quem precisa.**
