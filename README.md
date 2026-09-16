@@ -151,7 +151,6 @@ A Parte 1 corresponde à concepção do projeto. Ainda não há uma implementaç
 | [Documento de concepção](docs/apresentacao/Ampara_Documento_Parte1.pdf) | problema, referências, impacto social e proposta inicial |
 | [Decisão arquitetural](docs/decisoes/ADR-001-arquitetura-distribuida.md) | registro da arquitetura escolhida para a Parte 1 |
 | [Contratos](docs/contratos/README.md) | convenções para os futuros contratos HTTP e eventos |
-| [Roteiro da apresentação](docs/roteiro-apresentacao.md) | divisão da apresentação do GitHub entre os quatro integrantes |
 
 ## Organização do repositório
 
@@ -161,8 +160,7 @@ A Parte 1 corresponde à concepção do projeto. Ainda não há uma implementaç
 │   ├── apresentacao/
 │   ├── contratos/
 │   ├── decisoes/
-│   ├── arquitetura.md
-│   └── roteiro-apresentacao.md
+│   └── arquitetura.md
 ├── CONTRIBUTING.md
 └── README.md
 ```
