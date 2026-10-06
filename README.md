@@ -155,6 +155,9 @@ A Parte 1 corresponde à concepção do projeto. Ainda não há uma implementaç
 | [Documento de concepção](docs/apresentacao/Ampara_Documento_Parte1.pdf) | problema, referências, impacto social e proposta inicial |
 | [Decisão arquitetural](docs/decisoes/ADR-001-arquitetura-distribuida.md) | registro da arquitetura escolhida para a Parte 1 |
 | [Contratos](docs/contratos/README.md) | convenções para os futuros contratos HTTP e eventos |
+| [Requisitos](docs/requisitos.md) | requisitos das Partes 2 a 4, lacunas da arquitetura atual, histórias de usuário e MVP |
+| [Planejamento](docs/planejamento.md) | escopo, divisão por integrante, cronograma, riscos e kickoff |
+| [Board](https://github.com/users/mateus-vitor-ferreira-dev/projects/7) | tarefas por entrega, semana e integrante |
 
 ## Organização do repositório
 
