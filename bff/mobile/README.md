@@ -4,7 +4,7 @@ Backend for Frontend do **App Mobile** (adotantes): respostas enxutas, distânci
 
 | | |
 | --- | --- |
-| **Stack** | Node.js 20 + TypeScript + Fastify |
+| **Stack** | Node.js 22 + TypeScript + Fastify |
 | **Porta interna** | `3020` |
 | **Rota no gateway** | `/mobile/v1` |
 | **Banco** | nenhum (agrega dados dos serviços) |
