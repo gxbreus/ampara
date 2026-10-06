@@ -8,6 +8,7 @@ info:
     à rede interna e são consumidas pelos BFFs e serviços.
   license:
     name: UNLICENSED
+    identifier: LicenseRef-Proprietary
 servers:
   - url: http://identidade:3001
     description: Rede interna
