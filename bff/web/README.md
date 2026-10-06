@@ -4,7 +4,7 @@ Backend for Frontend do **App Web** (protetores, ONGs e admin): respostas comple
 
 | | |
 | --- | --- |
-| **Stack** | Node.js 20 + TypeScript + Fastify |
+| **Stack** | Node.js 22 + TypeScript + Fastify |
 | **Porta interna** | `3010` |
 | **Rota no gateway** | `/web/v1` |
 | **Banco** | nenhum (agrega dados dos serviços) |
