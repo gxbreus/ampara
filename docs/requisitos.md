@@ -324,7 +324,7 @@ Votadas de forma assíncrona; o grupo aprovou todas as recomendações.
 | 4 | Base vetorial do Assistente | Qdrant + cache de respostas em `redis-assistente` |
 | 5 | App Web | React + Vite |
 | 6 | App Mobile | Expo (React Native) |
-| 7 | LLM e orçamento | Claude Haiku 4.5 via API, Ollama local de fallback e embeddings locais multilíngues (ex.: `bge-m3`) |
+| 7 | LLM e orçamento | custo zero: free tier da Groq como modelo principal (ex.: `gpt-oss-120b`, com suporte a tools), Ollama local como fallback e embeddings locais multilíngues (ex.: `bge-m3`); a troca de provedor depende só de variáveis de ambiente (#67) |
 | 8 | Cluster local | kind |
 | 9 | Fotos dos animais | URL no MVP |
 | 10 | Algoritmo do JWT | RS256: a Identidade assina; gateway, BFFs e serviços validam com a chave pública |
@@ -339,4 +339,4 @@ Votadas de forma assíncrona; o grupo aprovou todas as recomendações.
 ## 12. Premissas e pontos a confirmar
 
 1. Canal assíncrono do grupo para o check-in semanal (WhatsApp, Discord ou discussões do GitHub). *(a confirmar)*
-2. Quem cria e guarda a chave de API do LLM e como ela chega ao Kubernetes (Secret criado à mão, nunca no repositório). *(a confirmar)*
+2. Quem cria a chave da Groq usada na demo e como ela chega ao Kubernetes (Secret criado à mão, nunca no repositório). Para desenvolvimento, cada integrante usa a própria chave, porque o limite do free tier vale por organização. *(a confirmar)*

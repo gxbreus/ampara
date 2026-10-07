@@ -130,7 +130,7 @@ As tarefas estão no [AMPARA — Board](https://github.com/users/mateus-vitor-fe
 ## 7. Premissas
 
 - Os 4 integrantes concordam com a divisão do §4. Se não concordarem, a tabela é refeita antes do fim da S1.
-- Haverá orçamento pequeno para a API do LLM, na casa de dezenas de reais. Sem orçamento, o plano é usar o Ollama local como modelo principal, o que muda a análise de custo.
+- O LLM não tem orçamento: o modelo principal é o free tier da Groq, com o Ollama local de fallback (decisão do kickoff, item 7). A análise de custo da #70 calcula quanto as mesmas perguntas custariam no plano pago.
 - As máquinas do grupo rodam Docker e kind/Minikube com pelo menos 8 GB livres. Caso contrário, os manifests vão reduzir as réplicas e um cluster pode ser compartilhado.
 
 ## 8. Riscos e mitigação
