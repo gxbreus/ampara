@@ -11,12 +11,17 @@
 #   animais:
 #     build: ./services/animais
 #     image: ampara/animais:dev
-#     env_file: .env
+#     environment:                      # só as variáveis deste serviço, nunca o .env inteiro
+#       ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
+#       ANIMAIS_AMQP_URL: amqp://animais:${RABBITMQ_ANIMAIS_PASSWORD}@rabbitmq:5672/
 #     networks: [services, data-animais]
 #     depends_on:
 #       mongo-animais: { condition: service_healthy }
 #       rabbitmq: { condition: service_healthy }
 #     deploy: { resources: { limits: { memory: 256m } } }
+#
+# Cada serviço recebe por `environment:` só as variáveis dele: com `env_file: .env`, um
+# serviço comprometido leria as senhas de todos os bancos.
 #
 # Só o gateway publica porta para fora (8000:8000). Serviços e bancos não usam `ports:`;
 # a exceção é o painel do RabbitMQ, apenas em desenvolvimento.
