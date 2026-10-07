@@ -99,6 +99,35 @@ func (r *Repositorio) Aplicar(ctx context.Context, sagaID string, ev saga.Evento
 	return saida, err
 }
 
+// AplicarResposta processa uma resposta de participante: grava o messageId na inbox e
+// aplica a transição na MESMA transação. Se a inbox já tinha o messageId, a resposta é
+// repetida (reentrega do broker) e nada é aplicado: duplicada volta true.
+func (r *Repositorio) AplicarResposta(ctx context.Context, messageID, tipo, sagaID string, ev saga.Evento) (saida saga.Saida, duplicada bool, err error) {
+	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `INSERT INTO inbox (message_id, tipo) VALUES ($1, $2) ON CONFLICT DO NOTHING`, messageID, tipo)
+		if err != nil {
+			return fmt.Errorf("gravar inbox: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			duplicada = true
+			return nil
+		}
+		antes, correlationID, err := carregar(ctx, tx, sagaID)
+		if err != nil {
+			return err
+		}
+		saida, err = saga.Transicao(antes, ev, r.regras())
+		if err != nil {
+			return err
+		}
+		if saida.Ignorada {
+			return nil // a inbox fica gravada: a mesma mensagem não será reavaliada
+		}
+		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
+	})
+	return saida, duplicada, err
+}
+
 func carregar(ctx context.Context, tx pgx.Tx, id string) (saga.Solicitacao, string, error) {
 	var (
 		s                                      saga.Solicitacao

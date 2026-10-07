@@ -10,6 +10,10 @@ import (
 // ErrEstadoNaoPermite: a ação não é válida no estado atual (a API responde 409).
 var ErrEstadoNaoPermite = errors.New("o estado atual não permite a ação")
 
+// ErrRespostaInesperada: o evento não faz sentido no estado atual. É definitivo: a mesma
+// mensagem falharia sempre, então o consumidor a manda para a DLQ.
+var ErrRespostaInesperada = errors.New("evento inesperado para o estado")
+
 const (
 	exComandos = "ampara.comandos"
 	exEventos  = "ampara.eventos"
@@ -122,7 +126,7 @@ func resposta(out Saida, ev Evento, r Regras) (Saida, error) {
 	s := out.Solicitacao
 	passo, ok := passoDaResposta[ev.Tipo]
 	if !ok {
-		return out, fmt.Errorf("evento desconhecido: %s", ev.Tipo)
+		return out, fmt.Errorf("%w: evento desconhecido %s", ErrRespostaInesperada, ev.Tipo)
 	}
 	info, existe := s.Passos[passo]
 	// um passo esgotado (#86) ainda aceita a resposta: é o participante voltando
@@ -235,7 +239,7 @@ func resposta(out Saida, ev Evento, r Regras) (Saida, error) {
 		out.Passos = append(out.Passos, AlteracaoPasso{passo, Concluir})
 		return out, nil
 	}
-	return out, fmt.Errorf("%s não é esperado em %s", ev.Tipo, s.Estado)
+	return out, fmt.Errorf("%w: %s em %s", ErrRespostaInesperada, ev.Tipo, s.Estado)
 }
 
 var passoDaResposta = map[TipoEvento]Passo{
