@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ampara
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  # chave pública do JWT: não é segredo, mas é gerada por ambiente (scripts/k8s-prep.sh)
+  - name: bff-web-jwt
+    files: [JWT_PUBLIC_KEY=jwt.pub]
+generatorOptions:
+  disableNameSuffixHash: true

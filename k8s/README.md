@@ -66,6 +66,16 @@ Cada linha é uma de duas formas, e nenhuma tem valor de senha:
 
 O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porque só a Identidade assina tokens. A chave **pública** vai para `k8s/gateway/jwt.pub` e para as pastas dos BFFs, que só validam. Cada arquivo só é gerado se a pasta existir.
 
+## Componentes
+
+| Pasta | Recursos | Observação |
+| --- | --- | --- |
+| `rabbitmq/` | StatefulSet (1 réplica, PVC 1 Gi) e Service 5672/15672 | a imagem `ampara/rabbitmq:dev` já traz a topologia e cria um usuário por serviço a partir do `rabbitmq-secret` |
+| `adocao/` | Deployment (2 réplicas), Service 8080, ConfigMap e StatefulSet `postgres-adocao` (PVC 1 Gi) | o pod do serviço recebe só `ADOCAO_DATABASE_URL` e `ADOCAO_AMQP_URL`; as credenciais de superusuário ficam com o banco |
+| `bff-web/` | Deployment (2 réplicas), Service 3010 e ConfigMaps | a chave pública do JWT vem do `jwt.pub` gerado pelo `k8s-prep.sh` |
+
+O BFF Web usa `/web/v1/health` também como readiness. O `/web/v1/ready` dele checa os serviços chamados: como readiness, um serviço fora do ar tiraria o BFF inteiro do balanceamento, quando o contrato prevê resposta parcial com `avisos[]` (#29).
+
 ## Regras para os manifests
 
 - `image: ampara/<nome>:dev` com `imagePullPolicy: IfNotPresent`. Com a tag `latest`, o padrão vira `Always` e o kind tenta baixar a imagem do Docker Hub.
