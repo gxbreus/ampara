@@ -1,21 +1,76 @@
 # Kubernetes
 
-Manifests para o cluster local (kind), no namespace `ampara`. Uma pasta por componente, cada uma com Deployment, Service, ConfigMap e o template do Secret:
+Manifests para o cluster local ([kind](https://kind.sigs.k8s.io/)), no namespace `ampara`, organizados com kustomize. Nenhuma credencial é versionada: os Secrets são gerados a partir de um `secret.env` local, que o Git ignora.
 
-```text
-k8s/
-├── base/            namespace, Secrets (gerados por scripts/k8s-prep.sh, fora do Git)
-├── gateway/         Kong Ingress Controller e Ingress
-├── identidade/      + postgres-identidade
-├── animais/         + mongo-animais
-├── adocao/          + postgres-adocao
-├── notificacoes/    + redis-notificacoes
-├── assistente/      + qdrant-assistente e redis-assistente
-├── bff-web/
-├── bff-mobile/
-└── rabbitmq/
+## Subir do zero
+
+Pré-requisitos: Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) e `kubectl` (o kustomize já vem nele).
+
+```bash
+# 1. variáveis e chaves (as mesmas do docker compose)
+cp .env.example .env
+./scripts/gerar-chaves-jwt.sh
+# preencha usuários e senhas no .env
+
+# 2. cluster com 1 control-plane e 2 workers
+kind create cluster --config k8s/kind-config.yaml
+
+# 3. secret.env de cada componente e as chaves JWT nas pastas que precisam
+./scripts/k8s-prep.sh
+
+# 4. imagens: o kind não enxerga as imagens do Docker local, é preciso carregá-las
+docker compose build
+for img in rabbitmq adocao bff-web; do kind load docker-image ampara/$img:dev --name ampara; done
+
+# 5. tudo
+kubectl apply -k k8s/
+kubectl get pods -n ampara -o wide -w
 ```
 
-Nenhuma credencial é versionada: os Secrets vêm de um `secret.env` local, ignorado pelo Git.
+Para apagar o cluster: `kind delete cluster --name ampara`.
 
-**Issues:** #46, #47, #48, #49 (manifests), #50 (Ingress), #51 (escalabilidade)
+## Padrão de pasta
+
+Cada componente tem a própria pasta, listada em `k8s/kustomization.yaml`:
+
+```text
+k8s/<componente>/
+├── kustomization.yaml     namespace ampara, recursos e o secretGenerator
+├── deployment.yaml        ou statefulset.yaml, para bancos e broker
+├── service.yaml
+├── configmap.yaml         configuração que não é segredo
+├── secret.env.example     versionado, sem valores
+└── secret.env             gerado pelo k8s-prep.sh, ignorado pelo Git
+```
+
+O Secret sai do `secretGenerator`, nunca de um YAML com `stringData`:
+
+```yaml
+secretGenerator:
+  - name: adocao-secret
+    envs: [secret.env]
+generatorOptions:
+  disableNameSuffixHash: true
+```
+
+### Como escrever o `secret.env.example`
+
+Cada linha é uma de duas formas, e nenhuma tem valor de senha:
+
+| Linha | O `k8s-prep.sh` grava |
+| --- | --- |
+| `POSTGRES_PASSWORD=` | o valor de `POSTGRES_PASSWORD` do `.env` |
+| `ADOCAO_DATABASE_URL=postgres://${ADOCAO_DB_USER}:${ADOCAO_DB_PASSWORD}@postgres-adocao:5432/adocao?sslmode=disable` | o modelo com cada `${VAR}` trocado pelo valor do `.env` |
+
+### Chaves do JWT
+
+O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porque só a Identidade assina tokens. A chave **pública** vai para `k8s/gateway/jwt.pub` e para as pastas dos BFFs, que só validam. Cada arquivo só é gerado se a pasta existir.
+
+## Regras para os manifests
+
+- `image: ampara/<nome>:dev` com `imagePullPolicy: IfNotPresent`. Com a tag `latest`, o padrão vira `Always` e o kind tenta baixar a imagem do Docker Hub.
+- Readiness em `/ready` e liveness em `/health`. A liveness nunca aponta para `/ready`: com o banco fora, o pod reiniciaria em loop.
+- O `selector` do Deployment precisa bater com os `labels` do template.
+- Bancos são StatefulSets com `volumeClaimTemplates` e um Service headless (`clusterIP: None`).
+- No PostgreSQL, defina `PGDATA=/var/lib/postgresql/data/pgdata`: o volume do kind cria `lost+found`, e o Postgres recusa um diretório que não esteja vazio.
+- Cada serviço recebe no Secret só a própria credencial, inclusive a do RabbitMQ (um usuário por serviço, #89).
