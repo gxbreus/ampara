@@ -152,6 +152,29 @@ services:
     deploy: { resources: { limits: { memory: 512m } } }
     restart: unless-stopped
 
+  adocao:
+    build: ./services/adocao
+    image: ampara/adocao:dev
+    environment:
+      ADOCAO_DATABASE_URL: postgres://${ADOCAO_DB_USER}:${ADOCAO_DB_PASSWORD}@postgres-adocao:5432/adocao?sslmode=disable
+      ADOCAO_AMQP_URL: amqp://adocao:${RABBITMQ_ADOCAO_PASSWORD}@rabbitmq:5672/
+      ADOCAO_TIMEOUT_PASSO: ${ADOCAO_TIMEOUT_PASSO:-10s}
+      ADOCAO_PRAZO_EXPIRACAO: ${ADOCAO_PRAZO_EXPIRACAO:-72h}
+      ADOCAO_MAX_REENVIOS_COMPENSACAO: ${ADOCAO_MAX_REENVIOS_COMPENSACAO:-10}
+    networks: [services, data-adocao]
+    depends_on:
+      postgres-adocao: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      # a imagem distroless não tem curl: o próprio binário confere o /health
+      test: ["CMD", "/adocao", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
 networks:
   edge: {}
   services: {}

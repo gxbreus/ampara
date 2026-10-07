@@ -9,7 +9,22 @@ Solicitações de adoção e **orquestrador da SAGA**: máquina de estados persi
 | **Banco** | PostgreSQL (`postgres-adocao`) |
 | **Responsável** | Mateus Vitor |
 
-Ainda não há código aqui. O esqueleto (`/health`, `/ready`, Dockerfile multi-stage) é criado na issue de esqueleto abaixo.
+## Rodar
+
+```bash
+docker compose up -d --build adocao   # sobe também o postgres-adocao e o RabbitMQ
+go test ./...                          # testes, dentro de services/adocao
+```
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /health` | 200 enquanto o processo está de pé |
+| `GET /ready` | 200 se o PostgreSQL responde em até 2 s; 503 com *problem details* se não |
+
+- **Configuração:** só por variáveis de ambiente (`ADOCAO_DATABASE_URL`, `ADOCAO_PORTA`); o `compose.yaml` monta a URL do banco a partir do `.env`.
+- **Migrations:** ficam em `internal/db/migrations/`, embutidas no binário com `go:embed`, e são aplicadas na subida.
+- **Healthcheck:** a imagem final é distroless, sem shell nem `curl`, então o contêiner usa o subcomando `/adocao healthcheck`.
+- **Logs:** JSON (`log/slog`), com `correlationId` em toda requisição. Toda resposta traz `X-Served-By` e `X-Correlation-Id`.
 
 ## Issues
 

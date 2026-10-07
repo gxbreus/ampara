@@ -6,7 +6,7 @@ Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage 
 | --- | ---: | ---: | ---: | --- |
 | `ampara/identidade` | | | | |
 | `ampara/animais` | | | | |
-| `ampara/adocao` | | | | |
+| `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
 | `ampara/notificacoes` | | | | |
 | `ampara/assistente` | | | | |
 | `ampara/bff-web` | | | | |
