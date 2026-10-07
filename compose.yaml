@@ -1,0 +1,170 @@
+# Ampara: sistema completo com um comando.
+#
+#   cp .env.example .env
+#   ./scripts/gerar-chaves-jwt.sh      # par RS256 do JWT
+#   # preencha as senhas no .env
+#   docker compose up -d --build
+#
+# Esta é a base (#37): bancos, broker, redes e volumes. Cada dono acrescenta o bloco do
+# próprio serviço (#38 a #45) seguindo este modelo:
+#
+#   animais:
+#     build: ./services/animais
+#     image: ampara/animais:dev
+#     environment:                      # só as variáveis deste serviço, nunca o .env inteiro
+#       ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
+#       ANIMAIS_AMQP_URL: amqp://animais:${RABBITMQ_ANIMAIS_PASSWORD}@rabbitmq:5672/
+#     networks: [services, data-animais]
+#     depends_on:
+#       mongo-animais: { condition: service_healthy }
+#       rabbitmq: { condition: service_healthy }
+#     deploy: { resources: { limits: { memory: 256m } } }
+#
+# Cada serviço recebe por `environment:` só as variáveis dele: com `env_file: .env`, um
+# serviço comprometido leria as senhas de todos os bancos.
+#
+# Só o gateway publica porta para fora (8000:8000). Serviços e bancos não usam `ports:`;
+# a exceção é o painel do RabbitMQ, apenas em desenvolvimento.
+
+name: ampara
+
+services:
+  postgres-identidade:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: identidade
+      POSTGRES_USER: ${IDENTIDADE_DB_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${IDENTIDADE_DB_PASSWORD:?defina no .env}
+    volumes: [pg-identidade:/var/lib/postgresql/data]
+    networks: [data-identidade]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d identidade"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
+  mongo-animais:
+    build: ./infra/mongo
+    image: ampara/mongo:dev
+    hostname: mongo-animais
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${ANIMAIS_DB_USER:?defina no .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${ANIMAIS_DB_PASSWORD:?defina no .env}
+    volumes: [mongo-animais:/data/db]
+    networks: [data-animais]
+    healthcheck:
+      # na primeira vez inicia o replica set; depois só confere se ele está de pé
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --quiet --eval
+          "try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-animais:27017'}]}).ok }"
+          | grep -q 1
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    deploy: { resources: { limits: { memory: 512m } } }
+    restart: unless-stopped
+
+  postgres-adocao:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: adocao
+      POSTGRES_USER: ${ADOCAO_DB_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${ADOCAO_DB_PASSWORD:?defina no .env}
+    volumes: [pg-adocao:/var/lib/postgresql/data]
+    networks: [data-adocao]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d adocao"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
+  redis-notificacoes:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
+    environment:
+      REDISCLI_AUTH: ${NOTIFICACOES_REDIS_PASSWORD}
+    volumes: [redis-notificacoes:/data]
+    networks: [data-notificacoes]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
+  qdrant-assistente:
+    image: qdrant/qdrant:v1.12.6
+    volumes: [qdrant-assistente:/qdrant/storage]
+    networks: [data-assistente]
+    healthcheck:
+      # a imagem não tem curl nem wget: o /readyz é consultado pelo /dev/tcp do bash
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf \"GET /readyz HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 384m } } }
+    restart: unless-stopped
+
+  redis-assistente:
+    # cache das respostas do LLM: sem volume, perder o cache não perde dado nenhum
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${ASSISTENTE_REDIS_PASSWORD:?defina no .env}"]
+    environment:
+      REDISCLI_AUTH: ${ASSISTENTE_REDIS_PASSWORD}
+    networks: [data-assistente]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
+  rabbitmq:
+    build: ./infra/rabbitmq
+    image: ampara/rabbitmq:dev
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_ADMIN_USER: ${RABBITMQ_ADMIN_USER:?defina no .env}
+      RABBITMQ_ADMIN_PASSWORD: ${RABBITMQ_ADMIN_PASSWORD:?defina no .env}
+      RABBITMQ_ADOCAO_PASSWORD: ${RABBITMQ_ADOCAO_PASSWORD:?defina no .env}
+      RABBITMQ_ANIMAIS_PASSWORD: ${RABBITMQ_ANIMAIS_PASSWORD:?defina no .env}
+      RABBITMQ_IDENTIDADE_PASSWORD: ${RABBITMQ_IDENTIDADE_PASSWORD:?defina no .env}
+      RABBITMQ_NOTIFICACOES_PASSWORD: ${RABBITMQ_NOTIFICACOES_PASSWORD:?defina no .env}
+    ports: ["127.0.0.1:15672:15672"]   # painel, só em desenvolvimento e só nesta máquina
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    networks: [services]
+    healthcheck:
+      # só fica saudável depois que os usuários dos serviços foram criados
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && test -f /tmp/ampara-usuarios-prontos"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    deploy: { resources: { limits: { memory: 512m } } }
+    restart: unless-stopped
+
+networks:
+  edge: {}
+  services: {}
+  data-identidade: { internal: true }
+  data-animais: { internal: true }
+  data-adocao: { internal: true }
+  data-notificacoes: { internal: true }
+  data-assistente: { internal: true }
+
+volumes:
+  pg-identidade: {}
+  mongo-animais: {}
+  pg-adocao: {}
+  redis-notificacoes: {}
+  qdrant-assistente: {}
+  rabbitmq-data: {}
