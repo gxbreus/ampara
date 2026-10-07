@@ -158,6 +158,7 @@ services:
     environment:
       ADOCAO_DATABASE_URL: postgres://${ADOCAO_DB_USER}:${ADOCAO_DB_PASSWORD}@postgres-adocao:5432/adocao?sslmode=disable
       ADOCAO_AMQP_URL: amqp://adocao:${RABBITMQ_ADOCAO_PASSWORD}@rabbitmq:5672/
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
       ADOCAO_TIMEOUT_PASSO: ${ADOCAO_TIMEOUT_PASSO:-10s}
       ADOCAO_PRAZO_EXPIRACAO: ${ADOCAO_PRAZO_EXPIRACAO:-72h}
       ADOCAO_MAX_REENVIOS_COMPENSACAO: ${ADOCAO_MAX_REENVIOS_COMPENSACAO:-10}

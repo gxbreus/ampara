@@ -78,6 +78,87 @@ func (r *Repositorio) Criar(ctx context.Context, n NovaSolicitacao) (saga.Solici
 	return saida.Solicitacao, err
 }
 
+// CriarIdempotente cria a solicitação respeitando o Idempotency-Key do POST: a mesma
+// chave do mesmo adotante devolve a solicitação já criada (existente = true), sem abrir
+// outra SAGA. Sem chave, é um Criar comum.
+func (r *Repositorio) CriarIdempotente(ctx context.Context, n NovaSolicitacao, chave string) (id string, existente bool, err error) {
+	if chave == "" {
+		_, err = r.Criar(ctx, n)
+		return n.ID, false, err
+	}
+	if id, ok, err := r.porChave(ctx, n.AdotanteID, chave); err != nil || ok {
+		return id, ok, err
+	}
+	vazia := saga.Solicitacao{ID: n.ID, AdotanteID: n.AdotanteID, AnimalID: n.AnimalID}
+	saida, err := saga.Transicao(vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, r.regras())
+	if err != nil {
+		return "", false, err
+	}
+	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO solicitacoes (id, adotante_id, animal_id, estado, correlation_id)
+			VALUES ($1, $2, $3, $4, $5)`, n.ID, n.AdotanteID, n.AnimalID, saida.Solicitacao.Estado, n.CorrelationID)
+		if violaUnicidade(err, "solicitacoes_ativa_unica") {
+			return ErrSolicitacaoAtiva
+		}
+		if err != nil {
+			return fmt.Errorf("inserir solicitação: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO idempotencia (adotante_id, chave, solicitacao_id) VALUES ($1, $2, $3)`,
+			n.AdotanteID, chave, n.ID); err != nil {
+			return err
+		}
+		return r.persistir(ctx, tx, vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, saida, n.CorrelationID)
+	})
+	// duas requisições com a mesma chave ao mesmo tempo: a segunda perde no PRIMARY KEY
+	// da idempotencia (ou no índice de ativa) e devolve a solicitação da primeira
+	if violaUnicidade(err, "idempotencia_pkey") || errors.Is(err, ErrSolicitacaoAtiva) {
+		if id, ok, e := r.porChave(ctx, n.AdotanteID, chave); e == nil && ok {
+			return id, true, nil
+		}
+	}
+	return n.ID, false, err
+}
+
+func (r *Repositorio) porChave(ctx context.Context, adotanteID, chave string) (string, bool, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, `SELECT solicitacao_id FROM idempotencia WHERE adotante_id = $1 AND chave = $2`, adotanteID, chave).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	return id, err == nil, err
+}
+
+// Visao é a solicitação como a API a representa (docs/contratos/adocao.v1.yaml).
+type Visao struct {
+	ID            string
+	Estado        saga.Estado
+	Desfecho      saga.Estado
+	Motivo        string
+	AnimalID      string
+	AnimalNome    string
+	AdotanteID    string
+	ResponsavelID string
+	ExpiraEm      *time.Time
+	CriadoEm      time.Time
+	AtualizadoEm  time.Time
+}
+
+// Obter lê a solicitação para a API.
+func (r *Repositorio) Obter(ctx context.Context, id string) (Visao, error) {
+	var v Visao
+	var estado string
+	var desfecho, motivo, nome, responsavel *string
+	err := r.pool.QueryRow(ctx, `SELECT id, estado, desfecho, motivo, animal_id, animal_nome, adotante_id, responsavel_id,
+			expira_em, criado_em, atualizado_em FROM solicitacoes WHERE id = $1`, id).
+		Scan(&v.ID, &estado, &desfecho, &motivo, &v.AnimalID, &nome, &v.AdotanteID, &responsavel, &v.ExpiraEm, &v.CriadoEm, &v.AtualizadoEm)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return v, ErrNaoEncontrada
+	}
+	v.Estado, v.Desfecho = saga.Estado(estado), saga.Estado(valor(desfecho))
+	v.Motivo, v.AnimalNome, v.ResponsavelID = valor(motivo), valor(nome), valor(responsavel)
+	return v, err
+}
+
 // Aplicar aplica um evento à solicitação: SELECT ... FOR UPDATE, Transicao e gravação.
 // O lock serializa aprovação, expiração, cancelamento e respostas da mesma solicitação.
 func (r *Repositorio) Aplicar(ctx context.Context, sagaID string, ev saga.Evento) (saga.Saida, error) {

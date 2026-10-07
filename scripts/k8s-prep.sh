@@ -5,8 +5,8 @@
 # - k8s/<componente>/secret.env, a partir do secret.env.example da mesma pasta. Cada linha
 #   do exemplo é "CHAVE=" (copia a variável de mesmo nome do .env) ou "CHAVE=modelo", onde
 #   o modelo usa ${VARIAVEL} do .env, por exemplo uma URL montada com usuário e senha.
-# - o par RS256 do JWT: jwt.key em k8s/identidade/, que assina, e jwt.pub em k8s/gateway/
-#   e nos BFFs, que só validam. Só nas pastas que existirem.
+# - o par RS256 do JWT: jwt.key em k8s/identidade/, que assina, e jwt.pub em toda pasta
+#   cujo kustomization.yaml o use (gateway, BFFs e serviços que validam tokens).
 #
 # Rodar de novo gera o mesmo resultado.
 set -euo pipefail
@@ -62,11 +62,12 @@ if [ -d "$raiz/k8s/identidade" ]; then
   pem "$JWT_PRIVATE_KEY" > "$raiz/k8s/identidade/jwt.key" && chmod 600 "$raiz/k8s/identidade/jwt.key"
   echo "gerado k8s/identidade/jwt.key"
 fi
-for pasta in gateway bff-web bff-mobile; do
-  if [ -d "$raiz/k8s/$pasta" ]; then
-    pem "$JWT_PUBLIC_KEY" > "$raiz/k8s/$pasta/jwt.pub"
-    echo "gerado k8s/$pasta/jwt.pub"
-  fi
+# a chave pública vai para toda pasta cujo kustomization.yaml usa o jwt.pub
+for kustomization in "$raiz"/k8s/*/kustomization.yaml; do
+  [ -f "$kustomization" ] && grep -q 'jwt\.pub' "$kustomization" || continue
+  pasta="$(dirname "$kustomization")"
+  pem "$JWT_PUBLIC_KEY" > "$pasta/jwt.pub"
+  echo "gerado ${pasta#"$raiz"/}/jwt.pub"
 done
 
 echo "pronto: $gerados secret.env gerados"

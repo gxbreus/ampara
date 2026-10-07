@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gxbreus/ampara/services/adocao/internal/auth"
 	"github.com/gxbreus/ampara/services/adocao/internal/config"
 	"github.com/gxbreus/ampara/services/adocao/internal/consumidor"
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
@@ -37,6 +38,10 @@ func main() {
 
 func executar(log *slog.Logger) error {
 	cfg, err := config.Carregar()
+	if err != nil {
+		return err
+	}
+	verificador, err := auth.NovoVerificador(cfg.JWTPublicKey)
 	if err != nil {
 		return err
 	}
@@ -67,8 +72,10 @@ func executar(log *slog.Logger) error {
 
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
-		Addr:              ":" + cfg.Porta,
-		Handler:           httpapi.NovoRouter(pool, log, hostname),
+		Addr: ":" + cfg.Porta,
+		Handler: httpapi.NovoRouter(httpapi.Dependencias{
+			Banco: pool, Solicitacoes: repo, Verificador: verificador, Log: log, ServidoPor: hostname,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
