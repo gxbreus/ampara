@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ampara
+resources:
+  - statefulset.yaml
+  - service.yaml
+secretGenerator:
+  # senhas do admin e de cada usuário de serviço: o broker precisa de todas para criar os
+  # usuários; cada serviço recebe só a própria no Secret dele
+  - name: rabbitmq-secret
+    envs: [secret.env]
+generatorOptions:
+  disableNameSuffixHash: true
