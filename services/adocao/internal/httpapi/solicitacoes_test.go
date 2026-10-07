@@ -58,6 +58,9 @@ type repoFalso struct {
 	criados  []repositorio.NovaSolicitacao
 	chaves   map[string]string
 	errCriar error
+	visoes   map[string]repositorio.Visao
+	eventos  []saga.TipoEvento
+	filtros  []repositorio.Filtro
 }
 
 func (r *repoFalso) CriarIdempotente(_ context.Context, n repositorio.NovaSolicitacao, chave string) (string, bool, error) {
@@ -71,12 +74,56 @@ func (r *repoFalso) CriarIdempotente(_ context.Context, n repositorio.NovaSolici
 	if chave != "" {
 		r.chaves[chave] = n.ID
 	}
+	r.visoes[n.ID] = repositorio.Visao{ID: n.ID, Estado: saga.Solicitada, AnimalID: n.AnimalID, AdotanteID: n.AdotanteID,
+		CriadoEm: time.Now(), AtualizadoEm: time.Now()}
 	return n.ID, false, nil
 }
 
 func (r *repoFalso) Obter(_ context.Context, id string) (repositorio.Visao, error) {
-	return repositorio.Visao{ID: id, Estado: saga.Solicitada, AnimalID: animalID, AdotanteID: adotanteID,
-		CriadoEm: time.Now(), AtualizadoEm: time.Now()}, nil
+	v, ok := r.visoes[id]
+	if !ok {
+		return v, repositorio.ErrNaoEncontrada
+	}
+	return v, nil
+}
+
+// Aplicar usa a máquina de estados de verdade, só sem banco.
+func (r *repoFalso) Aplicar(_ context.Context, id string, ev saga.Evento) (saga.Saida, error) {
+	v := r.visoes[id]
+	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado}
+	out, err := saga.Transicao(s, ev, saga.Regras{Agora: time.Now(), PrazoDecisao: time.Hour, MaxReenvios: 3})
+	if err != nil {
+		return out, err
+	}
+	r.eventos = append(r.eventos, ev.Tipo)
+	v.Estado, v.Desfecho, v.Motivo = out.Solicitacao.Estado, out.Solicitacao.Desfecho, out.Solicitacao.Motivo
+	r.visoes[id] = v
+	return out, nil
+}
+
+func (r *repoFalso) Listar(_ context.Context, f repositorio.Filtro) ([]repositorio.Visao, string, error) {
+	r.filtros = append(r.filtros, f)
+	if f.Cursor == "invalido" {
+		return nil, "", repositorio.ErrCursorInvalido
+	}
+	var itens []repositorio.Visao
+	for _, v := range r.visoes {
+		if (f.AdotanteID == "" || v.AdotanteID == f.AdotanteID) && (f.ResponsavelID == "" || v.ResponsavelID == f.ResponsavelID) {
+			itens = append(itens, v)
+		}
+	}
+	return itens, "proximo", nil
+}
+
+func (r *repoFalso) Resumir(context.Context, string) (repositorio.Resumo, error) {
+	return repositorio.Resumo{PorEstado: map[string]int{"AGUARDANDO_APROVACAO": 1}, AtivasPorAnimal: map[string]int{animalID: 1}, ConcluidasNoMes: 2}, nil
+}
+
+func (r *repoFalso) Historico(context.Context, string) ([]repositorio.ItemHistorico, error) {
+	return []repositorio.ItemHistorico{
+		{Para: "SOLICITADA", Evento: "SolicitacaoCriada", Em: time.Now()},
+		{De: "SOLICITADA", Para: "ANIMAL_RESERVADO", Evento: "AnimalReservado", Passo: "T1", Em: time.Now()},
+	}, nil
 }
 
 func postar(t *testing.T, repo *repoFalso, autorizacao, corpo string, cab map[string]string) *httptest.ResponseRecorder {
@@ -96,7 +143,9 @@ func postar(t *testing.T, repo *repoFalso, autorizacao, corpo string, cab map[st
 	return rec
 }
 
-func novoRepo() *repoFalso { return &repoFalso{chaves: map[string]string{}} }
+func novoRepo() *repoFalso {
+	return &repoFalso{chaves: map[string]string{}, visoes: map[string]repositorio.Visao{}}
+}
 
 func TestPostCria202ComLocationEHAL(t *testing.T) {
 	repo := novoRepo()
@@ -136,7 +185,7 @@ func TestPostRecusas(t *testing.T) {
 		{"animalId inválido", "Bearer " + token(t, adotanteID, "ADOTANTE", chave), `{"animalId":"thor"}`, nil, novoRepo(), 422},
 		{"campo desconhecido", "Bearer " + token(t, adotanteID, "ADOTANTE", chave), `{"animalId":"` + animalID + `","x":1}`, nil, novoRepo(), 422},
 		{"Idempotency-Key curta", "Bearer " + token(t, adotanteID, "ADOTANTE", chave), ok, map[string]string{"Idempotency-Key": "abc"}, novoRepo(), 422},
-		{"solicitação ativa", "Bearer " + token(t, adotanteID, "ADOTANTE", chave), ok, nil, &repoFalso{chaves: map[string]string{}, errCriar: repositorio.ErrSolicitacaoAtiva}, 409},
+		{"solicitação ativa", "Bearer " + token(t, adotanteID, "ADOTANTE", chave), ok, nil, &repoFalso{chaves: map[string]string{}, visoes: map[string]repositorio.Visao{}, errCriar: repositorio.ErrSolicitacaoAtiva}, 409},
 	}
 	for _, c := range casos {
 		rec := postar(t, c.repo, c.autorizacao, c.corpo, c.cab)

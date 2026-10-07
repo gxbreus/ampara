@@ -606,77 +606,77 @@ components:
           historico:
             href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
     AguardandoResponsavel:
-      summary: AGUARDANDO_APROVACAO, vista pelo responsável
+      summary: AGUARDANDO_APROVACAO, vista pelo responsável (resposta real do serviço)
       value:
-        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
         estado: AGUARDANDO_APROVACAO
         desfecho: null
         motivo: null
-        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
-        animalNome: Pipoca
-        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
         responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
-        expiraEm: '2026-11-20T15:00:00Z'
-        criadoEm: '2026-11-17T15:00:00Z'
-        atualizadoEm: '2026-11-17T15:00:02Z'
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:54Z'
         _links:
           self:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
           animal:
-            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
           historico:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
           aprovar:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/aprovacao
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/aprovacao
             method: POST
           recusar:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/recusa
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/recusa
             method: POST
     AguardandoAdotante:
-      summary: AGUARDANDO_APROVACAO, vista pelo adotante
+      summary: AGUARDANDO_APROVACAO, vista pelo adotante (resposta real do serviço)
       value:
-        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
         estado: AGUARDANDO_APROVACAO
         desfecho: null
         motivo: null
-        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
-        animalNome: Pipoca
-        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
         responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
-        expiraEm: '2026-11-20T15:00:00Z'
-        criadoEm: '2026-11-17T15:00:00Z'
-        atualizadoEm: '2026-11-17T15:00:02Z'
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:54Z'
         _links:
           self:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
           animal:
-            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
           historico:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
           cancelar:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/cancelamento
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/cancelamento
             method: POST
     Aprovada:
-      summary: APROVADA, SAGA seguindo até CONCLUIDA
+      summary: APROVADA, SAGA seguindo até CONCLUIDA (resposta real do serviço)
       value:
-        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
         estado: APROVADA
         desfecho: null
         motivo: null
-        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
-        animalNome: Pipoca
-        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
         responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
-        expiraEm: '2026-11-20T15:00:00Z'
-        criadoEm: '2026-11-17T15:00:00Z'
-        atualizadoEm: '2026-11-18T10:30:00Z'
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:56Z'
         _links:
           self:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
           animal:
-            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
           historico:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
     Compensando:
       summary: COMPENSANDO após uma recusa
       value:
@@ -699,47 +699,47 @@ components:
           historico:
             href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
     Concluida:
-      summary: CONCLUIDA, estado final do caminho feliz
+      summary: CONCLUIDA, estado final do caminho feliz (resposta real do serviço)
       value:
-        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
         estado: CONCLUIDA
         desfecho: null
         motivo: null
-        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
-        animalNome: Pipoca
-        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
         responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
-        expiraEm: '2026-11-20T15:00:00Z'
-        criadoEm: '2026-11-17T15:00:00Z'
-        atualizadoEm: '2026-11-18T10:30:02Z'
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:56Z'
         _links:
           self:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
           animal:
-            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
           historico:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
     Recusada:
-      summary: RECUSADA, estado final após as compensações
+      summary: RECUSADA, estado final após as compensações (resposta real do serviço)
       value:
-        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        id: 81685495-eff5-410d-a23b-b5f9f281b6d6
         estado: RECUSADA
-        desfecho: RECUSADA
+        desfecho: null
         motivo: Moradia sem tela de proteção nas janelas.
-        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
-        animalNome: Pipoca
-        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e8
+        animalNome: Thor
+        adotanteId: 22222222-2222-4222-8222-222222222222
         responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
-        expiraEm: '2026-11-20T15:00:00Z'
-        criadoEm: '2026-11-17T15:00:00Z'
-        atualizadoEm: '2026-11-18T10:30:01Z'
+        expiraEm: '2026-10-07T14:40:18Z'
+        criadoEm: '2026-10-07T14:39:58Z'
+        atualizadoEm: '2026-10-07T14:39:59Z'
         _links:
           self:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            href: /v1/solicitacoes/81685495-eff5-410d-a23b-b5f9f281b6d6
           animal:
-            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e8
           historico:
-            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+            href: /v1/solicitacoes/81685495-eff5-410d-a23b-b5f9f281b6d6/historico
   schemas:
     Estado:
       type: string

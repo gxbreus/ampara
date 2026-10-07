@@ -16,10 +16,20 @@ docker compose up -d --build adocao   # sobe também o postgres-adocao e o Rabbi
 go test ./...                          # testes, dentro de services/adocao
 ```
 
-| Rota | O que faz |
-| --- | --- |
-| `GET /health` | 200 enquanto o processo está de pé |
-| `GET /ready` | 200 se o PostgreSQL responde em até 2 s; 503 com *problem details* se não |
+| Rota | Quem | O que faz |
+| --- | --- | --- |
+| `GET /health` | — | 200 enquanto o processo está de pé |
+| `GET /ready` | — | 200 se o PostgreSQL responde em até 2 s; 503 com *problem details* se não |
+| `POST /v1/solicitacoes` | adotante | 202 e inicia a SAGA; aceita `Idempotency-Key` |
+| `GET /v1/solicitacoes/{id}` | adotante, responsável ou ADMIN | a solicitação em HAL, com os links do estado e do papel |
+| `GET /v1/solicitacoes` | filtro pelo próprio `sub` (ADMIN: qualquer) | lista paginada por cursor (`_embedded` + `_links.next`) |
+| `GET /v1/solicitacoes/resumo` | o próprio responsável ou ADMIN | contadores para o painel da ONG |
+| `GET /v1/solicitacoes/{id}/historico` | adotante, responsável ou ADMIN | a linha do tempo, em ordem |
+| `POST /v1/solicitacoes/{id}/aprovacao` | responsável | 202; é o pivô da SAGA |
+| `POST /v1/solicitacoes/{id}/recusa` | responsável | 202; compensa e chega a `RECUSADA` |
+| `POST /v1/solicitacoes/{id}/cancelamento` | adotante | 202; compensa e chega a `CANCELADA` |
+
+Ação em estado errado responde 409, e ação de quem não pode responde 403. O contrato completo está em `docs/contratos/adocao.v1.yaml`.
 
 - **Configuração:** só por variáveis de ambiente (`ADOCAO_DATABASE_URL`, `ADOCAO_PORTA`); o `compose.yaml` monta a URL do banco a partir do `.env`.
 - **Migrations:** ficam em `internal/db/migrations/`, embutidas no binário com `go:embed`, e são aplicadas na subida.
