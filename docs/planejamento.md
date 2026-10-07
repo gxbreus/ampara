@@ -33,7 +33,7 @@ A Ampara precisa sair de uma arquitetura descrita para um sistema distribuído e
 
 Pagamentos e doações, chat, verificação documental real, publicação nas lojas de apps, deploy em nuvem e storage externo de fotos. Avistamentos e denúncias ficam no backlog *Should*, ver [requisitos §9](requisitos.md#9-backlog-pós-mvp).
 
-## 4. Divisão por integrante *(proposta, a confirmar)*
+## 4. Divisão por integrante *(confirmada no kickoff de 2026-10-07)*
 
 Cada pessoa é **dona** de um serviço de domínio do começo ao fim: contrato, código, Dockerfile, manifest K8s e a parte do vídeo e da apresentação sobre ele. Também assume uma peça transversal e **revisa os PRs** de um colega fixo. Na arguição, o docente escolhe quem responde, então cada dono precisa dominar a própria parte e conhecer o fluxo da SAGA inteiro.
 
