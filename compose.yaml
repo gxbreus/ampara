@@ -175,6 +175,27 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+  bff-web:
+    build: ./bff/web
+    image: ampara/bff-web:dev
+    environment:
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+      IDENTIDADE_URL: http://identidade:3001
+      ANIMAIS_URL: http://animais:8001
+      ADOCAO_URL: http://adocao:8080
+    networks: [edge, services]
+    depends_on:
+      # identidade e animais entram aqui quando os blocos deles chegarem (#38, #39)
+      adocao: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/web/v1/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
 networks:
   edge: {}
   services: {}
