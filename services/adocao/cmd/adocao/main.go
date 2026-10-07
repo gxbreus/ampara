@@ -18,6 +18,7 @@ import (
 	"github.com/gxbreus/ampara/services/adocao/internal/config"
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/httpapi"
+	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
 )
 
 func main() {
@@ -51,6 +52,11 @@ func executar(log *slog.Logger) error {
 		return err
 	}
 	log.Info("migrations aplicadas")
+
+	// o único caminho de publicação: o relay do outbox (docs/dados.md, seção 5.3)
+	publicador := outbox.NovoPublicadorAMQP(cfg.AMQPURL)
+	defer publicador.Fechar()
+	go outbox.NovoRelay(pool, publicador, log).Rodar(ctx)
 
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
