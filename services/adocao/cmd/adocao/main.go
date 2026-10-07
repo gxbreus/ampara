@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/gxbreus/ampara/services/adocao/internal/config"
+	"github.com/gxbreus/ampara/services/adocao/internal/consumidor"
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/httpapi"
 	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
+	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
 )
 
 func main() {
@@ -57,6 +59,11 @@ func executar(log *slog.Logger) error {
 	publicador := outbox.NovoPublicadorAMQP(cfg.AMQPURL)
 	defer publicador.Fechar()
 	go outbox.NovoRelay(pool, publicador, log).Rodar(ctx)
+
+	repo := repositorio.Novo(pool, repositorio.Config{
+		TimeoutPasso: cfg.TimeoutPasso, PrazoDecisao: cfg.PrazoDecisao, MaxReenvios: cfg.MaxReenvios,
+	})
+	go consumidor.Novo(repo, log).Rodar(ctx, cfg.AMQPURL)
 
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
