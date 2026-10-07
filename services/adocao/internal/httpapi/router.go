@@ -24,8 +24,18 @@ func CorrelationID(ctx context.Context) string {
 	return id
 }
 
-// NovoRouter monta as rotas. servidoPor vai no header X-Served-By (o hostname do contêiner).
-func NovoRouter(banco Pinger, log *slog.Logger, servidoPor string) http.Handler {
+// Dependencias do roteador. Solicitacoes e Verificador podem ser nil nos testes de saúde.
+type Dependencias struct {
+	Banco        Pinger
+	Solicitacoes Solicitacoes
+	Verificador  Verificador
+	Log          *slog.Logger
+	ServidoPor   string // vai no header X-Served-By (o hostname do contêiner)
+}
+
+// NovoRouter monta as rotas.
+func NovoRouter(d Dependencias) http.Handler {
+	banco, log := d.Banco, d.Log
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		escreverJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -40,7 +50,11 @@ func NovoRouter(banco Pinger, log *slog.Logger, servidoPor string) http.Handler 
 		}
 		escreverJSON(w, http.StatusOK, map[string]string{"status": "pronto"})
 	})
-	return middleware(mux, log, servidoPor)
+	if d.Solicitacoes != nil && d.Verificador != nil {
+		h := &handlerSolicitacoes{repo: d.Solicitacoes, auth: d.Verificador, log: log}
+		mux.HandleFunc("POST /v1/solicitacoes", h.criar)
+	}
+	return middleware(mux, log, d.ServidoPor)
 }
 
 // middleware propaga o X-Correlation-Id (ou cria um), responde com X-Served-By e registra

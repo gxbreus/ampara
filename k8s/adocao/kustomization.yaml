@@ -6,6 +6,10 @@ resources:
   - deployment.yaml
   - service.yaml
   - postgres-statefulset.yaml
+configMapGenerator:
+  # chave pública do JWT: a Adoção valida os tokens (scripts/k8s-prep.sh gera o jwt.pub)
+  - name: adocao-jwt
+    files: [JWT_PUBLIC_KEY=jwt.pub]
 secretGenerator:
   - name: adocao-secret
     envs: [secret.env]

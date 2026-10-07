@@ -215,3 +215,58 @@ func TestAprovacaoEExpiracaoSimultaneas(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), `UPDATE solicitacoes SET estado = 'FALHOU' WHERE id = $1`, id)
 	}
 }
+
+func TestCriarIdempotente(t *testing.T) {
+	pool := banco(t)
+	r := repo(pool, 10)
+	n := func() NovaSolicitacao {
+		return NovaSolicitacao{ID: NovoUUID(), AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}
+	}
+	id1, existente, err := r.CriarIdempotente(context.Background(), n(), "chave-123456")
+	if err != nil || existente {
+		t.Fatalf("primeira: %v %v", existente, err)
+	}
+	id2, existente, err := r.CriarIdempotente(context.Background(), n(), "chave-123456")
+	if err != nil || !existente || id2 != id1 {
+		t.Fatalf("a mesma chave deveria devolver %s: %s %v %v", id1, id2, existente, err)
+	}
+	if _, _, err := r.CriarIdempotente(context.Background(), n(), "outra-chave-789"); !errors.Is(err, ErrSolicitacaoAtiva) {
+		t.Fatalf("outra chave para o mesmo animal ativo deveria dar 409: %v", err)
+	}
+	v, err := r.Obter(context.Background(), id1)
+	if err != nil || v.Estado != saga.Solicitada || v.AdotanteID != adotante {
+		t.Fatalf("Obter: %+v %v", v, err)
+	}
+	if _, err := r.Obter(context.Background(), NovoUUID()); !errors.Is(err, ErrNaoEncontrada) {
+		t.Fatalf("Obter de id inexistente: %v", err)
+	}
+}
+
+func TestCriarIdempotenteConcorrente(t *testing.T) {
+	pool := banco(t)
+	r := repo(pool, 10)
+	const n = 10
+	ids := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			ids[i], _, errs[i] = r.CriarIdempotente(context.Background(),
+				NovaSolicitacao{ID: NovoUUID(), AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}, "chave-concorrente")
+		}(i)
+	}
+	wg.Wait()
+	for i := 0; i < n; i++ {
+		if errs[i] != nil || ids[i] != ids[0] {
+			t.Fatalf("requisição %d: id %s (primeira %s), erro %v", i, ids[i], ids[0], errs[i])
+		}
+	}
+	var total, outbox int
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM solicitacoes`).Scan(&total)
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&outbox)
+	if total != 1 || outbox != 1 {
+		t.Fatalf("%d solicitações e %d mensagens no outbox; esperado 1 e 1", total, outbox)
+	}
+}

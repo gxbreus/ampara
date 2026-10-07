@@ -13,6 +13,7 @@ type Config struct {
 	Porta        string
 	DatabaseURL  string
 	AMQPURL      string
+	JWTPublicKey string
 	TimeoutPasso time.Duration
 	PrazoDecisao time.Duration
 	MaxReenvios  int
@@ -23,12 +24,17 @@ func Carregar() (Config, error) {
 		Porta:       valorOuPadrao("ADOCAO_PORTA", "8080"),
 		DatabaseURL: os.Getenv("ADOCAO_DATABASE_URL"),
 		AMQPURL:     os.Getenv("ADOCAO_AMQP_URL"),
+		// a Adoção só valida tokens; quem assina é a Identidade, com a chave privada
+		JWTPublicKey: os.Getenv("JWT_PUBLIC_KEY"),
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("ADOCAO_DATABASE_URL não definida")
 	}
 	if c.AMQPURL == "" {
 		return c, errors.New("ADOCAO_AMQP_URL não definida")
+	}
+	if c.JWTPublicKey == "" {
+		return c, errors.New("JWT_PUBLIC_KEY não definida")
 	}
 	var err error
 	if c.TimeoutPasso, err = duracao("ADOCAO_TIMEOUT_PASSO", "10s"); err != nil {

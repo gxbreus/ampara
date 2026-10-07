@@ -32,6 +32,7 @@ spec:
             - { name: http, containerPort: 8080 }
           envFrom:
             - configMapRef: { name: adocao-config }
+            - configMapRef: { name: adocao-jwt }
           # só as duas chaves do serviço; POSTGRES_USER e POSTGRES_PASSWORD ficam com o banco
           env:
             - name: ADOCAO_DATABASE_URL
