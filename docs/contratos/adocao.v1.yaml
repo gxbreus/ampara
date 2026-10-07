@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ampara — Adoção
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Solicitações de adoção e orquestração da SAGA. Todas as rotas pertencem à
     rede interna e são consumidas pelos BFFs, que repassam o `Authorization`
@@ -14,6 +14,15 @@ info:
     registra a transição e enfileira os comandos da SAGA pelo outbox. O
     cliente acompanha o andamento pelo `Location` e pelos `_links` da
     solicitação.
+
+    ## Intervenção manual (1.1.0)
+
+    Se uma compensação (ou o T4/T5) atinge o teto de reenvios
+    (`ADOCAO_MAX_REENVIOS_COMPENSACAO`), a SAGA para e a solicitação fica com
+    `requerIntervencao: true`. Um ADMIN encontra essas solicitações com
+    `GET /v1/solicitacoes?requerIntervencao=true`, corrige a causa e chama
+    `POST /v1/solicitacoes/{id}/compensacao/retomada`. O roteiro está em
+    `docs/operacao/dlq.md` (#86).
 
     ## HATEOAS
 
@@ -53,6 +62,8 @@ tags:
     description: Ações que movem a SAGA a partir de AGUARDANDO_APROVACAO.
   - name: Painel
     description: Agregações consumidas pelo BFF Web.
+  - name: Operação
+    description: Intervenção manual em SAGAs paradas no teto de reenvios.
 paths:
   /v1/solicitacoes:
     post:
@@ -124,6 +135,7 @@ paths:
         - $ref: '#/components/parameters/ResponsavelId'
         - $ref: '#/components/parameters/Estado'
         - $ref: '#/components/parameters/Ativa'
+        - $ref: '#/components/parameters/RequerIntervencao'
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limite'
       responses:
@@ -367,6 +379,47 @@ paths:
           $ref: '#/components/responses/SolicitacaoNaoEncontrada'
         '409':
           $ref: '#/components/responses/EstadoNaoPermiteAcao'
+  /v1/solicitacoes/{id}/compensacao/retomada:
+    post:
+      tags: [Operação]
+      summary: Retoma os passos esgotados de uma SAGA parada
+      description: >-
+        Só ADMIN. Depois de corrigir a causa (por exemplo, uma mensagem
+        envenenada), os passos esgotados voltam a pendentes, com as tentativas
+        zeradas, e são reenviados com o mesmo messageId: a inbox do participante
+        impede efeito duplicado. Responde 202, e requerIntervencao volta a false.
+      operationId: retomarCompensacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '202':
+          description: Passos retomados; a SAGA segue até o estado final.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                compensando:
+                  $ref: '#/components/examples/Compensando'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+        '409':
+          description: A solicitação não tem passo esgotado esperando intervenção.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://ampara.dev/problemas/nada-a-retomar
+                title: Nada a retomar
+                status: 409
+                detail: A solicitação não tem passo esgotado esperando intervenção.
   /v1/solicitacoes/{id}/historico:
     get:
       tags: [Solicitações]
@@ -495,6 +548,15 @@ components:
       name: ativa
       in: query
       description: true filtra só estados ativos; false, só estados finais.
+      schema:
+        type: boolean
+      example: true
+    RequerIntervencao:
+      name: requerIntervencao
+      in: query
+      description: >-
+        true lista só as solicitações paradas no teto de reenvios. Sem outro
+        filtro, só ADMIN pode usar.
       schema:
         type: boolean
       example: true
@@ -860,6 +922,11 @@ components:
           description: >-
             Gravado ao entrar em AGUARDANDO_APROVACAO, a partir de
             ADOCAO_PRAZO_EXPIRACAO (72 h em produção, 2 min na demo).
+        requerIntervencao:
+          type: boolean
+          description: >-
+            true quando um passo atingiu o teto de reenvios e a SAGA espera a
+            retomada manual de um ADMIN (desde a 1.1.0).
         criadoEm:
           type: string
           format: date-time

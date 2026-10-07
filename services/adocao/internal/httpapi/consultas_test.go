@@ -206,3 +206,44 @@ func TestHistorico(t *testing.T) {
 		t.Errorf("histórico de outra pessoa: %d", rec.Code)
 	}
 }
+
+func TestRetomadaSoParaAdmin(t *testing.T) {
+	esgotada := func(repo *repoFalso) {
+		repo.visoes["s1"] = repositorio.Visao{ID: "s1", Estado: saga.Compensando, Desfecho: saga.Recusada, AnimalID: animalID,
+			AdotanteID: adotanteID, ResponsavelID: responsavelID, RequerIntervencao: true, CriadoEm: time.Now(), AtualizadoEm: time.Now()}
+	}
+	repo := novoRepo()
+	esgotada(repo)
+	if rec, _ := chamar(t, repo, "POST", "/v1/solicitacoes/s1/compensacao/retomada", responsavelID, "ONG", ""); rec.Code != 403 {
+		t.Errorf("responsável: %d, esperado 403", rec.Code)
+	}
+	if rec, _ := chamar(t, repo, "POST", "/v1/solicitacoes/nao-existe/compensacao/retomada", outroID, "ADMIN", ""); rec.Code != 404 {
+		t.Errorf("inexistente: %d, esperado 404", rec.Code)
+	}
+	// o repositório falso não tem passos: a máquina não acha passo esgotado e responde 409
+	rec, corpo := chamar(t, repo, "POST", "/v1/solicitacoes/s1/compensacao/retomada", outroID, "ADMIN", "")
+	if rec.Code != 409 || corpo["type"] != "https://ampara.dev/problemas/nada-a-retomar" {
+		t.Errorf("sem passo esgotado: %d %v", rec.Code, corpo)
+	}
+}
+
+func TestRequerIntervencaoNaRepresentacaoENoFiltro(t *testing.T) {
+	repo := novoRepo()
+	aguardando(repo, "s1")
+	_, corpo := chamar(t, repo, "GET", "/v1/solicitacoes/s1", adotanteID, "ADOTANTE", "")
+	if v, ok := corpo["requerIntervencao"]; !ok || v != false {
+		t.Fatalf("requerIntervencao ausente: %v", corpo)
+	}
+	if rec, _ := chamar(t, repo, "GET", "/v1/solicitacoes?requerIntervencao=true", outroID, "ADMIN", ""); rec.Code != 200 {
+		t.Fatalf("ADMIN lista a fila de intervenção: %d", rec.Code)
+	}
+	if f := repo.filtros[len(repo.filtros)-1]; f.RequerIntervencao == nil || !*f.RequerIntervencao {
+		t.Fatalf("filtro não repassado: %+v", f)
+	}
+	if rec, _ := chamar(t, repo, "GET", "/v1/solicitacoes?requerIntervencao=true", responsavelID, "ONG", ""); rec.Code != 403 {
+		t.Errorf("só ADMIN vê a fila inteira: %d", rec.Code)
+	}
+	if rec, _ := chamar(t, repo, "GET", "/v1/solicitacoes?requerIntervencao=talvez", outroID, "ADMIN", ""); rec.Code != 422 {
+		t.Errorf("valor inválido: %d", rec.Code)
+	}
+}
