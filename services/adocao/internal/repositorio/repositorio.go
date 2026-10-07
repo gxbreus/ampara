@@ -180,6 +180,69 @@ func (r *Repositorio) Aplicar(ctx context.Context, sagaID string, ev saga.Evento
 	return saida, err
 }
 
+// AplicarTimeout aplica o timeout de um passo, mas só se, com a solicitação travada, o
+// passo continuar pendente e vencido. Com duas réplicas do verificador, as duas podem
+// achar o mesmo passo vencido; a segunda espera o lock, encontra o prazo já adiado pelo
+// reenvio da primeira e não faz nada. Sem essa conferência, o comando sairia duas vezes.
+func (r *Repositorio) AplicarTimeout(ctx context.Context, sagaID string, passo saga.Passo) (saga.Saida, error) {
+	var saida saga.Saida
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		antes, correlationID, err := carregar(ctx, tx, sagaID)
+		if err != nil {
+			return err
+		}
+		var vencido bool
+		err = tx.QueryRow(ctx, `SELECT status = 'PENDENTE' AND prazo IS NOT NULL AND prazo < $3
+			FROM saga_passos WHERE saga_id = $1 AND passo = $2`, sagaID, passo, r.cfg.Agora().UTC()).Scan(&vencido)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !vencido) {
+			saida.Ignorada = true
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		ev := saga.Evento{Tipo: saga.EvTimeout, Passo: passo}
+		saida, err = saga.Transicao(antes, ev, r.regras())
+		if err != nil || saida.Ignorada {
+			return err
+		}
+		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
+	})
+	return saida, err
+}
+
+// Vencido é um passo com prazo estourado.
+type Vencido struct {
+	SagaID string
+	Passo  saga.Passo
+}
+
+// PassosVencidos lista passos pendentes com prazo estourado, os mais antigos primeiro.
+func (r *Repositorio) PassosVencidos(ctx context.Context, limite int) ([]Vencido, error) {
+	rows, err := r.pool.Query(ctx, `SELECT saga_id, passo FROM saga_passos
+		WHERE status = 'PENDENTE' AND prazo IS NOT NULL AND prazo < $1 ORDER BY prazo LIMIT $2`, r.cfg.Agora().UTC(), limite)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Vencido, error) {
+		var v Vencido
+		var passo string
+		err := row.Scan(&v.SagaID, &passo)
+		v.Passo = saga.Passo(passo)
+		return v, err
+	})
+}
+
+// AExpirar lista solicitações em AGUARDANDO_APROVACAO com o prazo de decisão vencido.
+func (r *Repositorio) AExpirar(ctx context.Context, limite int) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id FROM solicitacoes
+		WHERE estado = 'AGUARDANDO_APROVACAO' AND expira_em < $1 ORDER BY expira_em LIMIT $2`, r.cfg.Agora().UTC(), limite)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
 // AplicarResposta processa uma resposta de participante: grava o messageId na inbox e
 // aplica a transição na MESMA transação. Se a inbox já tinha o messageId, a resposta é
 // repetida (reentrega do broker) e nada é aplicado: duplicada volta true.

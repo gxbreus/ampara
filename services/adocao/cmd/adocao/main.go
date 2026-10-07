@@ -21,6 +21,7 @@ import (
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/httpapi"
 	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
+	"github.com/gxbreus/ampara/services/adocao/internal/prazos"
 	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
 )
 
@@ -69,6 +70,8 @@ func executar(log *slog.Logger) error {
 		TimeoutPasso: cfg.TimeoutPasso, PrazoDecisao: cfg.PrazoDecisao, MaxReenvios: cfg.MaxReenvios,
 	})
 	go consumidor.Novo(repo, log).Rodar(ctx, cfg.AMQPURL)
+	// timeouts, expiração e retomada depois de um reinício
+	go prazos.Novo(repo, log).Rodar(ctx)
 
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
