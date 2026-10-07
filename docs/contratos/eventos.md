@@ -150,7 +150,7 @@ Comando é imperativo (`ReservarAnimal`) e vai para um único consumidor. Respos
 
 ## 4. Fichas
 
-Os schemas descrevem só o `payload` e são JSON Schema 2020-12 válidos. Eles serão extraídos para `docs/contratos/mensagens/` e usados nos testes de contrato (#88). Todos usam `additionalProperties: false`: campo novo entra primeiro aqui, numa versão nova.
+Os schemas descrevem só o `payload` e são JSON Schema 2020-12 válidos. Eles serão extraídos para `docs/contratos/mensagens/` e usados nos testes de contrato (#88). Eles usam `additionalProperties: false` porque descrevem exatamente o que o produtor emite, e é isso que os testes de contrato conferem. O consumidor faz o contrário: ignora campos que não conhece (leitor tolerante, ADR-006). Por isso adicionar um campo opcional é compatível e não muda a `version`; remover, renomear ou mudar o tipo de um campo cria a `version: 2`.
 
 ### Comandos e respostas com Animais
 
