@@ -9,7 +9,7 @@ Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage 
 | `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
 | `ampara/notificacoes` | | | | |
 | `ampara/assistente` | | | | |
-| `ampara/bff-web` | | | | |
+| `ampara/bff-web` | 336 MB | 261 MB | −22,3% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; sem TypeScript nem tsx na final. O ganho é menor porque o binário do `node` sozinho tem 123 MB; o código e as dependências somam 17 MB |
 | `ampara/bff-mobile` | | | | |
 | `ampara/gateway` | | | | |
 
