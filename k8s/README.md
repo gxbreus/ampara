@@ -64,7 +64,7 @@ Cada linha é uma de duas formas, e nenhuma tem valor de senha:
 
 ### Chaves do JWT
 
-O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porque só a Identidade assina tokens. A chave **pública** vai para `k8s/gateway/jwt.pub` e para as pastas dos BFFs, que só validam. Cada arquivo só é gerado se a pasta existir.
+O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porque só a Identidade assina tokens. A chave **pública** vai para toda pasta cujo `kustomization.yaml` cite o `jwt.pub` (gateway, BFFs e serviços que validam tokens, como a Adoção), por um `configMapGenerator`.
 
 ## Componentes
 

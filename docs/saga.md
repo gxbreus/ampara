@@ -323,3 +323,12 @@ As respostas dos participantes não passam por outbox. O participante grava o ef
 | Queda do orquestrador | `kubectl delete pod` da Adoção no meio de uma SAGA | o novo pod retoma a SAGA do ponto em que parou |
 
 A linha do tempo (`GET /v1/solicitacoes/{id}/historico`) mostra cada transição, e os logs filtrados por `sagaId` mostram as mensagens trocadas.
+
+## 9. O que a implementação acrescentou (#58)
+
+A máquina de estados está em `services/adocao/internal/saga/maquina.go`, com uma linha de teste por transição. Em relação ao modelo acima, a implementação acrescentou três detalhes:
+
+- **Conferência do prazo dentro da transação.** Com duas réplicas, os dois verificadores podem achar o mesmo passo vencido. A segunda réplica espera o lock da solicitação, confere de novo o prazo, encontra-o já adiado pelo reenvio da primeira e não faz nada. Sem isso, o comando sairia duas vezes.
+- **Respostas sem transição também entram na linha do tempo.** A primeira de duas compensações bloqueantes, ou a resposta a uma precautória, fecha o passo sem mudar o estado. Ela fica em `saga_historico` com `transicao = 0`, para a linha do tempo mostrar cada resposta recebida.
+- **Passo esgotado ainda aceita a resposta.** Depois do teto de reenvios (#86), o passo fica `ESGOTADO`, mas a resposta que chegar mais tarde ainda é aplicada: é o participante voltando.
+

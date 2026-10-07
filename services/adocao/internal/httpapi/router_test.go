@@ -26,7 +26,7 @@ func requisitar(t *testing.T, banco Pinger, caminho string, cabecalhos map[strin
 		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
-	NovoRouter(banco, log, "adocao-teste").ServeHTTP(rec, req)
+	NovoRouter(Dependencias{Banco: banco, Log: log, ServidoPor: "adocao-teste"}).ServeHTTP(rec, req)
 	return rec, &logs
 }
 

@@ -15,9 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gxbreus/ampara/services/adocao/internal/auth"
 	"github.com/gxbreus/ampara/services/adocao/internal/config"
+	"github.com/gxbreus/ampara/services/adocao/internal/consumidor"
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/httpapi"
+	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
+	"github.com/gxbreus/ampara/services/adocao/internal/prazos"
+	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
 )
 
 func main() {
@@ -37,6 +42,10 @@ func executar(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	verificador, err := auth.NovoVerificador(cfg.JWTPublicKey)
+	if err != nil {
+		return err
+	}
 
 	ctx, parar := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer parar()
@@ -52,10 +61,24 @@ func executar(log *slog.Logger) error {
 	}
 	log.Info("migrations aplicadas")
 
+	// o único caminho de publicação: o relay do outbox (docs/dados.md, seção 5.3)
+	publicador := outbox.NovoPublicadorAMQP(cfg.AMQPURL)
+	defer publicador.Fechar()
+	go outbox.NovoRelay(pool, publicador, log).Rodar(ctx)
+
+	repo := repositorio.Novo(pool, repositorio.Config{
+		TimeoutPasso: cfg.TimeoutPasso, PrazoDecisao: cfg.PrazoDecisao, MaxReenvios: cfg.MaxReenvios,
+	})
+	go consumidor.Novo(repo, log).Rodar(ctx, cfg.AMQPURL)
+	// timeouts, expiração e retomada depois de um reinício
+	go prazos.Novo(repo, log).Rodar(ctx)
+
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
-		Addr:              ":" + cfg.Porta,
-		Handler:           httpapi.NovoRouter(pool, log, hostname),
+		Addr: ":" + cfg.Porta,
+		Handler: httpapi.NovoRouter(httpapi.Dependencias{
+			Banco: pool, Solicitacoes: repo, Verificador: verificador, Log: log, ServidoPor: hostname,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
