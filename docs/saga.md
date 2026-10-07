@@ -32,7 +32,7 @@ stateDiagram-v2
     APROVADA --> APROVADA: (16) timeout T4 ou T5 / reenvia
     APROVADA --> CONCLUIDA: (15) AdocaoRegistrada / T6
     APROVADA --> COMPENSANDO: (17) ConfirmacaoRecusada / C2 + C1 condicional
-    COMPENSANDO --> COMPENSANDO: (13) timeout de compensação / reenvia
+    COMPENSANDO --> COMPENSANDO: (13) timeout de compensação / reenvia até o teto
     COMPENSANDO --> COMPENSANDO: (18) resposta tardia / reemite compensação
     COMPENSANDO --> PERFIL_INVALIDO: (12) última compensação bloqueante
     COMPENSANDO --> RECUSADA: (12) última compensação bloqueante
@@ -94,7 +94,7 @@ Há dois tipos de compensação:
 | 10 | `AGUARDANDO_APROVACAO` | cancelamento | `COMPENSANDO` (desfecho `CANCELADA`) | C2 + C1, ambas bloqueantes |
 | 11 | `AGUARDANDO_APROVACAO` | `expira_em` vencido | `COMPENSANDO` (desfecho `EXPIRADA`) | C2 + C1, ambas bloqueantes |
 | 12 | `COMPENSANDO` | última resposta bloqueante (`ReservaLiberada` ou `VagaLiberada`) | o desfecho gravado | `adocao.recusada`, `adocao.cancelada`, `adocao.expirada` ou `adocao.falhou` |
-| 13 | `COMPENSANDO` | timeout de uma compensação | `COMPENSANDO` | reenvia o mesmo comando, com o mesmo `messageId` e backoff; não desiste; log ERROR a partir da 10ª tentativa |
+| 13 | `COMPENSANDO` | timeout de uma compensação | `COMPENSANDO` | reenvia o mesmo comando, com o mesmo `messageId` e backoff exponencial, até `ADOCAO_MAX_REENVIOS_COMPENSACAO` (padrão 10); no teto, marca o passo como `ESGOTADO` e a solicitação com `requer_intervencao` |
 | 14 | `APROVADA` (passo T4) | `AdocaoConfirmada` | `APROVADA` (passo T5) | `RegistrarAdocao` (T5) |
 | 15 | `APROVADA` (passo T5) | `AdocaoRegistrada` | `CONCLUIDA` | `adocao.concluida` (T6) |
 | 16 | `APROVADA` | timeout do T4 ou do T5 | `APROVADA` | reenvia o mesmo comando (passo retentável, sem compensação) |
@@ -125,7 +125,7 @@ Observações:
 | 9 | Expiração do prazo | decisão | 11 → 12 | C2 + C1 bloqueantes | `EXPIRADA` | `adocao.expirada` |
 | 10 | Notificações fora do ar | T3 ou T6 | — | nada: os eventos ficam na fila durável `notificacoes.eventos` e são entregues quando o serviço volta; a SAGA não espera por ele | não muda | entregue depois |
 | 11 | `ConfirmacaoRecusada` (invariante violada) | T4 | 17 → 12 | C2 bloqueante + C1 condicional + log crítico | `FALHOU` | `adocao.falhou` (`CONFIRMACAO_RECUSADA`) |
-| 12 | Timeout de uma compensação | C1 ou C2 | 13 | reenvia com o mesmo `messageId` e backoff, sem desistir; log ERROR a partir da 10ª tentativa | continua `COMPENSANDO` até a resposta | — |
+| 12 | Timeout de uma compensação (participante fora do ar ou mensagem envenenada na DLQ) | C1 ou C2 | 13 | reenvia com o mesmo `messageId` e backoff exponencial; no teto, para, marca `requer_intervencao`, loga `CRITICAL` e espera a retomada manual de um ADMIN (#86) | continua `COMPENSANDO` até a resposta | — |
 | 13 | Resposta tardia (participante volta depois do timeout) | T1 ou T2 | 18 | reemite `LiberarReserva` ou `LiberarVaga` | não muda | — |
 | 14 | Corrida entre aprovação e expiração | decisão | 8 ou 11 | `SELECT … FOR UPDATE` serializa as duas; quem pega o lock primeiro vence. Se a expiração venceu, a aprovação recebe 409; se a aprovação venceu, o verificador encontra `APROVADA` e não faz nada | `CONCLUIDA` ou `EXPIRADA` | o do vencedor |
 | 15 | Clique duplo em aprovar | decisão | 8 | a segunda requisição encontra `APROVADA` e recebe 409; sai um único `ConfirmarAdocao` | `CONCLUIDA` | `adocao.concluida` |
@@ -298,6 +298,7 @@ sequenceDiagram
 - **Comandos idempotentes por `sagaId` + passo.** Cada passo tem uma linha em `saga_passos` com o `messageId` do comando.
 - **Reenvio com o mesmo `messageId`.** Um comando reenviado por timeout mantém o `messageId`, para a inbox do participante devolver a resposta já gravada em vez de aplicar o efeito de novo.
 - **Encerramento depois das compensações bloqueantes.** `adocao.recusada`, `adocao.cancelada`, `adocao.expirada` e o `adocao.falhou` que vem de `COMPENSANDO` só saem na transição 12.
+- **Teto de reenvios das compensações.** Reenviar para sempre faria uma mensagem envenenada entrar em loop com a DLQ, com o animal preso. Ao atingir `ADOCAO_MAX_REENVIOS_COMPENSACAO`, o passo fica `ESGOTADO`, a solicitação continua em `COMPENSANDO` com `requer_intervencao` e um ADMIN retoma manualmente depois de corrigir a causa, com o mesmo `messageId` (#86). Os passos retentáveis depois do pivô (transição 16) seguem a mesma regra.
 - **Prazos configuráveis.** `ADOCAO_TIMEOUT_PASSO` define o timeout de cada passo (10 s). `ADOCAO_PRAZO_EXPIRACAO` define o prazo da decisão humana (72 h em produção, 2 min na demo, via ConfigMap).
 - **Retomada ao reiniciar.** Nada fica em memória. Ao subir, o relay publica o outbox pendente e o verificador de timeouts trata os passos com prazo vencido.
 - **Correlação.** Toda mensagem leva `sagaId` (igual ao id da solicitação) e `correlationId`, e todo log de transição registra `sagaId`, `correlationId`, `estado`, `passo` e `evento`.
