@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/gxbreus/ampara/services/adocao/internal/saga"
 )
 
 // Pinger é o que o /ready precisa do banco; o *pgxpool.Pool atende.
@@ -53,6 +55,13 @@ func NovoRouter(d Dependencias) http.Handler {
 	if d.Solicitacoes != nil && d.Verificador != nil {
 		h := &handlerSolicitacoes{repo: d.Solicitacoes, auth: d.Verificador, log: log}
 		mux.HandleFunc("POST /v1/solicitacoes", h.criar)
+		mux.HandleFunc("GET /v1/solicitacoes", h.listar)
+		mux.HandleFunc("GET /v1/solicitacoes/resumo", h.resumir)
+		mux.HandleFunc("GET /v1/solicitacoes/{id}", h.obter)
+		mux.HandleFunc("GET /v1/solicitacoes/{id}/historico", h.historico)
+		mux.HandleFunc("POST /v1/solicitacoes/{id}/aprovacao", h.acao(saga.EvAprovacao, Responsavel))
+		mux.HandleFunc("POST /v1/solicitacoes/{id}/recusa", h.acao(saga.EvRecusa, Responsavel))
+		mux.HandleFunc("POST /v1/solicitacoes/{id}/cancelamento", h.acao(saga.EvCancelamento, Adotante))
 	}
 	return middleware(mux, log, d.ServidoPor)
 }

@@ -19,6 +19,10 @@ import (
 type Solicitacoes interface {
 	CriarIdempotente(ctx context.Context, n repositorio.NovaSolicitacao, chave string) (string, bool, error)
 	Obter(ctx context.Context, id string) (repositorio.Visao, error)
+	Aplicar(ctx context.Context, id string, ev saga.Evento) (saga.Saida, error)
+	Listar(ctx context.Context, f repositorio.Filtro) ([]repositorio.Visao, string, error)
+	Resumir(ctx context.Context, responsavelID string) (repositorio.Resumo, error)
+	Historico(ctx context.Context, id string) ([]repositorio.ItemHistorico, error)
 }
 
 type Verificador interface {

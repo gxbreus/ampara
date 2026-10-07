@@ -145,17 +145,10 @@ type Visao struct {
 
 // Obter lê a solicitação para a API.
 func (r *Repositorio) Obter(ctx context.Context, id string) (Visao, error) {
-	var v Visao
-	var estado string
-	var desfecho, motivo, nome, responsavel *string
-	err := r.pool.QueryRow(ctx, `SELECT id, estado, desfecho, motivo, animal_id, animal_nome, adotante_id, responsavel_id,
-			expira_em, criado_em, atualizado_em FROM solicitacoes WHERE id = $1`, id).
-		Scan(&v.ID, &estado, &desfecho, &motivo, &v.AnimalID, &nome, &v.AdotanteID, &responsavel, &v.ExpiraEm, &v.CriadoEm, &v.AtualizadoEm)
+	v, err := lerVisao(r.pool.QueryRow(ctx, `SELECT `+colunasVisao+` FROM solicitacoes WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, ErrNaoEncontrada
 	}
-	v.Estado, v.Desfecho = saga.Estado(estado), saga.Estado(valor(desfecho))
-	v.Motivo, v.AnimalNome, v.ResponsavelID = valor(motivo), valor(nome), valor(responsavel)
 	return v, err
 }
 
