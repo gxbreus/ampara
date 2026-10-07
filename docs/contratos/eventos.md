@@ -36,7 +36,7 @@ flowchart LR
     ID -- conta.verificada --> XE
     XE -- "animal.* e conta.verificada" --> QAP --> AN
     XE -- "adocao.* e conta.verificada" --> QNE --> NO
-    QAC -. 5 entregas ou inválida .-> DLX --> DLQ
+    QAC -. 5 devoluções ou inválida .-> DLX --> DLQ
 ```
 
 Toda fila tem a própria DLQ; o diagrama mostra só a de `animais.comandos` para não poluir.
@@ -2073,8 +2073,8 @@ Animais atualiza a réplica `responsaveis` e o `responsavel` na projeção; Noti
 ## 6. DLQ e novas tentativas
 
 1. **Erro temporário** (banco fora do ar, timeout): o consumidor faz `nack` com requeue, e o RabbitMQ entrega de novo.
-2. **Quinta entrega sem sucesso:** o `x-delivery-limit: 5` manda a mensagem para `ampara.dlx`, que a roteia para a `<fila>.dlq`.
-3. **Mensagem inválida** (JSON quebrado, schema que não confere, `version` desconhecida): `nack` sem requeue, direto para a DLQ, sem gastar as 5 entregas.
+2. **Quinta devolução:** o `x-delivery-limit: 5` conta as devoluções. Depois da entrega original e de 5 devoluções (6 entregas no total), a mensagem vai para `ampara.dlx`, que a roteia para a `<fila>.dlq`. Comportamento conferido no teste do `compose.yaml` (#37).
+3. **Mensagem inválida** (JSON quebrado, schema que não confere, `version` desconhecida): `nack` sem requeue, direto para a DLQ, sem gastar as devoluções.
 
 Depois da DLQ (#86):
 
