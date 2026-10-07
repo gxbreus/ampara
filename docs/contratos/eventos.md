@@ -36,7 +36,7 @@ flowchart LR
     ID -- conta.verificada --> XE
     XE -- "animal.* e conta.verificada" --> QAP --> AN
     XE -- "adocao.* e conta.verificada" --> QNE --> NO
-    QAC -. 5 entregas ou inválida .-> DLX --> DLQ
+    QAC -. 5 devoluções ou inválida .-> DLX --> DLQ
 ```
 
 Toda fila tem a própria DLQ; o diagrama mostra só a de `animais.comandos` para não poluir.
@@ -150,7 +150,7 @@ Comando é imperativo (`ReservarAnimal`) e vai para um único consumidor. Respos
 
 ## 4. Fichas
 
-Os schemas descrevem só o `payload` e são JSON Schema 2020-12 válidos. Eles serão extraídos para `docs/contratos/mensagens/` e usados nos testes de contrato (#88). Todos usam `additionalProperties: false`: campo novo entra primeiro aqui, numa versão nova.
+Os schemas descrevem só o `payload` e são JSON Schema 2020-12 válidos. Eles serão extraídos para `docs/contratos/mensagens/` e usados nos testes de contrato (#88). Eles usam `additionalProperties: false` porque descrevem exatamente o que o produtor emite, e é isso que os testes de contrato conferem. O consumidor faz o contrário: ignora campos que não conhece (leitor tolerante, ADR-006). Por isso adicionar um campo opcional é compatível e não muda a `version`; remover, renomear ou mudar o tipo de um campo cria a `version: 2`.
 
 ### Comandos e respostas com Animais
 
@@ -2073,8 +2073,8 @@ Animais atualiza a réplica `responsaveis` e o `responsavel` na projeção; Noti
 ## 6. DLQ e novas tentativas
 
 1. **Erro temporário** (banco fora do ar, timeout): o consumidor faz `nack` com requeue, e o RabbitMQ entrega de novo.
-2. **Quinta entrega sem sucesso:** o `x-delivery-limit: 5` manda a mensagem para `ampara.dlx`, que a roteia para a `<fila>.dlq`.
-3. **Mensagem inválida** (JSON quebrado, schema que não confere, `version` desconhecida): `nack` sem requeue, direto para a DLQ, sem gastar as 5 entregas.
+2. **Quinta devolução:** o `x-delivery-limit: 5` conta as devoluções. Depois da entrega original e de 5 devoluções (6 entregas no total), a mensagem vai para `ampara.dlx`, que a roteia para a `<fila>.dlq`. Comportamento conferido no teste do `compose.yaml` (#37).
+3. **Mensagem inválida** (JSON quebrado, schema que não confere, `version` desconhecida): `nack` sem requeue, direto para a DLQ, sem gastar as devoluções.
 
 Depois da DLQ (#86):
 

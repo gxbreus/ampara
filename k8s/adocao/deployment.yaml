@@ -1,0 +1,55 @@
+# Com 2 réplicas, o relay do outbox e o job de expiração rodam nas duas. A #58 resolve isso
+# com SELECT ... FOR UPDATE SKIP LOCKED (docs/dados.md, seção 5.3): cada réplica pega um
+# lote diferente e nenhuma linha é publicada ou expirada em dobro.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adocao
+  labels: { app: adocao }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: adocao }
+  template:
+    metadata:
+      labels: { app: adocao }
+    spec:
+      # espalha as réplicas pelos workers, quando houver espaço
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: adocao }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532     # usuário nonroot da imagem distroless
+      containers:
+        - name: adocao
+          image: ampara/adocao:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: adocao-config }
+          # só as duas chaves do serviço; POSTGRES_USER e POSTGRES_PASSWORD ficam com o banco
+          env:
+            - name: ADOCAO_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: adocao-secret, key: ADOCAO_DATABASE_URL } }
+            - name: ADOCAO_AMQP_URL
+              valueFrom: { secretKeyRef: { name: adocao-secret, key: ADOCAO_AMQP_URL } }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          # liveness em /health, nunca em /ready: com o banco fora, o pod reiniciaria em loop
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }

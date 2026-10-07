@@ -1,0 +1,50 @@
+# A imagem ampara/rabbitmq:dev (#37) já traz o definitions.json com a topologia do catálogo
+# e o entrypoint que cria um usuário por serviço a partir das senhas do Secret (#89).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels: { app: rabbitmq }
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels: { app: rabbitmq }
+  template:
+    metadata:
+      labels: { app: rabbitmq }
+    spec:
+      containers:
+        - name: rabbitmq
+          image: ampara/rabbitmq:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: amqp, containerPort: 5672 }
+            - { name: painel, containerPort: 15672 }
+          envFrom:
+            - secretRef: { name: rabbitmq-secret }
+          # só fica pronto depois que os usuários dos serviços foram criados
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "rabbitmq-diagnostics -q ping && test -f /tmp/ampara-usuarios-prontos"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "status"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - { name: dados, mountPath: /var/lib/rabbitmq }
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }
