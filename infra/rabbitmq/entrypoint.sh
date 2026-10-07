@@ -14,6 +14,16 @@ set -eu
 PRONTO=/tmp/ampara-usuarios-prontos
 rm -f "$PRONTO"
 
+# Cria o cookie do Erlang antes de subir o broker, já com o dono certo. Sem isso, na
+# primeira subida o rabbitmqctl abaixo (rodando como root) criaria o arquivo como root,
+# e o servidor, que roda como o usuário rabbitmq, cairia com "eacces" ao tentar lê-lo.
+COOKIE=/var/lib/rabbitmq/.erlang.cookie
+if [ ! -f "$COOKIE" ]; then
+  head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32 > "$COOKIE"
+  chmod 400 "$COOKIE"
+  chown rabbitmq:rabbitmq "$COOKIE" 2>/dev/null || true
+fi
+
 docker-entrypoint.sh rabbitmq-server &
 pid=$!
 trap 'kill -TERM "$pid"; wait "$pid"' TERM INT
