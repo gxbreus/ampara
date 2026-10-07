@@ -198,7 +198,7 @@ func TestPostRecusas(t *testing.T) {
 func TestPostIdempotente(t *testing.T) {
 	repo := novoRepo()
 	auth := "Bearer " + token(t, adotanteID, "ADOTANTE", chave)
-	cab := map[string]string{"Idempotency-Key": "3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63"}
+	cab := map[string]string{"Idempotency-Key": "3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63"} // gitleaks:allow (UUID de teste)
 	a := postar(t, repo, auth, `{"animalId":"`+animalID+`"}`, cab)
 	b := postar(t, repo, auth, `{"animalId":"`+animalID+`"}`, cab)
 	if a.Code != 202 || b.Code != 202 || a.Header().Get("Location") != b.Header().Get("Location") || len(repo.criados) != 1 {

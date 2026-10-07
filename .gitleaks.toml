@@ -1,0 +1,14 @@
+# Configuração do gitleaks (#72): as regras padrão, mais uma allowlist estreita para arquivos
+# que só têm valores fictícios por definição.
+title = "Ampara"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "modelos sem valores reais e exemplos fictícios dos contratos"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''^k8s/.*/secret\.env\.example$''',
+  '''^docs/contratos/.*\.ya?ml$''',
+]

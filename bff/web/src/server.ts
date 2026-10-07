@@ -13,7 +13,10 @@ const app = criarApp({
 for (const sinal of ["SIGINT", "SIGTERM"] as const) {
   process.on(sinal, () => {
     app.log.info({ sinal }, "encerrando");
-    app.close().then(() => process.exit(0));
+    app.close().then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
   });
 }
 
