@@ -1,10 +1,10 @@
 """Ponto de entrada do serviço Animais: `uvicorn app.main:app --port 8001`."""
 
-from contextlib import asynccontextmanager
 import logging
 import socket
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from pythonjsonlogger.json import JsonFormatter
