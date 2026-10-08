@@ -11,15 +11,15 @@ Regras:
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ANIMAIS_")
 
-    # TODO(#39): mongo_url (ANIMAIS_MONGO_URL, database animais, escrita) e
-    # leitura_mongo_url (ANIMAIS_LEITURA_MONGO_URL, database animais_leitura, projeção),
-    # os dois como SecretStr, sem valor padrão.
+    mongo_url: SecretStr
+    leitura_mongo_url: SecretStr
 
 
 @lru_cache

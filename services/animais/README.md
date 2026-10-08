@@ -79,13 +79,13 @@ Teste `async def` roda direto, sem decorator (`asyncio_mode = "auto"`).
 
 A base acima só tem o `GET /health` e a configuração. O resto da #39 fica com o responsável. Os pontos marcados com `TODO(#39)` no código mostram onde mexer:
 
-- [ ] `requirements.txt`: acrescentar `pymongo` e `python-json-logger`, com versão fixada.
-- [ ] `config.py`: `ANIMAIS_MONGO_URL` e `ANIMAIS_LEITURA_MONGO_URL` como `SecretStr`, sem valor padrão.
-- [ ] `app/db.py` e o `lifespan` em `main.py`: `AsyncMongoClient` e criação dos índices, incluindo o `2dsphere`.
-- [ ] `GET /ready` em `api/health.py`: `ping` no MongoDB, 503 quando ele cai, com um teste.
-- [ ] Middleware de `X-Correlation-Id` e `X-Served-By` e logs em JSON.
-- [ ] `Dockerfile` multi-stage, `Dockerfile.single` para comparar, e os tamanhos em `docs/imagens.md`.
-- [ ] Bloco `animais` no `compose.yaml`, nas redes `services` e `data-animais`.
+- [x] `requirements.txt`: acrescentar `pymongo` e `python-json-logger`, com versão fixada.
+- [x] `config.py`: `ANIMAIS_MONGO_URL` e `ANIMAIS_LEITURA_MONGO_URL` como `SecretStr`, sem valor padrão.
+- [x] `app/db.py` e o `lifespan` em `main.py`: `AsyncMongoClient` e criação dos índices, incluindo o `2dsphere`.
+- [x] `GET /ready` em `api/health.py`: `ping` no MongoDB, 503 quando ele cai, com um teste.
+- [x] Middleware de `X-Correlation-Id` e `X-Served-By` e logs em JSON.
+- [x] `Dockerfile` multi-stage, `Dockerfile.single` para comparar, e os tamanhos em `docs/imagens.md`.
+- [x] Bloco `animais` no `compose.yaml`, nas redes `services` e `data-animais`.
 
 A CI instala o `requirements-dev.txt` e roda `ruff check`, `ruff format --check` e `pytest` neste serviço. O `docker build` passa a rodar quando o `Dockerfile` existir.
 
