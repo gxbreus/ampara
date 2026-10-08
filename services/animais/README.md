@@ -19,8 +19,8 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 
 uvicorn app.main:app --reload --port 8001   # http://localhost:8001/health e /docs
-pytest                                     # testes
-ruff check . && ruff format --check .      # o mesmo lint da CI
+pytest                                      # testes
+ruff check . && ruff format --check .       # o mesmo lint da CI
 ```
 
 O `--reload` serve só para o desenvolvimento e não vai para o Dockerfile.
