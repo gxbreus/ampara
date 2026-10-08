@@ -176,6 +176,24 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+  identidade:
+    build: ./services/identidade
+    image: ampara/identidade:dev
+    environment:
+      IDENTIDADE_DATABASE_URL: postgresql://${IDENTIDADE_DB_USER}:${IDENTIDADE_DB_PASSWORD}@postgres-identidade:5432/identidade
+    # edge: o gateway encaminha /auth/v1 direto para a Identidade
+    networks: [edge, services, data-identidade]
+    depends_on:
+      postgres-identidade: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
   bff-web:
     build: ./bff/web
     image: ampara/bff-web:dev
@@ -186,7 +204,8 @@ services:
       ADOCAO_URL: http://adocao:8080
     networks: [edge, services]
     depends_on:
-      # identidade e animais entram aqui quando os blocos deles chegarem (#38, #39)
+      # animais entra aqui quando o bloco dele chegar (#39)
+      identidade: { condition: service_healthy }
       adocao: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/web/v1/health >/dev/null || exit 1"]

@@ -24,7 +24,13 @@ em JSON com esse identificador.
 
 O serviço usa somente variáveis de ambiente. A primeira migration em
 `src/migrations/` cria a tabela `contas`; `synchronize` permanece desativado.
-O Compose com PostgreSQL e as redes será conectado pela #37.
+A conexão vem de `IDENTIDADE_DATABASE_URL`, o mesmo nome do `.env.example` da raiz.
+
+Pelo Compose, na raiz do repositório:
+
+```bash
+docker compose up -d --build identidade   # sobe também o postgres-identidade
+```
 
 ## Issues
 

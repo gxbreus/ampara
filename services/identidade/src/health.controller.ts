@@ -14,11 +14,7 @@ export class HealthController {
   @Get('ready')
   async readiness(): Promise<{ status: string }> {
     const client = new Client({
-      host: this.config.getOrThrow<string>('DB_HOST'),
-      port: Number(this.config.getOrThrow<string>('DB_PORT')),
-      user: this.config.getOrThrow<string>('DB_USER'),
-      password: this.config.getOrThrow<string>('DB_PASSWORD'),
-      database: this.config.getOrThrow<string>('DB_NAME'),
+      connectionString: this.config.getOrThrow<string>('IDENTIDADE_DATABASE_URL'),
       connectionTimeoutMillis: 300,
     });
 
