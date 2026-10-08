@@ -67,7 +67,7 @@ flowchart TB
     MQ -. eventos .-> NO
 ```
 
-Os grupos antecipam as redes do Compose (#37): o gateway e os BFFs ficam em `edge`, os serviços e o broker em `services`, e cada banco numa rede `data-<serviço>` que só o próprio serviço alcança. Os serviços de domínio não têm rota externa: tudo entra pelo Kong ([`gateway.md`](gateway.md)).
+Os grupos são as redes do [`compose.yaml`](../compose.yaml): o gateway fica em `edge`; os BFFs ficam em `edge` e em `services`, porque recebem do gateway e chamam os serviços; os serviços e o broker ficam em `services`; e cada banco fica numa rede interna `data-<serviço>` que só o próprio serviço alcança. Os serviços de domínio não têm rota externa: tudo entra pelo Kong (ADR-005 e `gateway.md`, #27).
 
 Animais aparece com dois cilindros na mesma instância do MongoDB: o modelo de escrita (`animais`) e a projeção de busca (`animais_leitura`), separados pelo CQRS.
 
@@ -120,7 +120,7 @@ Cada subseção diz pelo que o serviço responde, os dados que só ele possui, o
 
 ### Adoção
 
-- **Responsável por:** a solicitação de adoção do começo ao fim e a orquestração da SAGA: decide o próximo passo, dispara as compensações, controla os prazos (timeout de cada passo e expiração da decisão) e retoma as SAGAs em andamento quando reinicia.
+- **Responsável por:** a solicitação de adoção do começo ao fim e a orquestração da SAGA: decide o próximo passo, dispara as compensações, controla os prazos (timeout de cada passo e expiração da decisão) e retoma as SAGAs em andamento quando reinicia. Quando uma compensação esgota os reenvios, marca a solicitação para intervenção manual, e um ADMIN pode retomá-la depois de corrigir a causa ([`operacao/dlq.md`](operacao/dlq.md)).
 - **Dados que possui:** solicitações e o estado da SAGA, a linha do tempo de cada solicitação, os passos com seus `messageId`, o outbox, a inbox e as chaves de idempotência do `POST`. Guarda uma cópia do nome do animal e do responsável, recebida em `AnimalReservado`.
 - **Não faz:** não muda o status do animal nem ocupa a vaga do adotante: pede isso por comando a Animais e à Identidade, que decidem sobre os próprios dados. Não envia avisos: publica eventos, e Notificações decide quem avisar e como.
 - **Corte alternativo rejeitado: Adoção dentro de Animais.** A reserva fica em Animais, então juntar os dois parece natural. Só que a SAGA também envolve a vaga do adotante, que é da Identidade, e uma espera humana de até 72 horas com estado próprio. Dentro de Animais, o catálogo, que muda pouco e é muito lido, passaria a carregar a máquina de estados, os prazos e as compensações. Uma queda no orquestrador derrubaria também a busca. Separados, cada um escala e falha sozinho: Animais pode ter 3 réplicas atendendo buscas sem mudar nada na SAGA.
@@ -196,6 +196,8 @@ A máquina de estados, as 18 transições, os 17 cenários de falha e os diagram
 | [`saga.md`](saga.md) | estados, transições, compensações e diagramas da SAGA |
 | [`dados.md`](dados.md) | banco por serviço, consistência eventual, outbox e inbox |
 | `cqrs.md` (#33) | modelo de escrita, projeção de busca e defasagem em Animais |
-| [`gateway.md`](gateway.md) | rotas externas e políticas do Kong |
+| `gateway.md` (#27) | rotas externas e políticas do Kong |
 | [`contratos/`](contratos/) | contratos OpenAPI de cada serviço e BFF, e o catálogo de mensagens |
-| [`decisoes/`](decisoes/) | ADRs: arquitetura (001), SAGA (002), outbox (003), CQRS (004), gateway (005), versionamento (006) e Assistente (007) |
+| [`decisoes/`](decisoes/) | ADRs publicadas: arquitetura (001), SAGA (002) e outbox (003). Em andamento: CQRS (004, #33), gateway (005, #27), versionamento (006, #28) e Assistente (007, #35) |
+| [`operacao/dlq.md`](operacao/dlq.md) | como identificar uma mensagem envenenada, reprocessar ou descartar e retomar a SAGA |
+| [`compose.yaml`](../compose.yaml) e [`k8s/`](../k8s/) | execução local no Docker Compose e no Kubernetes (kind) |
