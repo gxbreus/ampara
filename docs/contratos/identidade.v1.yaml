@@ -192,8 +192,12 @@ paths:
       tags: [Contas internas]
       summary: Consulta contas por identificadores ou pela fila de verificação
       description: >-
-        Rota interna. Com ids, retorna no máximo 100 resumos para uso do BFF
-        Web. Com statusVerificacao e role, retorna a fila administrativa.
+        Rota interna, com dois modos. Com ids (PROTETOR, ONG ou ADMIN), retorna
+        os resumos das contas encontradas, até 100; ids inexistentes são
+        omitidos, e mais de 100 ids responde 422. Com incluir=perfil, cada
+        resumo traz também o perfil de adoção, sem e-mail nem aceite do termo
+        (null quando a conta não tem perfil). Com statusVerificacao e role
+        (só ADMIN), retorna a fila de verificação.
       operationId: listarContas
       security:
         - bearerAuth: []
@@ -210,13 +214,32 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ContaResumo'
-              example:
-                - id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
-                  nome: Bruna Silva
-                  role: ADOTANTE
-                  cidade: Lavras
-                  statusVerificacao: VERIFICADA
+                  oneOf:
+                    - $ref: '#/components/schemas/ContaResumo'
+                    - $ref: '#/components/schemas/ContaComPerfil'
+              examples:
+                resumo:
+                  summary: Sem incluir
+                  value:
+                    - id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: Bruna Silva
+                      role: ADOTANTE
+                      cidade: Lavras
+                      statusVerificacao: VERIFICADA
+                comPerfil:
+                  summary: Com incluir=perfil
+                  value:
+                    - id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: Bruna Silva
+                      role: ADOTANTE
+                      cidade: Lavras
+                      statusVerificacao: VERIFICADA
+                      perfil:
+                        tipoMoradia: CASA
+                        temQuintal: true
+                        outrosAnimais: false
+                        horasForaDeCasa: 6
+                        completo: true
         '401':
           $ref: '#/components/responses/NaoAutenticado'
         '403':
@@ -316,6 +339,9 @@ components:
     IncluirPerfil:
       name: incluir
       in: query
+      description: >-
+        Com perfil, cada conta da resposta vem como ContaComPerfil. Só vale com
+        ids.
       schema:
         type: string
         enum: [perfil]
@@ -488,6 +514,46 @@ components:
           type: string
         statusVerificacao:
           $ref: '#/components/schemas/StatusVerificacao'
+    ContaComPerfil:
+      type: object
+      description: Resumo da conta com o perfil de adoção, sem dados de contato (LGPD).
+      additionalProperties: false
+      required: [id, nome, role, cidade, statusVerificacao, perfil]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        cidade:
+          type: string
+        statusVerificacao:
+          $ref: '#/components/schemas/StatusVerificacao'
+        perfil:
+          oneOf:
+            - $ref: '#/components/schemas/PerfilResumo'
+            - type: 'null'
+    PerfilResumo:
+      type: object
+      description: Perfil de adoção sem o aceite do termo, como o BFF Web o repassa.
+      additionalProperties: false
+      required: [tipoMoradia, completo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        completo:
+          type: boolean
     Role:
       type: string
       enum: [ADOTANTE, PROTETOR, ONG, ADMIN]
