@@ -25,17 +25,18 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
   });
 
   const servidoPor = os.hostname();
-  app.addHook("onSend", async (req, reply) => {
+  app.addHook("onSend", (req, reply, payload, done) => {
     reply.header("X-Served-By", servidoPor);
     reply.header("X-Correlation-Id", req.id);
+    done(null, payload);
   });
 
   const rolesDoPainel = exigirRoles(verificar, ["PROTETOR", "ONG", "ADMIN"]);
 
   // O gateway encaminha /web/v1/* sem cortar o prefixo, então todas as rotas ficam sob ele.
   app.register(
-    async (r) => {
-      r.get("/health", async () => ({ status: "ok" }));
+    (r, _opcoes, done) => {
+      r.get("/health", (_req, reply) => reply.send({ status: "ok" }));
 
       r.get("/ready", async (req, reply) => {
         const nomes = Object.keys(config.servicos) as (keyof Config["servicos"])[];
@@ -65,6 +66,7 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
         const corpo = await resp.text();
         return reply.code(resp.status).type(resp.headers.get("content-type") ?? "application/json").send(corpo);
       });
+      done();
     },
     { prefix: "/web/v1" },
   );
