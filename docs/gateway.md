@@ -8,7 +8,7 @@ de domínio não possuem rota externa.
 
 | Nome | Rota externa | Destino interno | Autenticação | Limite | Roles esperadas |
 | --- | --- | --- | --- | --- | --- |
-| `auth` | `/api/v1/auth/*` | `identidade:3001/v1/auth/*` | Pública | 20/min por IP | — |
+| `auth` | `/auth/v1/*` | `identidade:3001/v1/auth/*` | Pública | 20/min por IP | — |
 | `mobile-publico` | GET `/mobile/v1/animais*` | `bff-mobile:3020` | Pública; se vier token, o BFF valida assinatura e `exp` antes de usar | 600/min por IP | — |
 | `mobile` | `/mobile/v1/*` | `bff-mobile:3020` | JWT RS256 | 600/min por IP | ADOTANTE |
 | `web` | `/web/v1/*` | `bff-web:3010` | JWT RS256 | 300/min por IP | PROTETOR, ONG, ADMIN |
@@ -20,12 +20,29 @@ perfil e verificação permanecem na rede interna.
 flowchart LR
     Web[App Web] --> Gateway[Kong API Gateway]
     Mobile[App Mobile] --> Gateway
-    Gateway -->|/api/v1/auth| Identidade[Identidade]
+    Gateway -->|/auth/v1| Identidade[Identidade]
     Gateway -->|/web/v1| BffWeb[BFF Web]
     Gateway -->|/mobile/v1| BffMobile[BFF Mobile]
     BffWeb --> Servicos[Serviços de domínio]
     BffMobile --> Servicos
 ```
+
+### Regra das URLs e versões
+
+Toda rota externa segue o formato `/<cliente>/v<versão maior>/...`: `/web/v1`,
+`/mobile/v1` e `/auth/v1`. As rotas internas dos serviços usam só `/v<versão>/...`
+e nunca aparecem para o cliente.
+
+As duas versões são **eixos independentes**. O `v1` de `/web/v1` é a versão do
+contrato do BFF Web com o App Web; o `v1` de `/v1/solicitacoes` é a versão do
+contrato da Adoção com os BFFs. Se a Adoção publicar uma `v2`, o BFF Web passa a
+consumi-la e continua expondo `/web/v1` enquanto o contrato dele com o cliente
+não mudar. Uma `/web/v2` só surge quando o próprio BFF quebra esse contrato.
+
+Alternativas rejeitadas (#124): prefixo único `/api/<cliente>/v1`, que muda o BFF
+Web, os testes e a reescrita dos `_links` sem ganho para um host que só serve API;
+e login pelos BFFs, que tiraria a Identidade do gateway mas exigiria rotas de
+sessão nos dois BFFs, com o BFF Mobile ainda inexistente.
 
 ## Responsabilidades
 

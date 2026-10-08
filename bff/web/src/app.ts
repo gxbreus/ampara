@@ -1,10 +1,13 @@
-import Fastify, { LogController, type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
+import { rotasDeAdmin } from "./admin.js";
 import { exigirRoles, type Verificador } from "./auth.js";
 import type { Cliente } from "./cliente.js";
 import type { Config } from "./config.js";
 import { problema } from "./problema.js";
+import { RespostaDoServico, ServicoIndisponivel } from "./servicos.js";
+import { rotasDeSolicitacoes } from "./solicitacoes.js";
 
 interface Dependencias {
   config: Config;
@@ -56,7 +59,7 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
       });
 
       // Conta autenticada: repassa para a Identidade (GET /v1/contas/eu), como no contrato.
-      r.get("/eu", { preHandler: rolesDoPainel }, async (req, reply) => {
+      r.get("/eu", { onRequest: rolesDoPainel }, async (req, reply) => {
         let resp: Response;
         try {
           resp = await chamar(`${config.servicos.identidade}/v1/contas/eu`, req);
@@ -66,10 +69,27 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
         const corpo = await resp.text();
         return reply.code(resp.status).type(resp.headers.get("content-type") ?? "application/json").send(corpo);
       });
+
+      rotasDeSolicitacoes(r, { config, verificar, chamar });
+      rotasDeAdmin(r, { config, verificar, chamar });
       done();
     },
     { prefix: "/web/v1" },
   );
+
+  app.setErrorHandler((erro, req, reply) => {
+    if (erro instanceof ServicoIndisponivel) {
+      return problema(reply, 503, "servico-indisponivel", "Serviço indisponível", erro.message);
+    }
+    if (erro instanceof RespostaDoServico) {
+      return reply.code(erro.status).type(erro.tipo).send(erro.corpo);
+    }
+    if ((erro as FastifyError).validation) {
+      return problema(reply, 422, "validacao", "Dados inválidos", (erro as FastifyError).message);
+    }
+    req.log.error(erro);
+    return problema(reply, 500, "erro-interno", "Erro interno", "Erro inesperado no BFF.");
+  });
 
   return app;
 }
