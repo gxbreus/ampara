@@ -1,0 +1,1461 @@
+openapi: 3.1.0
+info:
+  title: Ampara — BFF Web
+  version: 1.0.0
+  description: |
+    Backend for Frontend do App Web, o painel de protetores e ONGs. Fica atrás
+    do gateway em `/web/v1/*` (o Kong valida o JWT RS256 e repassa o mesmo
+    caminho) e agrega Animais, Adoção e Identidade numa resposta por tela.
+
+    ## Por que um BFF só para o web
+
+    O painel mostra numa tela o que nenhum serviço tem sozinho: o animal
+    completo, a linha do tempo de status, as solicitações dele e quem é cada
+    adotante. O App Mobile precisa do oposto: cartões pequenos, com distância e
+    o estado da própria solicitação, numa rede móvel. Um endpoint único teria
+    que mandar ao celular dados pessoais de adotantes que ele não pode ver, ou
+    obrigar o painel a fazer dezenas de chamadas por tela. A comparação campo a
+    campo está em `docs/contratos/bff-comparacao.md`.
+
+    ## Como o BFF chama os serviços
+
+    - Repassa o `Authorization` original e propaga o `X-Correlation-Id`. Não
+      existe header `X-Usuario`: cada serviço lê o `sub` e a `role` do JWT.
+    - **No máximo uma chamada por serviço por rota.** Dados de vários
+      adotantes ou animais vêm em lote (`?ids=`), nunca um por item (sem N+1).
+    - Segue a política de chamadas internas da #87: timeout de 2 s em leitura
+      e 5 s em escrita, retry só em `GET` (até 2, com backoff e *jitter*) e
+      circuit breaker por serviço de destino.
+    - Traduz os `_links` HAL da Adoção de `/v1/...` para `/web/v1/...`.
+    - O schema de resposta do Fastify corta qualquer campo fora deste contrato.
+
+    ## Falha parcial
+
+    Cada rota tem um serviço **essencial** e, às vezes, serviços
+    **complementares**. Se o essencial falhar (lento, fora do ar ou com o
+    circuito aberto), a rota responde **503**. Se um complementar falhar, a
+    rota responde **200** com o que conseguiu, os campos daquele serviço
+    vazios ou `null`, e um item em `avisos[]` dizendo qual serviço faltou.
+    Nunca 500 por falha de outro serviço.
+
+    | Rota | Essencial | Complementares | Sem um complementar |
+    | --- | --- | --- | --- |
+    | `GET /web/v1/painel` | — | Animais, Adoção | os contadores daquele serviço vêm `null` |
+    | `GET /web/v1/animais` | Animais | Adoção | `solicitacoesAtivas` vem `null` |
+    | `GET /web/v1/animais/{id}` | Animais | Adoção, Identidade | sem Adoção, `solicitacoes` vem `[]`; sem Identidade, `adotante` vem `null` |
+    | `GET /web/v1/solicitacoes` | Adoção | Identidade, Animais | `adotante` ou `animal` vem `null` |
+    | `GET /web/v1/solicitacoes/{id}` | Adoção | Identidade, Animais | `adotante` ou `animal` vem `null` |
+    | escrita em animais e decisões | o serviço que grava | — | — |
+    | `/web/v1/eu` e `/web/v1/admin/*` | Identidade | — | — |
+
+    No painel, se Animais e Adoção falharem juntos, a rota responde 503.
+
+    ## Autorização
+
+    As rotas do painel exigem role `PROTETOR` ou `ONG`; as de `/web/v1/admin`
+    exigem `ADMIN`. O BFF confere a role e o serviço de domínio decide sobre o
+    recurso (por exemplo, se o animal é do responsável). Toda listagem usa o
+    `sub` do token como `responsavelId`.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://bff-web:3010
+    description: Rede interna; exposto pelo gateway no mesmo caminho
+tags:
+  - name: Painel
+    description: Visão geral do responsável.
+  - name: Animais
+    description: Cadastro e acompanhamento dos animais do responsável.
+  - name: Solicitações
+    description: Solicitações de adoção recebidas e decisões.
+  - name: Conta
+    description: Conta autenticada.
+  - name: Administração
+    description: Verificação de protetores e ONGs.
+paths:
+  /web/v1/painel:
+    get:
+      tags: [Painel]
+      summary: Contadores e atalhos do painel
+      description: |
+        Chama, em paralelo:
+        - Animais `GET /v1/animais?responsavelId={sub}` para os contadores por status;
+        - Adoção `GET /v1/solicitacoes/resumo?responsavelId={sub}`.
+      operationId: obterPainel
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Painel do responsável, completo ou parcial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Painel'
+              examples:
+                completo:
+                  summary: Todos os serviços responderam
+                  value:
+                    animais:
+                      total: 4
+                      porStatus:
+                        DISPONIVEL: 2
+                        RESERVADO: 1
+                        ADOTADO: 1
+                    solicitacoes:
+                      aguardandoAprovacao: 1
+                      porEstado:
+                        AGUARDANDO_APROVACAO: 1
+                        CONCLUIDA: 1
+                        RECUSADA: 1
+                      concluidasNoMes: 1
+                    avisos: []
+                semAdocao:
+                  summary: Adoção fora do ar, resposta parcial
+                  value:
+                    animais:
+                      total: 4
+                      porStatus:
+                        DISPONIVEL: 2
+                        RESERVADO: 1
+                        ADOTADO: 1
+                    solicitacoes: null
+                    avisos:
+                      - servico: adocao
+                        motivo: CIRCUITO_ABERTO
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/animais:
+    get:
+      tags: [Animais]
+      summary: Lista os animais do responsável
+      description: |
+        Chama:
+        - Animais `GET /v1/animais?responsavelId={sub}&status=&cursor=` (essencial);
+        - Adoção `GET /v1/solicitacoes/resumo?responsavelId={sub}` para preencher
+          `solicitacoesAtivas` com `ativasPorAnimal`.
+      operationId: listarAnimais
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatusAnimal'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de animais.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaAnimais'
+              example:
+                itens:
+                  - id: 65a2f1c4e8b9d3a7f0c1b2e9
+                    nome: Thor
+                    especie: CAO
+                    porte: MEDIO
+                    status: RESERVADO
+                    fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+                    solicitacoesAtivas: 1
+                    atualizadoEm: '2026-11-17T15:00:01Z'
+                  - id: 65a2f1c4e8b9d3a7f0c1b2d4
+                    nome: Pipoca
+                    especie: GATO
+                    porte: PEQUENO
+                    status: DISPONIVEL
+                    fotoCapa: https://exemplo.ampara.dev/fotos/pipoca-1.jpg
+                    solicitacoesAtivas: 0
+                    atualizadoEm: '2026-11-17T14:00:00Z'
+                proximoCursor: null
+                avisos: []
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+    post:
+      tags: [Animais]
+      summary: Cadastra um animal
+      description: >-
+        Repassa para Animais `POST /v1/animais`. Animais recusa com 403 se o
+        responsável ainda não foi verificado.
+      operationId: cadastrarAnimal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalEntrada'
+            example:
+              nome: Thor
+              especie: CAO
+              porte: MEDIO
+              idadeMeses: 36
+              temperamento: [dócil, brincalhão]
+              fotos:
+                - https://exemplo.ampara.dev/fotos/thor-1.jpg
+              localizacao:
+                lat: -21.2453
+                lng: -44.9998
+                bairro: Centro
+                cidade: Lavras
+      responses:
+        '201':
+          description: Animal cadastrado.
+          headers:
+            Location:
+              description: Caminho do animal no BFF Web.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+              example: /web/v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalResumo'
+              example:
+                id: 65a2f1c4e8b9d3a7f0c1b2e9
+                nome: Thor
+                especie: CAO
+                porte: MEDIO
+                status: DISPONIVEL
+                fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+                solicitacoesAtivas: 0
+                atualizadoEm: '2026-11-10T13:00:00Z'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/animais/{id}:
+    get:
+      tags: [Animais]
+      summary: Detalhe completo de um animal
+      description: |
+        Chama, em paralelo depois da primeira:
+        - Animais `GET /v1/animais/{id}` (essencial): modelo completo, com
+          coordenada exata e histórico de status;
+        - Adoção `GET /v1/solicitacoes?animalId={id}&responsavelId={sub}`;
+        - Identidade `GET /v1/contas?ids={adotantes}&incluir=perfil`, uma
+          chamada em lote com os adotantes de todas as solicitações.
+
+        O adotante vem sem e-mail e sem endereço (LGPD). Os `_links` de cada
+        solicitação são os da Adoção traduzidos para `/web/v1`.
+      operationId: obterAnimal
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdAnimal'
+      responses:
+        '200':
+          description: Animal, histórico e solicitações com dados do adotante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalPainel'
+              examples:
+                thor:
+                  $ref: '#/components/examples/Thor'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+    put:
+      tags: [Animais]
+      summary: Atualiza os dados de um animal
+      description: Repassa para Animais `PUT /v1/animais/{id}`. Não muda o status.
+      operationId: atualizarAnimal
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdAnimal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalEntrada'
+            example:
+              nome: Thor
+              especie: CAO
+              porte: MEDIO
+              idadeMeses: 37
+              temperamento: [dócil, brincalhão, castrado]
+              fotos:
+                - https://exemplo.ampara.dev/fotos/thor-1.jpg
+              localizacao:
+                lat: -21.2453
+                lng: -44.9998
+                bairro: Centro
+                cidade: Lavras
+      responses:
+        '200':
+          description: Animal atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalResumo'
+              example:
+                id: 65a2f1c4e8b9d3a7f0c1b2e9
+                nome: Thor
+                especie: CAO
+                porte: MEDIO
+                status: RESERVADO
+                fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+                solicitacoesAtivas: null
+                atualizadoEm: '2026-11-18T08:00:00Z'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/animais/{id}/status:
+    patch:
+      tags: [Animais]
+      summary: Muda o status manual de um animal
+      description: >-
+        Repassa para Animais `PATCH /v1/animais/{id}/status`. Só aceita
+        `DISPONIVEL`, `EM_TRATAMENTO` e `INDISPONIVEL`: `RESERVADO` e `ADOTADO`
+        só mudam pela SAGA, e Animais responde 409 se o animal estiver
+        reservado.
+      operationId: alterarStatusAnimal
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdAnimal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlteracaoStatus'
+            example:
+              status: EM_TRATAMENTO
+      responses:
+        '200':
+          description: Status alterado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalResumo'
+              example:
+                id: 65a2f1c4e8b9d3a7f0c1b2d4
+                nome: Pipoca
+                especie: GATO
+                porte: PEQUENO
+                status: EM_TRATAMENTO
+                fotoCapa: https://exemplo.ampara.dev/fotos/pipoca-1.jpg
+                solicitacoesAtivas: null
+                atualizadoEm: '2026-11-18T08:10:00Z'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '409':
+          $ref: '#/components/responses/StatusDaSaga'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/solicitacoes:
+    get:
+      tags: [Solicitações]
+      summary: Lista as solicitações recebidas
+      description: |
+        Uma chamada por serviço, sem N+1:
+        1. Adoção `GET /v1/solicitacoes?responsavelId={sub}&estado=&cursor=` (essencial);
+        2. em paralelo, Identidade `GET /v1/contas?ids={adotantes}&incluir=perfil`
+           e Animais `GET /v1/animais?ids={animais}`, com os ids da página.
+      operationId: listarSolicitacoes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Estado'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de solicitações com animal e adotante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaSolicitacoes'
+              example:
+                itens:
+                  - id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                    estado: AGUARDANDO_APROVACAO
+                    desfecho: null
+                    expiraEm: '2026-11-20T15:00:00Z'
+                    criadoEm: '2026-11-17T15:00:00Z'
+                    animal:
+                      id: 65a2f1c4e8b9d3a7f0c1b2e9
+                      nome: Thor
+                      fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+                    adotante:
+                      id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: Bruna Silva
+                      cidade: Lavras
+                      perfil:
+                        tipoMoradia: CASA
+                        temQuintal: true
+                        outrosAnimais: false
+                        horasForaDeCasa: 4
+                        completo: true
+                    _links:
+                      self:
+                        href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                      animal:
+                        href: /web/v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+                      aprovar:
+                        href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/aprovacao
+                        method: POST
+                      recusar:
+                        href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/recusa
+                        method: POST
+                proximoCursor: null
+                avisos: []
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/solicitacoes/{id}:
+    get:
+      tags: [Solicitações]
+      summary: Detalhe de uma solicitação
+      description: |
+        Chama:
+        - Adoção `GET /v1/solicitacoes/{id}` e `GET /v1/solicitacoes/{id}/historico` (essencial);
+        - Identidade `GET /v1/contas?ids={adotanteId}&incluir=perfil`;
+        - Animais `GET /v1/animais?ids={animalId}`.
+
+        A linha do tempo vem embutida em `historico`, então o link
+        `historico` da Adoção é omitido.
+      operationId: obterSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '200':
+          description: Solicitação com animal, adotante e linha do tempo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitacaoDetalhe'
+              example:
+                id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                estado: AGUARDANDO_APROVACAO
+                desfecho: null
+                motivo: null
+                expiraEm: '2026-11-20T15:00:00Z'
+                criadoEm: '2026-11-17T15:00:00Z'
+                animal:
+                  id: 65a2f1c4e8b9d3a7f0c1b2e9
+                  nome: Thor
+                  fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+                adotante:
+                  id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                  nome: Bruna Silva
+                  cidade: Lavras
+                  perfil:
+                    tipoMoradia: CASA
+                    temQuintal: true
+                    outrosAnimais: false
+                    horasForaDeCasa: 4
+                    completo: true
+                historico:
+                  - de: null
+                    para: SOLICITADA
+                    evento: SolicitacaoCriada
+                    em: '2026-11-17T15:00:00Z'
+                  - de: SOLICITADA
+                    para: ANIMAL_RESERVADO
+                    evento: AnimalReservado
+                    em: '2026-11-17T15:00:01Z'
+                  - de: ANIMAL_RESERVADO
+                    para: AGUARDANDO_APROVACAO
+                    evento: PerfilValidado
+                    em: '2026-11-17T15:00:02Z'
+                _links:
+                  self:
+                    href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                  animal:
+                    href: /web/v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+                  aprovar:
+                    href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/aprovacao
+                    method: POST
+                  recusar:
+                    href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/recusa
+                    method: POST
+                avisos: []
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/solicitacoes/{id}/aprovacao:
+    post:
+      tags: [Solicitações]
+      summary: Aprova a solicitação
+      description: >-
+        Repassa para Adoção `POST /v1/solicitacoes/{id}/aprovacao`. Responde
+        202 porque a SAGA segue assíncrona até `CONCLUIDA`; o painel acompanha
+        pelo `self`.
+      operationId: aprovarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '202':
+          description: Aprovação registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitacaoAcao'
+              example:
+                id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                estado: APROVADA
+                desfecho: null
+                _links:
+                  self:
+                    href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                  animal:
+                    href: /web/v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '409':
+          $ref: '#/components/responses/EstadoNaoPermiteAcao'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/solicitacoes/{id}/recusa:
+    post:
+      tags: [Solicitações]
+      summary: Recusa a solicitação
+      description: >-
+        Repassa para Adoção `POST /v1/solicitacoes/{id}/recusa`. Responde 202
+        com a solicitação em `COMPENSANDO`; ela chega a `RECUSADA` quando o
+        animal e a vaga do adotante forem liberados.
+      operationId: recusarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recusa'
+            example:
+              motivo: Moradia sem tela de proteção nas janelas.
+      responses:
+        '202':
+          description: Recusa registrada; compensações em andamento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitacaoAcao'
+              example:
+                id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                estado: COMPENSANDO
+                desfecho: RECUSADA
+                _links:
+                  self:
+                    href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                  animal:
+                    href: /web/v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '409':
+          $ref: '#/components/responses/EstadoNaoPermiteAcao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/eu:
+    get:
+      tags: [Conta]
+      summary: Conta autenticada
+      description: Repassa para Identidade `GET /v1/contas/eu`.
+      operationId: obterMinhaConta
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Conta autenticada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MinhaConta'
+              example:
+                id: c50a83ab-7db0-41b4-9436-4144c36f97d5
+                nome: ONG Patas de Lavras
+                email: contato@patasdelavras.example.org
+                role: ONG
+                cidade: Lavras
+                statusVerificacao: VERIFICADA
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/admin/contas:
+    get:
+      tags: [Administração]
+      summary: Fila de contas a verificar
+      description: >-
+        Só `ADMIN`. Repassa para Identidade
+        `GET /v1/contas?statusVerificacao=&role=`.
+      operationId: listarContasParaVerificar
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: statusVerificacao
+          in: query
+          schema:
+            type: string
+            enum: [PENDENTE_VERIFICACAO, VERIFICADA]
+            default: PENDENTE_VERIFICACAO
+          example: PENDENTE_VERIFICACAO
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [PROTETOR, ONG]
+          example: ONG
+      responses:
+        '200':
+          description: Contas encontradas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContaResumo'
+              example:
+                - id: 1d7e4c3a-2b9f-4f61-8a0e-6c5b3d2a1f90
+                  nome: Protetores de Ijaci
+                  role: ONG
+                  cidade: Ijaci
+                  statusVerificacao: PENDENTE_VERIFICACAO
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/admin/contas/{id}/verificacao:
+    put:
+      tags: [Administração]
+      summary: Verifica uma conta de protetor ou ONG
+      description: >-
+        Só `ADMIN`. Repassa para Identidade `PUT /v1/contas/{id}/verificacao`,
+        que é idempotente e publica `conta.verificada` pelo outbox.
+      operationId: verificarConta
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 1d7e4c3a-2b9f-4f61-8a0e-6c5b3d2a1f90
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [VERIFICADA]
+            example:
+              status: VERIFICADA
+      responses:
+        '200':
+          description: Conta verificada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResumo'
+              example:
+                id: 1d7e4c3a-2b9f-4f61-8a0e-6c5b3d2a1f90
+                nome: Protetores de Ijaci
+                role: ONG
+                cidade: Ijaci
+                statusVerificacao: VERIFICADA
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 emitido pela Identidade, validado pelo gateway e repassado pelo BFF.
+  parameters:
+    IdAnimal:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/AnimalId'
+      example: 65a2f1c4e8b9d3a7f0c1b2e9
+    IdSolicitacao:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+    StatusAnimal:
+      name: status
+      in: query
+      schema:
+        $ref: '#/components/schemas/StatusAnimal'
+      example: DISPONIVEL
+    Estado:
+      name: estado
+      in: query
+      schema:
+        $ref: '#/components/schemas/EstadoSolicitacao'
+      example: AGUARDANDO_APROVACAO
+    Cursor:
+      name: cursor
+      in: query
+      description: Valor opaco devolvido em `proximoCursor`.
+      schema:
+        type: string
+      example: eyJjcmlhZG9FbSI6IjIwMjYtMTEtMTcifQ
+  responses:
+    NaoAutenticado:
+      description: JWT ausente, inválido ou expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-autenticado
+            title: Não autenticado
+            status: 401
+            detail: Envie um token Bearer válido.
+    SemPermissao:
+      description: Role incompatível com o painel, ou recurso de outro responsável.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/sem-permissao
+            title: Sem permissão
+            status: 403
+            detail: O painel web é exclusivo de protetores e ONGs.
+    NaoEncontrado:
+      description: Recurso não encontrado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-encontrado
+            title: Não encontrado
+            status: 404
+            detail: Não existe animal com este identificador.
+    DadosInvalidos:
+      description: Corpo ou parâmetros inválidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/validacao
+            title: Dados inválidos
+            status: 422
+            detail: porte deve ser PEQUENO, MEDIO ou GRANDE.
+    StatusDaSaga:
+      description: O status pedido só pode ser alterado pela SAGA, ou o animal está reservado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/status-da-saga
+            title: Status controlado pela SAGA
+            status: 409
+            detail: O animal está reservado por uma solicitação em andamento.
+    EstadoNaoPermiteAcao:
+      description: A ação não é válida para o estado atual da solicitação.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/estado-nao-permite-acao
+            title: Estado não permite a ação
+            status: 409
+            detail: A solicitação está em APROVADA; só é possível aprovar em AGUARDANDO_APROVACAO.
+    ServicoIndisponivel:
+      description: >-
+        O serviço essencial da rota não respondeu a tempo, está fora do ar ou
+        com o circuito aberto. Falha de serviço complementar não gera este
+        erro: vira item em `avisos[]`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/servico-indisponivel
+            title: Serviço indisponível
+            status: 503
+            detail: Animais não respondeu em 2 s.
+  examples:
+    Thor:
+      summary: Thor, da ONG Patas de Lavras, com uma solicitação ativa e uma recusada
+      value:
+        id: 65a2f1c4e8b9d3a7f0c1b2e9
+        nome: Thor
+        especie: CAO
+        porte: MEDIO
+        idadeMeses: 36
+        temperamento: [dócil, brincalhão]
+        fotos:
+          - https://exemplo.ampara.dev/fotos/thor-1.jpg
+          - https://exemplo.ampara.dev/fotos/thor-2.jpg
+        fotoCapa: https://exemplo.ampara.dev/fotos/thor-1.jpg
+        localizacao:
+          lat: -21.2453
+          lng: -44.9998
+          bairro: Centro
+          cidade: Lavras
+        status: RESERVADO
+        historicoStatus:
+          - status: DISPONIVEL
+            em: '2026-11-10T13:00:00Z'
+            por: RESPONSAVEL
+          - status: RESERVADO
+            em: '2026-11-12T10:00:01Z'
+            por: SAGA
+          - status: DISPONIVEL
+            em: '2026-11-13T09:30:01Z'
+            por: SAGA
+          - status: RESERVADO
+            em: '2026-11-17T15:00:01Z'
+            por: SAGA
+        atualizadoEm: '2026-11-17T15:00:01Z'
+        solicitacoes:
+          - id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+            estado: AGUARDANDO_APROVACAO
+            desfecho: null
+            expiraEm: '2026-11-20T15:00:00Z'
+            criadoEm: '2026-11-17T15:00:00Z'
+            adotante:
+              id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+              nome: Bruna Silva
+              cidade: Lavras
+              perfil:
+                tipoMoradia: CASA
+                temQuintal: true
+                outrosAnimais: false
+                horasForaDeCasa: 4
+                completo: true
+            _links:
+              self:
+                href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+              aprovar:
+                href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/aprovacao
+                method: POST
+              recusar:
+                href: /web/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/recusa
+                method: POST
+          - id: 3c9e5b1d-8a2f-4d7c-b6e0-9f1a2c3d4e5f
+            estado: RECUSADA
+            desfecho: RECUSADA
+            expiraEm: '2026-11-15T10:00:00Z'
+            criadoEm: '2026-11-12T10:00:00Z'
+            adotante:
+              id: 9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e
+              nome: Carlos Souza
+              cidade: Lavras
+              perfil:
+                tipoMoradia: APARTAMENTO
+                temQuintal: false
+                outrosAnimais: true
+                horasForaDeCasa: 10
+                completo: true
+            _links:
+              self:
+                href: /web/v1/solicitacoes/3c9e5b1d-8a2f-4d7c-b6e0-9f1a2c3d4e5f
+        avisos: []
+  schemas:
+    AnimalId:
+      type: string
+      description: ObjectId do animal no MongoDB.
+      pattern: '^[0-9a-f]{24}$'
+    StatusAnimal:
+      type: string
+      enum: [DISPONIVEL, EM_TRATAMENTO, INDISPONIVEL, RESERVADO, ADOTADO]
+    EstadoSolicitacao:
+      type: string
+      enum:
+        - SOLICITADA
+        - ANIMAL_RESERVADO
+        - AGUARDANDO_APROVACAO
+        - APROVADA
+        - COMPENSANDO
+        - CONCLUIDA
+        - REJEITADA_INDISPONIVEL
+        - PERFIL_INVALIDO
+        - RECUSADA
+        - CANCELADA
+        - EXPIRADA
+        - FALHOU
+    Desfecho:
+      oneOf:
+        - type: string
+          enum: [PERFIL_INVALIDO, RECUSADA, CANCELADA, EXPIRADA, FALHOU]
+        - type: 'null'
+    Aviso:
+      type: object
+      description: Um serviço complementar que não respondeu; a resposta veio parcial.
+      additionalProperties: false
+      required: [servico, motivo]
+      properties:
+        servico:
+          type: string
+          enum: [animais, adocao, identidade]
+        motivo:
+          type: string
+          enum: [TIMEOUT, INDISPONIVEL, CIRCUITO_ABERTO]
+    Avisos:
+      type: array
+      description: Vazio quando todos os serviços responderam.
+      items:
+        $ref: '#/components/schemas/Aviso'
+    Link:
+      type: object
+      additionalProperties: false
+      required: [href]
+      properties:
+        href:
+          type: string
+          format: uri-reference
+        method:
+          type: string
+          enum: [POST]
+    LinksSolicitacao:
+      type: object
+      description: >-
+        Os links da Adoção traduzidos para `/web/v1`. O responsável recebe
+        `aprovar` e `recusar` só em `AGUARDANDO_APROVACAO`.
+      additionalProperties: false
+      required: [self]
+      properties:
+        self:
+          $ref: '#/components/schemas/Link'
+        animal:
+          $ref: '#/components/schemas/Link'
+        aprovar:
+          $ref: '#/components/schemas/Link'
+        recusar:
+          $ref: '#/components/schemas/Link'
+    PerfilResumo:
+      type: object
+      description: Perfil de adoção sem dados de contato (LGPD).
+      additionalProperties: false
+      required: [tipoMoradia, completo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        completo:
+          type: boolean
+    Adotante:
+      description: Dados do adotante vindos da Identidade; `null` se ela não respondeu.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [id, nome, cidade, perfil]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nome:
+              type: string
+            cidade:
+              type: string
+            perfil:
+              oneOf:
+                - $ref: '#/components/schemas/PerfilResumo'
+                - type: 'null'
+        - type: 'null'
+    AnimalMini:
+      description: Animal da solicitação, vindo de Animais; `null` se ele não respondeu.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [id, nome, fotoCapa]
+          properties:
+            id:
+              $ref: '#/components/schemas/AnimalId'
+            nome:
+              type: string
+            fotoCapa:
+              type: [string, 'null']
+              format: uri
+        - type: 'null'
+    Localizacao:
+      type: object
+      description: Coordenada exata; só o responsável pelo animal a recebe.
+      additionalProperties: false
+      required: [lat, lng, bairro, cidade]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+        bairro:
+          type: string
+        cidade:
+          type: string
+    AnimalEntrada:
+      type: object
+      description: Corpo repassado para Animais; o contrato de referência é `animais.v1.yaml` (#21).
+      additionalProperties: false
+      required: [nome, especie, porte, idadeMeses, fotos, localizacao]
+      properties:
+        nome:
+          type: string
+          minLength: 1
+        especie:
+          type: string
+          enum: [CAO, GATO, OUTRO]
+        porte:
+          type: string
+          enum: [PEQUENO, MEDIO, GRANDE]
+        idadeMeses:
+          type: integer
+          minimum: 0
+        temperamento:
+          type: array
+          items:
+            type: string
+        fotos:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+        localizacao:
+          $ref: '#/components/schemas/Localizacao'
+    AlteracaoStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [DISPONIVEL, EM_TRATAMENTO, INDISPONIVEL]
+    AnimalResumo:
+      type: object
+      additionalProperties: false
+      required: [id, nome, especie, porte, status, fotoCapa, solicitacoesAtivas, atualizadoEm]
+      properties:
+        id:
+          $ref: '#/components/schemas/AnimalId'
+        nome:
+          type: string
+        especie:
+          type: string
+          enum: [CAO, GATO, OUTRO]
+        porte:
+          type: string
+          enum: [PEQUENO, MEDIO, GRANDE]
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        fotoCapa:
+          type: [string, 'null']
+          format: uri
+        solicitacoesAtivas:
+          type: [integer, 'null']
+          minimum: 0
+          description: Vem de `ativasPorAnimal` da Adoção; `null` quando ela não respondeu ou a rota não a consulta.
+        atualizadoEm:
+          type: string
+          format: date-time
+    PaginaAnimais:
+      type: object
+      additionalProperties: false
+      required: [itens, proximoCursor, avisos]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnimalResumo'
+        proximoCursor:
+          type: [string, 'null']
+        avisos:
+          $ref: '#/components/schemas/Avisos'
+    SolicitacaoDoAnimal:
+      type: object
+      additionalProperties: false
+      required: [id, estado, desfecho, expiraEm, criadoEm, adotante, _links]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitacao'
+        desfecho:
+          $ref: '#/components/schemas/Desfecho'
+        expiraEm:
+          type: [string, 'null']
+          format: date-time
+        criadoEm:
+          type: string
+          format: date-time
+        adotante:
+          $ref: '#/components/schemas/Adotante'
+        _links:
+          $ref: '#/components/schemas/LinksSolicitacao'
+    AnimalPainel:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - nome
+        - especie
+        - porte
+        - idadeMeses
+        - temperamento
+        - fotos
+        - fotoCapa
+        - localizacao
+        - status
+        - historicoStatus
+        - atualizadoEm
+        - solicitacoes
+        - avisos
+      properties:
+        id:
+          $ref: '#/components/schemas/AnimalId'
+        nome:
+          type: string
+        especie:
+          type: string
+          enum: [CAO, GATO, OUTRO]
+        porte:
+          type: string
+          enum: [PEQUENO, MEDIO, GRANDE]
+        idadeMeses:
+          type: integer
+          minimum: 0
+        temperamento:
+          type: array
+          items:
+            type: string
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+        fotoCapa:
+          type: [string, 'null']
+          format: uri
+        localizacao:
+          $ref: '#/components/schemas/Localizacao'
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        historicoStatus:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [status, em, por]
+            properties:
+              status:
+                $ref: '#/components/schemas/StatusAnimal'
+              em:
+                type: string
+                format: date-time
+              por:
+                type: string
+                enum: [RESPONSAVEL, SAGA]
+        atualizadoEm:
+          type: string
+          format: date-time
+        solicitacoes:
+          type: array
+          description: Todas as solicitações do animal, ativas primeiro; `[]` se a Adoção não respondeu.
+          items:
+            $ref: '#/components/schemas/SolicitacaoDoAnimal'
+        avisos:
+          $ref: '#/components/schemas/Avisos'
+    SolicitacaoPainel:
+      type: object
+      additionalProperties: false
+      required: [id, estado, desfecho, expiraEm, criadoEm, animal, adotante, _links]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitacao'
+        desfecho:
+          $ref: '#/components/schemas/Desfecho'
+        expiraEm:
+          type: [string, 'null']
+          format: date-time
+        criadoEm:
+          type: string
+          format: date-time
+        animal:
+          $ref: '#/components/schemas/AnimalMini'
+        adotante:
+          $ref: '#/components/schemas/Adotante'
+        _links:
+          $ref: '#/components/schemas/LinksSolicitacao'
+    PaginaSolicitacoes:
+      type: object
+      additionalProperties: false
+      required: [itens, proximoCursor, avisos]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/SolicitacaoPainel'
+        proximoCursor:
+          type: [string, 'null']
+        avisos:
+          $ref: '#/components/schemas/Avisos'
+    SolicitacaoDetalhe:
+      type: object
+      additionalProperties: false
+      required: [id, estado, desfecho, motivo, expiraEm, criadoEm, animal, adotante, historico, _links, avisos]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitacao'
+        desfecho:
+          $ref: '#/components/schemas/Desfecho'
+        motivo:
+          type: [string, 'null']
+        expiraEm:
+          type: [string, 'null']
+          format: date-time
+        criadoEm:
+          type: string
+          format: date-time
+        animal:
+          $ref: '#/components/schemas/AnimalMini'
+        adotante:
+          $ref: '#/components/schemas/Adotante'
+        historico:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [de, para, evento, em]
+            properties:
+              de:
+                oneOf:
+                  - $ref: '#/components/schemas/EstadoSolicitacao'
+                  - type: 'null'
+              para:
+                $ref: '#/components/schemas/EstadoSolicitacao'
+              evento:
+                type: string
+              em:
+                type: string
+                format: date-time
+        _links:
+          $ref: '#/components/schemas/LinksSolicitacao'
+        avisos:
+          $ref: '#/components/schemas/Avisos'
+    SolicitacaoAcao:
+      type: object
+      description: Resposta da Adoção à ação, com os links traduzidos; sem agregação.
+      additionalProperties: false
+      required: [id, estado, desfecho, _links]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitacao'
+        desfecho:
+          $ref: '#/components/schemas/Desfecho'
+        _links:
+          $ref: '#/components/schemas/LinksSolicitacao'
+    Recusa:
+      type: object
+      additionalProperties: false
+      properties:
+        motivo:
+          type: string
+          maxLength: 500
+    Painel:
+      type: object
+      additionalProperties: false
+      required: [animais, solicitacoes, avisos]
+      properties:
+        animais:
+          description: Contadores de Animais; `null` se ele não respondeu.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [total, porStatus]
+              properties:
+                total:
+                  type: integer
+                  minimum: 0
+                porStatus:
+                  type: object
+                  propertyNames:
+                    $ref: '#/components/schemas/StatusAnimal'
+                  additionalProperties:
+                    type: integer
+                    minimum: 1
+            - type: 'null'
+        solicitacoes:
+          description: Resumo da Adoção; `null` se ela não respondeu.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [aguardandoAprovacao, porEstado, concluidasNoMes]
+              properties:
+                aguardandoAprovacao:
+                  type: integer
+                  minimum: 0
+                porEstado:
+                  type: object
+                  propertyNames:
+                    $ref: '#/components/schemas/EstadoSolicitacao'
+                  additionalProperties:
+                    type: integer
+                    minimum: 1
+                concluidasNoMes:
+                  type: integer
+                  minimum: 0
+            - type: 'null'
+        avisos:
+          $ref: '#/components/schemas/Avisos'
+    MinhaConta:
+      type: object
+      additionalProperties: false
+      required: [id, nome, email, role, cidade, statusVerificacao]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADOTANTE, PROTETOR, ONG, ADMIN]
+        cidade:
+          type: string
+        statusVerificacao:
+          type: string
+          enum: [PENDENTE_VERIFICACAO, VERIFICADA]
+    ContaResumo:
+      type: object
+      additionalProperties: false
+      required: [id, nome, role, cidade, statusVerificacao]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        role:
+          type: string
+          enum: [ADOTANTE, PROTETOR, ONG, ADMIN]
+        cidade:
+          type: string
+        statusVerificacao:
+          type: string
+          enum: [PENDENTE_VERIFICACAO, VERIFICADA]
+    Problema:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

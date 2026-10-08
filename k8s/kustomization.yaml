@@ -1,0 +1,9 @@
+# Sobe tudo: kubectl apply -k k8s/
+# Cada componente entra aqui quando a pasta dele chegar (#46, #47, #48, #49).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - rabbitmq
+  - adocao
+  - bff-web

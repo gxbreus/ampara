@@ -33,7 +33,7 @@ A Ampara precisa sair de uma arquitetura descrita para um sistema distribuído e
 
 Pagamentos e doações, chat, verificação documental real, publicação nas lojas de apps, deploy em nuvem e storage externo de fotos. Avistamentos e denúncias ficam no backlog *Should*, ver [requisitos §9](requisitos.md#9-backlog-pós-mvp).
 
-## 4. Divisão por integrante *(proposta, a confirmar)*
+## 4. Divisão por integrante *(confirmada no kickoff de 2026-10-07)*
 
 Cada pessoa é **dona** de um serviço de domínio do começo ao fim: contrato, código, Dockerfile, manifest K8s e a parte do vídeo e da apresentação sobre ele. Também assume uma peça transversal e **revisa os PRs** de um colega fixo. Na arguição, o docente escolhe quem responde, então cada dono precisa dominar a própria parte e conhecer o fluxo da SAGA inteiro.
 
@@ -130,7 +130,7 @@ As tarefas estão no [AMPARA — Board](https://github.com/users/mateus-vitor-fe
 ## 7. Premissas
 
 - Os 4 integrantes concordam com a divisão do §4. Se não concordarem, a tabela é refeita antes do fim da S1.
-- Haverá orçamento pequeno para a API do LLM, na casa de dezenas de reais. Sem orçamento, o plano é usar o Ollama local como modelo principal, o que muda a análise de custo.
+- O LLM não tem orçamento: o modelo principal é o free tier da Groq, com o Ollama local de fallback (decisão do kickoff, item 7). A análise de custo da #70 calcula quanto as mesmas perguntas custariam no plano pago.
 - As máquinas do grupo rodam Docker e kind/Minikube com pelo menos 8 GB livres. Caso contrário, os manifests vão reduzir as réplicas e um cluster pode ser compartilhado.
 
 ## 8. Riscos e mitigação

@@ -9,7 +9,28 @@ Cadastro, autenticação (JWT RS256) e perfil de adoção de adotantes, protetor
 | **Banco** | PostgreSQL (`postgres-identidade`) |
 | **Responsável** | Gabriel Soares |
 
-Ainda não há código aqui. O esqueleto (`/health`, `/ready`, Dockerfile multi-stage) é criado na issue de esqueleto abaixo.
+## Executar localmente
+
+```bash
+cp .env.example .env
+npm install
+npm run start:dev
+```
+
+`GET /health` apenas confirma que o processo está ativo. `GET /ready` consulta
+o PostgreSQL e responde `503` enquanto o banco estiver indisponível. Toda
+resposta inclui `X-Served-By` e `X-Correlation-Id`; os logs HTTP são emitidos
+em JSON com esse identificador.
+
+O serviço usa somente variáveis de ambiente. A primeira migration em
+`src/migrations/` cria a tabela `contas`; `synchronize` permanece desativado.
+A conexão vem de `IDENTIDADE_DATABASE_URL`, o mesmo nome do `.env.example` da raiz.
+
+Pelo Compose, na raiz do repositório:
+
+```bash
+docker compose up -d --build identidade   # sobe também o postgres-identidade
+```
 
 ## Issues
 
