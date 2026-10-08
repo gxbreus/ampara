@@ -314,3 +314,39 @@ func TestEventosInvalidos(t *testing.T) {
 		t.Error("resposta fora de lugar deveria falhar")
 	}
 }
+
+func TestRetomadaDosPassosEsgotados(t *testing.T) {
+	s := comDesfecho(sol(Compensando, map[Passo]InfoPasso{
+		C1: {Status: Esgotado, Bloqueante: true, Tentativas: 10},
+		C2: {Status: Concluido, Bloqueante: true},
+	}), Recusada)
+	s.RequerIntervencao = true
+	out, err := Transicao(s, Evento{Tipo: EvRetomada}, regras)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Solicitacao.RequerIntervencao || out.Solicitacao.Estado != Compensando || out.Transicao != 13 {
+		t.Fatalf("retomada: %+v", out.Solicitacao)
+	}
+	if !slices.Equal(out.Passos, []AlteracaoPasso{{C1, Retomar}}) || len(out.Mensagens) != 0 {
+		t.Fatalf("só a C1 esgotada é retomada, sem mensagem nova (mesmo messageId): %+v", out)
+	}
+
+	// depois do pivô, T4 ou T5 esgotado também pode ser retomado
+	s = sol(Aprovada, map[Passo]InfoPasso{T4: {Status: Esgotado, Tentativas: 10}})
+	s.RequerIntervencao = true
+	if out, err := Transicao(s, Evento{Tipo: EvRetomada}, regras); err != nil || out.Transicao != 16 {
+		t.Fatalf("retomada do T4: %+v %v", out, err)
+	}
+}
+
+func TestRetomadaSemPassoEsgotadoDa409(t *testing.T) {
+	for _, s := range []Solicitacao{
+		sol(AguardandoAprovacao, map[Passo]InfoPasso{T1: conc(), T2: conc()}),
+		comDesfecho(sol(Compensando, map[Passo]InfoPasso{C1: pend(true)}), Recusada),
+	} {
+		if _, err := Transicao(s, Evento{Tipo: EvRetomada}, regras); !errors.Is(err, ErrEstadoNaoPermite) {
+			t.Errorf("%s: erro %v", s.Estado, err)
+		}
+	}
+}

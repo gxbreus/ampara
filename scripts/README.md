@@ -10,3 +10,4 @@ Utilitários de desenvolvimento e demonstração. Previstos:
 | `demo/` | provoca cada cenário da SAGA ao vivo; `demo/participantes_falsos.py` faz o papel de Animais e da Identidade enquanto os serviços reais não existem | #71 |
 | `carga/` | teste de carga da demonstração de escalabilidade | #51 |
 | `reconstruir_projecao.py` | reconstrói o read model de Animais do zero | #56 |
+| `dlq.sh` | lista, reprocessa e descarta mensagens das DLQs pela API do RabbitMQ (roteiro em `docs/operacao/dlq.md`) | #86 |

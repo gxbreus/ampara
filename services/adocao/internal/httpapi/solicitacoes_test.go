@@ -89,8 +89,12 @@ func (r *repoFalso) Obter(_ context.Context, id string) (repositorio.Visao, erro
 
 // Aplicar usa a máquina de estados de verdade, só sem banco.
 func (r *repoFalso) Aplicar(_ context.Context, id string, ev saga.Evento) (saga.Saida, error) {
-	v := r.visoes[id]
-	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado}
+	v, ok := r.visoes[id]
+	if !ok {
+		return saga.Saida{}, repositorio.ErrNaoEncontrada // como o repositório real
+	}
+	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado,
+		RequerIntervencao: v.RequerIntervencao}
 	out, err := saga.Transicao(s, ev, saga.Regras{Agora: time.Now(), PrazoDecisao: time.Hour, MaxReenvios: 3})
 	if err != nil {
 		return out, err
