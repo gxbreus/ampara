@@ -42,8 +42,12 @@ function paraUsuario(payload: JWTPayload): Usuario {
 
 export type Verificador = Awaited<ReturnType<typeof criarVerificador>>;
 
-// preHandler que exige um token válido com uma das roles permitidas.
-export function exigirRoles(verificar: Verificador, permitidas: Role[]) {
+// Hook (onRequest) que exige um token válido com uma das roles permitidas.
+export function exigirRoles(
+  verificar: Verificador,
+  permitidas: Role[],
+  semPermissao = "O painel web é exclusivo de protetores, ONGs e administradores.",
+) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
     const [esquema, token] = (req.headers.authorization ?? "").split(" ");
     if (esquema !== "Bearer" || !token) {
@@ -55,7 +59,7 @@ export function exigirRoles(verificar: Verificador, permitidas: Role[]) {
       return problema(reply, 401, "nao-autenticado", "Não autenticado", "Token inválido ou expirado.");
     }
     if (!permitidas.includes(req.usuario.role)) {
-      return problema(reply, 403, "sem-permissao", "Sem permissão", "O painel web é exclusivo de protetores, ONGs e administradores.");
+      return problema(reply, 403, "sem-permissao", "Sem permissão", semPermissao);
     }
   };
 }
