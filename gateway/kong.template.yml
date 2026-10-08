@@ -6,7 +6,7 @@ services:
     url: http://identidade:3001/v1/auth
     routes:
       - name: auth
-        paths: [/api/v1/auth]
+        paths: [/auth/v1]
         strip_path: true
         plugins:
           - name: rate-limiting

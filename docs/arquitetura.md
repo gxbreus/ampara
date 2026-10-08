@@ -97,6 +97,8 @@ Nenhum serviço acessa as tabelas ou coleções de outro. Quando um dado externo
 
 Chamadas que precisam de uma resposta para o fluxo continuar usam HTTP. Os clientes entram pelo API Gateway, que valida o JWT e encaminha a requisição ao serviço responsável.
 
+As rotas externas seguem `/<cliente>/v1` (`/web/v1`, `/mobile/v1` e `/auth/v1`), e as internas dos serviços, só `/v1`. São versões independentes: a Adoção pode publicar uma `v2` interna sem que o BFF Web deixe de expor `/web/v1` (ver [`gateway.md`](gateway.md#regra-das-urls-e-versões) e a ADR-006).
+
 ### Assíncrona
 
 Eventos passam pelo RabbitMQ. Esse caminho é usado quando o produtor não precisa aguardar a conclusão do consumidor, como no disparo de notificações.
