@@ -3,7 +3,7 @@
 Abre clientes assíncronos e gerencia índices sem regras de negócio.
 """
 
-from pymongo import ASCENDING, AsyncMongoClient, GEOSPHERE
+from pymongo import ASCENDING, GEOSPHERE, AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
 
