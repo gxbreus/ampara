@@ -190,17 +190,48 @@ O impacto será acompanhado por quatro indicadores:
 | Parte 3 — Containerização e orquestração | 17/11 | planejada |
 | Parte 4 — Sistema em funcionamento | 10/12 ou 15/12 (repositório congela em 09/12 às 23h59) | planejada |
 
-Ainda não há implementação executável. As tarefas de cada etapa, com responsável e semana, estão no [board do projeto](https://github.com/users/mateus-vitor-ferreira-dev/projects/7). As instruções para subir o sistema entram neste README junto com o primeiro `compose.yaml`.
+As tarefas de cada etapa, com responsável e semana, estão no [board do projeto](https://github.com/users/mateus-vitor-ferreira-dev/projects/7).
+
+### Situação de cada componente
+
+| Componente | Pasta | Situação |
+| --- | --- | --- |
+| Adoção (SAGA) | [`services/adocao`](services/adocao) | implementado: SAGA, outbox, DLQ, Dockerfile e manifests do k8s |
+| BFF Web | [`bff/web`](bff/web) | implementado: Dockerfile e manifests do k8s |
+| Animais | [`services/animais`](services/animais) | base pronta (`/health`, testes, regras); o resto na #39 |
+| Notificações | [`services/notificacoes`](services/notificacoes) | base pronta (`/health`, testes, regras); o resto na #41 |
+| Assistente | [`services/assistente`](services/assistente) | base pronta (`/health`, testes, regras); o resto na #42 |
+| Identidade | [`services/identidade`](services/identidade) | esqueleto em revisão (#98) |
+| Gateway, BFF Mobile e apps | [`gateway`](gateway), [`bff/mobile`](bff/mobile), [`apps`](apps) | planejados; o README de cada pasta descreve o escopo |
+
+Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
+
+## Como rodar
+
+Precisa de Docker com o Compose. Na raiz do repositório:
+
+```bash
+cp .env.example .env
+./scripts/gerar-chaves-jwt.sh      # par RS256 do JWT
+# preencha as senhas no .env
+docker compose up -d --build
+```
+
+Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+
+A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
 ## Documentação
 
 | Documento | Conteúdo |
 | --- | --- |
 | [Arquitetura técnica](docs/arquitetura.md) | limites dos serviços, comunicação, dados, SAGA e diretrizes de implementação |
+| [Dados](docs/dados.md) e [SAGA](docs/saga.md) | database per service, consistência eventual e o fluxo da adoção |
 | [Documento de concepção](docs/apresentacao/parte-1/Ampara_Documento_Parte1.pdf) e [pitch](docs/apresentacao/parte-1/ampara_pitch.pptx) | Parte 1: problema, referências, impacto social e proposta inicial |
 | [Apresentação da Parte 2](docs/apresentacao/parte-2/README.md) | slides da arquitetura, com o PDF e o roteiro de quem apresenta cada parte |
-| [Decisão arquitetural](docs/decisoes/ADR-001-arquitetura-distribuida.md) | registro da arquitetura escolhida para a Parte 1 |
-| [Contratos](docs/contratos/README.md) | convenções para os futuros contratos HTTP e eventos |
+| [Decisões arquiteturais](docs/decisoes/) | ADRs: arquitetura distribuída, SAGA orquestrada e outbox |
+| [Contratos](docs/contratos/README.md) | OpenAPI da Adoção e do BFF Web, catálogo de eventos e convenções; os contratos dos outros serviços entram nas próprias issues |
+| [Operação](docs/operacao/dlq.md) | como inspecionar e reprocessar a DLQ |
 | [Requisitos](docs/requisitos.md) | requisitos das Partes 2 a 4, lacunas da arquitetura atual, histórias de usuário e MVP |
 | [Planejamento](docs/planejamento.md) | escopo, divisão por integrante, cronograma, riscos e kickoff |
 | [Board](https://github.com/users/mateus-vitor-ferreira-dev/projects/7) | tarefas por entrega, semana e integrante |
@@ -209,13 +240,16 @@ Ainda não há implementação executável. As tarefas de cada etapa, com respon
 
 ```text
 .
-├── docs/
-│   ├── apresentacao/
-│   ├── contratos/
-│   ├── decisoes/
-│   ├── arquitetura.md
-│   ├── planejamento.md
-│   └── requisitos.md
+├── apps/              # front-ends web e mobile
+├── bff/               # BFF Web e BFF Mobile
+├── gateway/           # API Gateway, única porta exposta
+├── services/          # adocao, animais, identidade, notificacoes, assistente
+├── infra/             # imagens próprias do MongoDB e do RabbitMQ (definitions.json)
+├── k8s/               # manifests do cluster local (kind + kustomize)
+├── scripts/           # chaves do JWT, DLQ e roteiro da demo
+├── docs/              # arquitetura, contratos, ADRs, requisitos e apresentações
+├── compose.yaml       # o sistema inteiro com um comando
+├── .env.example       # variáveis de ambiente, sem nenhum valor secreto
 ├── CONTRIBUTING.md
 └── README.md
 ```
