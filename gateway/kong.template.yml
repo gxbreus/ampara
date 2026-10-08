@@ -1,0 +1,79 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: identidade-auth
+    url: http://identidade:3001/v1/auth
+    routes:
+      - name: auth
+        paths: [/api/v1/auth]
+        strip_path: true
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 20
+              policy: local
+              limit_by: ip
+  - name: bff-web
+    url: http://bff-web:3010
+    routes:
+      - name: web
+        paths: [/web/v1]
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify: [exp]
+          - name: rate-limiting
+            config:
+              minute: 300
+              policy: local
+              limit_by: ip
+  - name: bff-mobile
+    url: http://bff-mobile:3020
+    routes:
+      - name: mobile-publico
+        paths: [/mobile/v1/animais]
+        methods: [GET]
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 600
+              policy: local
+              limit_by: ip
+      - name: mobile
+        paths: [/mobile/v1]
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify: [exp]
+          - name: rate-limiting
+            config:
+              minute: 600
+              policy: local
+              limit_by: ip
+
+consumers:
+  - username: ampara-identidade
+    jwt_secrets:
+      - key: ampara-identidade
+        algorithm: RS256
+        rsa_public_key: "${JWT_PUBLIC_KEY}"
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-Id
+      generator: uuid
+      echo_downstream: true
+  - name: cors
+    config:
+      origins: [http://localhost:5173]
+      methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      headers: [Authorization, Content-Type, X-Correlation-Id]
+      exposed_headers: [X-Correlation-Id]
+      credentials: false
