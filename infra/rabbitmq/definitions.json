@@ -1,0 +1,250 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "ampara.comandos",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ampara.respostas",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ampara.eventos",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ampara.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "animais.comandos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "animais.comandos.dlq"
+      }
+    },
+    {
+      "name": "animais.comandos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "identidade.comandos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "identidade.comandos.dlq"
+      }
+    },
+    {
+      "name": "identidade.comandos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "adocao.respostas",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "adocao.respostas.dlq"
+      }
+    },
+    {
+      "name": "adocao.respostas.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "animais.projecao",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "animais.projecao.dlq"
+      }
+    },
+    {
+      "name": "animais.projecao.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notificacoes.eventos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "notificacoes.eventos.dlq"
+      }
+    },
+    {
+      "name": "notificacoes.eventos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "animais.comandos.dlq",
+      "destination_type": "queue",
+      "routing_key": "animais.comandos.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "identidade.comandos.dlq",
+      "destination_type": "queue",
+      "routing_key": "identidade.comandos.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "adocao.respostas.dlq",
+      "destination_type": "queue",
+      "routing_key": "adocao.respostas.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "animais.projecao.dlq",
+      "destination_type": "queue",
+      "routing_key": "animais.projecao.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "notificacoes.eventos.dlq",
+      "destination_type": "queue",
+      "routing_key": "notificacoes.eventos.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.comandos",
+      "vhost": "/",
+      "destination": "animais.comandos",
+      "destination_type": "queue",
+      "routing_key": "animais",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.comandos",
+      "vhost": "/",
+      "destination": "identidade.comandos",
+      "destination_type": "queue",
+      "routing_key": "identidade",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.respostas",
+      "vhost": "/",
+      "destination": "adocao.respostas",
+      "destination_type": "queue",
+      "routing_key": "adocao",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "animais.projecao",
+      "destination_type": "queue",
+      "routing_key": "animal.*",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "animais.projecao",
+      "destination_type": "queue",
+      "routing_key": "conta.verificada",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "notificacoes.eventos",
+      "destination_type": "queue",
+      "routing_key": "adocao.*",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "notificacoes.eventos",
+      "destination_type": "queue",
+      "routing_key": "conta.verificada",
+      "arguments": {}
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Cluster local da Ampara: 1 control-plane e 2 workers, para as réplicas se espalharem
+# por nós diferentes (kubectl get pods -o wide).
+#   kind create cluster --config k8s/kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ampara
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080   # NodePort do proxy do Kong (#46); vira localhost:8000
+        hostPort: 8000
+        protocol: TCP
+  - role: worker
+  - role: worker

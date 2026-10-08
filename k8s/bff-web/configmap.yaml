@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bff-web-config
+data:
+  PORT: "3010"
+  BFF_TIMEOUT_MS: "3000"
+  IDENTIDADE_URL: http://identidade:3001
+  ANIMAIS_URL: http://animais:8001
+  ADOCAO_URL: http://adocao:8080
