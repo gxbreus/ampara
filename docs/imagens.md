@@ -1,14 +1,16 @@
-# Imagens Docker
+# Tamanho das imagens
 
-## Identidade
+Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage (#38 a #45), medindo com `docker image ls`. A coluna "Ganho" é a redução do multi-stage em relação ao single-stage.
 
-Medição local em 2026-10-07, com `node:22-alpine`, Docker 29.3.0 e o mesmo
-contexto de build:
+| Imagem | Single-stage | Multi-stage | Ganho | Observação |
+| --- | ---: | ---: | ---: | --- |
+| `ampara/identidade` | 511 MB | 325 MB | −36,4% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; só `dist/` e dependências de produção na final, sem `src/` nem TypeScript |
+| `ampara/animais` | | | | |
+| `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
+| `ampara/notificacoes` | | | | |
+| `ampara/assistente` | | | | |
+| `ampara/bff-web` | 336 MB | 261 MB | −22,3% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; sem TypeScript nem tsx na final. O ganho é menor porque o binário do `node` sozinho tem 123 MB; o código e as dependências somam 17 MB |
+| `ampara/bff-mobile` | | | | |
+| `ampara/gateway` | | | | |
 
-| Imagem | Estratégia | Tamanho | Usuário em runtime |
-| --- | --- | ---: | --- |
-| `ampara-identidade:single-test` | dependências de desenvolvimento e build na imagem final | 304.7 MB | root (padrão) |
-| `ampara-identidade:local` | `deps` → `build` → `runtime`, somente dependências de produção e `dist/` | 209.3 MB | `node` |
-
-A imagem multi-stage reduziu **95.4 MB** (31%) e não copia `src/` nem as
-dependências de desenvolvimento para a etapa final.
+As imagens da infraestrutura (`ampara/rabbitmq` e `ampara/mongo`) só acrescentam configuração à imagem oficial e não têm etapa de build.

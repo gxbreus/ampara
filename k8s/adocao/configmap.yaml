@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adocao-config
+data:
+  ADOCAO_PORTA: "8080"
+  ADOCAO_TIMEOUT_PASSO: "10s"
+  # 72h em produção; para a demo, troque por 2m e reinicie: kubectl rollout restart deploy/adocao
+  ADOCAO_PRAZO_EXPIRACAO: "72h"
+  ADOCAO_MAX_REENVIOS_COMPENSACAO: "10"
