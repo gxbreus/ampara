@@ -74,8 +74,8 @@ jobs:
               - docs/contratos/**
               - services/**
 
-  servicos:
-    name: servicos (${{ matrix.componente }})
+  componentes:
+    name: componente (${{ matrix.componente }})
     needs: mudancas
     if: needs.mudancas.outputs.componentes != '[]'
     runs-on: ubuntu-latest
@@ -154,6 +154,25 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.componente }}
           cache-to: type=gha,mode=max,scope=${{ matrix.componente }}
+
+  # Check fixo para a ruleset: os nomes da matriz mudam com o componente e a matriz
+  # é pulada quando nenhum componente muda. Pulada conta como sucesso; falha ou
+  # cancelamento de qualquer componente reprova.
+  servicos:
+    name: servicos
+    needs: [mudancas, componentes]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: resultado dos componentes
+        env:
+          MUDANCAS: ${{ needs.mudancas.result }}
+          COMPONENTES: ${{ needs.componentes.result }}
+        run: |
+          echo "mudancas=$MUDANCAS componentes=$COMPONENTES"
+          [ "$MUDANCAS" = success ] || exit 1
+          case "$COMPONENTES" in success|skipped) ;; *) exit 1 ;; esac
 
   # #88: os testes de contrato (respostas e mensagens reais contra os contratos) entram
   # neste job. Por enquanto, ele garante que todo contrato OpenAPI é válido.
