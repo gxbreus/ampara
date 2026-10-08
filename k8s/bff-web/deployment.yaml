@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bff-web
+  labels: { app: bff-web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: bff-web }
+  template:
+    metadata:
+      labels: { app: bff-web }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: bff-web }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # usuário node da imagem node:22-alpine
+      containers:
+        - name: bff-web
+          image: ampara/bff-web:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3010 }
+          envFrom:
+            - configMapRef: { name: bff-web-config }
+            - configMapRef: { name: bff-web-jwt }
+          # Readiness em /web/v1/health, e não em /web/v1/ready. O /ready do BFF checa os
+          # serviços chamados; usado como readiness, um serviço fora do ar tiraria o BFF
+          # inteiro do balanceamento e derrubaria o painel todo, quando o contrato (#29)
+          # prevê resposta parcial com avisos[]. O /ready continua como diagnóstico.
+          readinessProbe:
+            httpGet: { path: /web/v1/health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /web/v1/health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }

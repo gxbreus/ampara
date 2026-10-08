@@ -1,0 +1,201 @@
+# CI da Ampara (#72): segredos, lint, testes e build das imagens em todo PR.
+# Só os componentes que mudaram são verificados, para a CI ficar rápida.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  segredos:
+    name: segredos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks nos commits novos
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # push de branch novo vem com before = 000…0: aí o histórico inteiro é verificado
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            INTERVALO="$HEAD"
+          else
+            INTERVALO="$BASE..$HEAD"
+          fi
+          echo "verificando $INTERVALO"
+          docker run --rm -v "$PWD":/repo zricethezav/gitleaks:v8.21.2 git --no-banner --redact -v \
+            --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore \
+            --log-opts="$INTERVALO" /repo
+
+  mudancas:
+    name: mudancas
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      componentes: ${{ steps.filtro.outputs.changes }}
+      contratos: ${{ steps.contratos.outputs.contratos }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filtro
+        uses: dorny/paths-filter@v3
+        with:
+          # cada chave é a pasta do componente; a matriz usa o nome como caminho
+          filters: |
+            services/adocao: services/adocao/**
+            services/identidade: services/identidade/**
+            services/animais: services/animais/**
+            services/notificacoes: services/notificacoes/**
+            services/assistente: services/assistente/**
+            bff/web: bff/web/**
+            bff/mobile: bff/mobile/**
+            apps/web: apps/web/**
+            apps/mobile: apps/mobile/**
+            gateway: gateway/**
+            infra/rabbitmq: infra/rabbitmq/**
+            infra/mongo: infra/mongo/**
+      - id: contratos
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            contratos:
+              - docs/contratos/**
+              - services/**
+
+  componentes:
+    name: componente (${{ matrix.componente }})
+    needs: mudancas
+    if: needs.mudancas.outputs.componentes != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        componente: ${{ fromJSON(needs.mudancas.outputs.componentes) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.componente }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: detectar a linguagem
+        id: tipo
+        run: |
+          tem() { [ -f "$1" ] && echo true || echo false; }
+          python=false
+          if [ -f pyproject.toml ] || [ -f requirements.txt ]; then python=true; fi
+          {
+            echo "go=$(tem go.mod)"
+            echo "node=$(tem package.json)"
+            echo "python=$python"
+            echo "docker=$(tem Dockerfile)"
+          } >> "$GITHUB_OUTPUT"
+
+      # --- Go
+      - if: steps.tipo.outputs.go == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.componente }}/go.mod
+          cache-dependency-path: ${{ matrix.componente }}/go.sum
+      - if: steps.tipo.outputs.go == 'true'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+          working-directory: ${{ matrix.componente }}
+      - if: steps.tipo.outputs.go == 'true'
+        name: go test
+        # os testes de integração precisam de PostgreSQL e RabbitMQ e são pulados aqui
+        run: go test ./...
+
+      # --- Node / TypeScript
+      - if: steps.tipo.outputs.node == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.componente }}/package-lock.json
+      - if: steps.tipo.outputs.node == 'true'
+        name: npm ci, eslint, typecheck e testes
+        run: |
+          npm ci
+          npm run lint --if-present
+          npm run typecheck --if-present
+          npm test --if-present
+
+      # --- Python
+      - if: steps.tipo.outputs.python == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.componente }}/requirements*.txt
+      - if: steps.tipo.outputs.python == 'true'
+        name: dependências
+        run: pip install -r requirements-dev.txt
+      - if: steps.tipo.outputs.python == 'true'
+        name: ruff
+        run: |
+          ruff check .
+          ruff format --check .
+      - if: steps.tipo.outputs.python == 'true'
+        name: pytest
+        run: pytest
+
+      # --- imagem
+      - if: steps.tipo.outputs.docker == 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.tipo.outputs.docker == 'true'
+        name: docker build (sem push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.componente }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.componente }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.componente }}
+
+  # Check fixo para a ruleset: os nomes da matriz mudam com o componente e a matriz
+  # é pulada quando nenhum componente muda. Pulada conta como sucesso; falha ou
+  # cancelamento de qualquer componente reprova.
+  servicos:
+    name: servicos
+    needs: [mudancas, componentes]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: resultado dos componentes
+        env:
+          MUDANCAS: ${{ needs.mudancas.result }}
+          COMPONENTES: ${{ needs.componentes.result }}
+        run: |
+          echo "mudancas=$MUDANCAS componentes=$COMPONENTES"
+          [ "$MUDANCAS" = success ] || exit 1
+          case "$COMPONENTES" in success|skipped) ;; *) exit 1 ;; esac
+
+  # #88: os testes de contrato (respostas e mensagens reais contra os contratos) entram
+  # neste job. Por enquanto, ele garante que todo contrato OpenAPI é válido.
+  contratos:
+    name: contratos
+    needs: mudancas
+    if: needs.mudancas.outputs.contratos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: redocly lint
+        run: npx --yes @redocly/cli@1 lint docs/contratos/*.v1.yaml

@@ -1,0 +1,3 @@
+# Falsos positivos já no histórico, ignorados pela impressão digital exata (commit:arquivo:regra:linha).
+# UUID usado como Idempotency-Key num teste; a linha atual tem "gitleaks:allow".
+0d20114fc12628407570d4730afa5168e0d99c4f:services/adocao/internal/httpapi/solicitacoes_test.go:generic-api-key:152

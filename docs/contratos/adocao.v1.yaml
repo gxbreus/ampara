@@ -1,0 +1,1040 @@
+openapi: 3.1.0
+info:
+  title: Ampara — Adoção
+  version: 1.1.0
+  description: |
+    Solicitações de adoção e orquestração da SAGA. Todas as rotas pertencem à
+    rede interna e são consumidas pelos BFFs, que repassam o `Authorization`
+    original e o `X-Correlation-Id`. O adotante e o responsável são
+    identificados pelo `sub` do JWT; não existe header `X-Usuario`.
+
+    ## Processo assíncrono
+
+    Criar, aprovar, recusar e cancelar respondem **202**: a requisição só
+    registra a transição e enfileira os comandos da SAGA pelo outbox. O
+    cliente acompanha o andamento pelo `Location` e pelos `_links` da
+    solicitação.
+
+    ## Intervenção manual (1.1.0)
+
+    Se uma compensação (ou o T4/T5) atinge o teto de reenvios
+    (`ADOCAO_MAX_REENVIOS_COMPENSACAO`), a SAGA para e a solicitação fica com
+    `requerIntervencao: true`. Um ADMIN encontra essas solicitações com
+    `GET /v1/solicitacoes?requerIntervencao=true`, corrige a causa e chama
+    `POST /v1/solicitacoes/{id}/compensacao/retomada`. O roteiro está em
+    `docs/operacao/dlq.md` (#86).
+
+    ## HATEOAS
+
+    A solicitação é representada em HAL (`application/hal+json`). Os `_links`
+    dependem do **estado** e do **papel de quem pede**. Toda representação traz
+    `self`, `animal` e `historico`; ações só aparecem em
+    `AGUARDANDO_APROVACAO`.
+
+    | Estado | Responsável pelo animal | Adotante | ADMIN |
+    | --- | --- | --- | --- |
+    | `SOLICITADA`, `ANIMAL_RESERVADO` | — | — | — |
+    | `AGUARDANDO_APROVACAO` | `aprovar`, `recusar` | `cancelar` | — |
+    | `APROVADA`, `COMPENSANDO` | — | — | — |
+    | `CONCLUIDA`, `REJEITADA_INDISPONIVEL`, `PERFIL_INVALIDO`, `RECUSADA`, `CANCELADA`, `EXPIRADA`, `FALHOU` | — | — | — |
+
+    "—" significa só `self`, `animal` e `historico`. Não há link `adotante`,
+    porque nenhum BFF consegue traduzi-lo para o cliente. O link `animal`
+    aponta para a rota interna de Animais; os BFFs reescrevem os `href` de
+    `/v1/...` para `/web/v1/...` ou `/mobile/v1/...`.
+
+    ## Estados
+
+    Ativos: `SOLICITADA`, `ANIMAL_RESERVADO`, `AGUARDANDO_APROVACAO`,
+    `APROVADA` e `COMPENSANDO`. Finais: `CONCLUIDA`, `REJEITADA_INDISPONIVEL`,
+    `PERFIL_INVALIDO`, `RECUSADA`, `CANCELADA`, `EXPIRADA` e `FALHOU`. As
+    transições estão em `docs/saga.md`.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://adocao:8080
+    description: Rede interna
+tags:
+  - name: Solicitações
+    description: Criação e consulta das solicitações de adoção.
+  - name: Decisão
+    description: Ações que movem a SAGA a partir de AGUARDANDO_APROVACAO.
+  - name: Painel
+    description: Agregações consumidas pelo BFF Web.
+  - name: Operação
+    description: Intervenção manual em SAGAs paradas no teto de reenvios.
+paths:
+  /v1/solicitacoes:
+    post:
+      tags: [Solicitações]
+      summary: Solicita a adoção de um animal
+      description: >-
+        Exclusivo para ADOTANTE (HU-09). Grava a solicitação em SOLICITADA e o
+        comando ReservarAnimal (T1) no outbox, na mesma transação. O 202
+        significa que a SAGA começou, não que a adoção foi aceita: o cliente
+        acompanha pelo Location. Repetir a requisição com o mesmo
+        Idempotency-Key devolve a solicitação já criada, sem iniciar outra
+        SAGA. Se o animal já estiver reservado por outra pessoa, a solicitação
+        termina em REJEITADA_INDISPONIVEL de forma assíncrona.
+      operationId: criarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaSolicitacao'
+            example:
+              animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+      responses:
+        '202':
+          description: SAGA iniciada.
+          headers:
+            Location:
+              description: URI interna da solicitação criada.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                solicitada:
+                  $ref: '#/components/examples/Solicitada'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '409':
+          $ref: '#/components/responses/SolicitacaoAtivaExistente'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+    get:
+      tags: [Solicitações]
+      summary: Lista solicitações por filtro
+      description: >-
+        Exige pelo menos um filtro. adotanteId ou responsavelId precisa ser
+        igual ao sub do JWT, exceto para ADMIN. Serve à lista "minhas
+        solicitações" do adotante (HU-14) e à lista do responsável (HU-10);
+        os dados do adotante são agregados pelo BFF Web a partir da
+        Identidade. Paginação por cursor, ordenada da mais recente para a mais
+        antiga.
+      operationId: listarSolicitacoes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdotanteId'
+        - $ref: '#/components/parameters/AnimalId'
+        - $ref: '#/components/parameters/ResponsavelId'
+        - $ref: '#/components/parameters/Estado'
+        - $ref: '#/components/parameters/Ativa'
+        - $ref: '#/components/parameters/RequerIntervencao'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Página de solicitações.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/PaginaSolicitacoes'
+              example:
+                _embedded:
+                  solicitacoes:
+                    - id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                      estado: AGUARDANDO_APROVACAO
+                      desfecho: null
+                      motivo: null
+                      animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+                      animalNome: Pipoca
+                      adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+                      expiraEm: '2026-11-20T15:00:00Z'
+                      criadoEm: '2026-11-17T15:00:00Z'
+                      atualizadoEm: '2026-11-17T15:00:02Z'
+                      _links:
+                        self:
+                          href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                        animal:
+                          href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+                        historico:
+                          href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+                        aprovar:
+                          href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/aprovacao
+                          method: POST
+                        recusar:
+                          href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/recusa
+                          method: POST
+                _links:
+                  self:
+                    href: /v1/solicitacoes?responsavelId=c50a83ab-7db0-41b4-9436-4144c36f97d5&ativa=true
+                  next:
+                    href: /v1/solicitacoes?responsavelId=c50a83ab-7db0-41b4-9436-4144c36f97d5&ativa=true&cursor=eyJjcmlhZG9FbSI6IjIwMjYtMTEtMTcifQ
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/solicitacoes/resumo:
+    get:
+      tags: [Painel]
+      summary: Resume as solicitações de um responsável
+      description: >-
+        Contadores para o painel da ONG, numa única chamada (sem N+1 no BFF
+        Web). responsavelId precisa ser igual ao sub do JWT, exceto para
+        ADMIN. concluidasNoMes considera o mês corrente em UTC.
+      operationId: resumirSolicitacoes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResponsavelIdObrigatorio'
+      responses:
+        '200':
+          description: Contadores do responsável.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resumo'
+              example:
+                porEstado:
+                  AGUARDANDO_APROVACAO: 2
+                  CONCLUIDA: 5
+                  RECUSADA: 1
+                ativasPorAnimal:
+                  65a2f1c4e8b9d3a7f0c1b2d4: 1
+                  65a2f1c4e8b9d3a7f0c1b2e9: 1
+                concluidasNoMes: 2
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/solicitacoes/{id}:
+    get:
+      tags: [Solicitações]
+      summary: Consulta uma solicitação
+      description: >-
+        Permitido ao adotante e ao responsável pelo animal, e a ADMIN. Os
+        _links seguem a tabela por estado e papel da descrição geral.
+      operationId: obterSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '200':
+          description: Solicitação com links de navegação.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                aguardandoVistaPeloResponsavel:
+                  $ref: '#/components/examples/AguardandoResponsavel'
+                aguardandoVistaPeloAdotante:
+                  $ref: '#/components/examples/AguardandoAdotante'
+                aprovada:
+                  $ref: '#/components/examples/Aprovada'
+                compensando:
+                  $ref: '#/components/examples/Compensando'
+                concluida:
+                  $ref: '#/components/examples/Concluida'
+                recusada:
+                  $ref: '#/components/examples/Recusada'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+  /v1/solicitacoes/{id}/aprovacao:
+    post:
+      tags: [Decisão]
+      summary: Aprova a solicitação
+      description: >-
+        Exclusivo para o responsável pelo animal, só em AGUARDANDO_APROVACAO
+        (HU-11). A aprovação é o pivô da SAGA: grava APROVADA e emite
+        ConfirmarAdocao (T4) e adocao.aprovada. Depois dela, os passos só são
+        repetidos até concluir. Uma segunda aprovação (duplo clique) encontra
+        o estado APROVADA e responde 409, sem emitir outro comando.
+      operationId: aprovarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '202':
+          description: Aprovação registrada; a SAGA segue até CONCLUIDA.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                aprovada:
+                  $ref: '#/components/examples/Aprovada'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+        '409':
+          $ref: '#/components/responses/EstadoNaoPermiteAcao'
+  /v1/solicitacoes/{id}/recusa:
+    post:
+      tags: [Decisão]
+      summary: Recusa a solicitação
+      description: >-
+        Exclusivo para o responsável pelo animal, só em AGUARDANDO_APROVACAO
+        (HU-11). Grava COMPENSANDO com desfecho RECUSADA e emite LiberarVaga
+        (C2) e LiberarReserva (C1). O estado RECUSADA só é gravado quando as
+        duas compensações responderem; o evento adocao.recusada sai nesse
+        momento.
+      operationId: recusarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recusa'
+            example:
+              motivo: Moradia sem tela de proteção nas janelas.
+      responses:
+        '202':
+          description: Recusa registrada; compensações em andamento.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                compensando:
+                  $ref: '#/components/examples/Compensando'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+        '409':
+          $ref: '#/components/responses/EstadoNaoPermiteAcao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/solicitacoes/{id}/cancelamento:
+    post:
+      tags: [Decisão]
+      summary: Cancela a solicitação
+      description: >-
+        Exclusivo para o adotante que criou a solicitação, só em
+        AGUARDANDO_APROVACAO (HU-13). Grava COMPENSANDO com desfecho CANCELADA
+        e emite C2 e C1; CANCELADA é gravado quando as duas responderem.
+      operationId: cancelarSolicitacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '202':
+          description: Cancelamento registrado; compensações em andamento.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              example:
+                id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                estado: COMPENSANDO
+                desfecho: CANCELADA
+                motivo: null
+                animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+                animalNome: Pipoca
+                adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+                expiraEm: '2026-11-20T15:00:00Z'
+                criadoEm: '2026-11-17T15:00:00Z'
+                atualizadoEm: '2026-11-18T09:12:00Z'
+                _links:
+                  self:
+                    href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                  animal:
+                    href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+                  historico:
+                    href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+        '409':
+          $ref: '#/components/responses/EstadoNaoPermiteAcao'
+  /v1/solicitacoes/{id}/compensacao/retomada:
+    post:
+      tags: [Operação]
+      summary: Retoma os passos esgotados de uma SAGA parada
+      description: >-
+        Só ADMIN. Depois de corrigir a causa (por exemplo, uma mensagem
+        envenenada), os passos esgotados voltam a pendentes, com as tentativas
+        zeradas, e são reenviados com o mesmo messageId: a inbox do participante
+        impede efeito duplicado. Responde 202, e requerIntervencao volta a false.
+      operationId: retomarCompensacao
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '202':
+          description: Passos retomados; a SAGA segue até o estado final.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Solicitacao'
+              examples:
+                compensando:
+                  $ref: '#/components/examples/Compensando'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+        '409':
+          description: A solicitação não tem passo esgotado esperando intervenção.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://ampara.dev/problemas/nada-a-retomar
+                title: Nada a retomar
+                status: 409
+                detail: A solicitação não tem passo esgotado esperando intervenção.
+  /v1/solicitacoes/{id}/historico:
+    get:
+      tags: [Solicitações]
+      summary: Consulta a linha do tempo da solicitação
+      description: >-
+        Todas as transições da SAGA, em ordem cronológica (HU-14). Permitido
+        ao adotante, ao responsável e a ADMIN. A expiração automática (HU-12)
+        aparece como o evento PrazoExpirado, aplicado pelo sistema quando
+        expiraEm passa sem decisão.
+      operationId: obterHistorico
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdSolicitacao'
+      responses:
+        '200':
+          description: Linha do tempo.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Historico'
+              example:
+                itens:
+                  - de: null
+                    para: SOLICITADA
+                    evento: SolicitacaoCriada
+                    passo: null
+                    em: '2026-11-17T15:00:00Z'
+                  - de: SOLICITADA
+                    para: ANIMAL_RESERVADO
+                    evento: AnimalReservado
+                    passo: T1
+                    em: '2026-11-17T15:00:01Z'
+                  - de: ANIMAL_RESERVADO
+                    para: AGUARDANDO_APROVACAO
+                    evento: PerfilValidado
+                    passo: T2
+                    em: '2026-11-17T15:00:02Z'
+                  - de: AGUARDANDO_APROVACAO
+                    para: COMPENSANDO
+                    evento: PrazoExpirado
+                    passo: null
+                    em: '2026-11-20T15:00:00Z'
+                  - de: COMPENSANDO
+                    para: EXPIRADA
+                    evento: ReservaLiberada
+                    passo: C1
+                    em: '2026-11-20T15:00:01Z'
+                _links:
+                  self:
+                    href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+                  solicitacao:
+                    href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/SolicitacaoNaoEncontrada'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        JWT RS256 emitido pela Identidade e repassado pelo BFF. A Adoção
+        verifica a assinatura com a chave pública e usa sub e role.
+  parameters:
+    IdSolicitacao:
+      name: id
+      in: path
+      required: true
+      description: Identificador da solicitação, igual ao sagaId.
+      schema:
+        type: string
+        format: uuid
+      example: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        Chave gerada pelo cliente para tornar a criação idempotente. A mesma
+        chave do mesmo adotante devolve a solicitação já criada.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      example: 3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63
+    AdotanteId:
+      name: adotanteId
+      in: query
+      schema:
+        type: string
+        format: uuid
+      example: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+    AnimalId:
+      name: animalId
+      in: query
+      schema:
+        $ref: '#/components/schemas/AnimalId'
+      example: 65a2f1c4e8b9d3a7f0c1b2d4
+    ResponsavelId:
+      name: responsavelId
+      in: query
+      schema:
+        type: string
+        format: uuid
+      example: c50a83ab-7db0-41b4-9436-4144c36f97d5
+    ResponsavelIdObrigatorio:
+      name: responsavelId
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: c50a83ab-7db0-41b4-9436-4144c36f97d5
+    Estado:
+      name: estado
+      in: query
+      schema:
+        $ref: '#/components/schemas/Estado'
+      example: AGUARDANDO_APROVACAO
+    Ativa:
+      name: ativa
+      in: query
+      description: true filtra só estados ativos; false, só estados finais.
+      schema:
+        type: boolean
+      example: true
+    RequerIntervencao:
+      name: requerIntervencao
+      in: query
+      description: >-
+        true lista só as solicitações paradas no teto de reenvios. Sem outro
+        filtro, só ADMIN pode usar.
+      schema:
+        type: boolean
+      example: true
+    Cursor:
+      name: cursor
+      in: query
+      description: Valor opaco copiado de _links.next.href da página anterior.
+      schema:
+        type: string
+      example: eyJjcmlhZG9FbSI6IjIwMjYtMTEtMTcifQ
+    Limite:
+      name: limite
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+  responses:
+    DadosInvalidos:
+      description: Corpo ou parâmetros inválidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/validacao
+            title: Dados inválidos
+            status: 422
+            detail: Informe pelo menos um filtro.
+    NaoAutenticado:
+      description: JWT ausente, inválido ou expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-autenticado
+            title: Não autenticado
+            status: 401
+            detail: Envie um token Bearer válido.
+    SemPermissao:
+      description: >-
+        A conta autenticada não tem o papel exigido ou não é parte da
+        solicitação.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/sem-permissao
+            title: Sem permissão
+            status: 403
+            detail: Só o responsável pelo animal pode aprovar esta solicitação.
+    SolicitacaoNaoEncontrada:
+      description: Solicitação não encontrada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/solicitacao-nao-encontrada
+            title: Solicitação não encontrada
+            status: 404
+            detail: Não existe solicitação com este identificador.
+    SolicitacaoAtivaExistente:
+      description: O adotante já tem uma solicitação ativa para este animal.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/solicitacao-ativa-existente
+            title: Solicitação ativa existente
+            status: 409
+            detail: Já existe uma solicitação em andamento para este animal.
+    EstadoNaoPermiteAcao:
+      description: A ação não é válida para o estado atual da solicitação.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/estado-nao-permite-acao
+            title: Estado não permite a ação
+            status: 409
+            detail: A solicitação está em APROVADA; só é possível aprovar em AGUARDANDO_APROVACAO.
+  examples:
+    Solicitada:
+      summary: SOLICITADA, logo após a criação
+      value:
+        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        estado: SOLICITADA
+        desfecho: null
+        motivo: null
+        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+        animalNome: null
+        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        responsavelId: null
+        expiraEm: null
+        criadoEm: '2026-11-17T15:00:00Z'
+        atualizadoEm: '2026-11-17T15:00:00Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+          historico:
+            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+    AguardandoResponsavel:
+      summary: AGUARDANDO_APROVACAO, vista pelo responsável (resposta real do serviço)
+      value:
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
+        estado: AGUARDANDO_APROVACAO
+        desfecho: null
+        motivo: null
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:54Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+          historico:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
+          aprovar:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/aprovacao
+            method: POST
+          recusar:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/recusa
+            method: POST
+    AguardandoAdotante:
+      summary: AGUARDANDO_APROVACAO, vista pelo adotante (resposta real do serviço)
+      value:
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
+        estado: AGUARDANDO_APROVACAO
+        desfecho: null
+        motivo: null
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:54Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+          historico:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
+          cancelar:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/cancelamento
+            method: POST
+    Aprovada:
+      summary: APROVADA, SAGA seguindo até CONCLUIDA (resposta real do serviço)
+      value:
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
+        estado: APROVADA
+        desfecho: null
+        motivo: null
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:56Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+          historico:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
+    Compensando:
+      summary: COMPENSANDO após uma recusa
+      value:
+        id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+        estado: COMPENSANDO
+        desfecho: RECUSADA
+        motivo: Moradia sem tela de proteção nas janelas.
+        animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+        animalNome: Pipoca
+        adotanteId: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-11-20T15:00:00Z'
+        criadoEm: '2026-11-17T15:00:00Z'
+        atualizadoEm: '2026-11-18T10:30:00Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2d4
+          historico:
+            href: /v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/historico
+    Concluida:
+      summary: CONCLUIDA, estado final do caminho feliz (resposta real do serviço)
+      value:
+        id: 4f14430b-4f1b-4dcf-a471-909694a69b3a
+        estado: CONCLUIDA
+        desfecho: null
+        motivo: null
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+        animalNome: Thor
+        adotanteId: 11111111-1111-4111-8111-111111111111
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-10-07T14:40:14Z'
+        criadoEm: '2026-10-07T14:39:53Z'
+        atualizadoEm: '2026-10-07T14:39:56Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e9
+          historico:
+            href: /v1/solicitacoes/4f14430b-4f1b-4dcf-a471-909694a69b3a/historico
+    Recusada:
+      summary: RECUSADA, estado final após as compensações (resposta real do serviço)
+      value:
+        id: 81685495-eff5-410d-a23b-b5f9f281b6d6
+        estado: RECUSADA
+        desfecho: null
+        motivo: Moradia sem tela de proteção nas janelas.
+        animalId: 65a2f1c4e8b9d3a7f0c1b2e8
+        animalNome: Thor
+        adotanteId: 22222222-2222-4222-8222-222222222222
+        responsavelId: c50a83ab-7db0-41b4-9436-4144c36f97d5
+        expiraEm: '2026-10-07T14:40:18Z'
+        criadoEm: '2026-10-07T14:39:58Z'
+        atualizadoEm: '2026-10-07T14:39:59Z'
+        _links:
+          self:
+            href: /v1/solicitacoes/81685495-eff5-410d-a23b-b5f9f281b6d6
+          animal:
+            href: /v1/animais/65a2f1c4e8b9d3a7f0c1b2e8
+          historico:
+            href: /v1/solicitacoes/81685495-eff5-410d-a23b-b5f9f281b6d6/historico
+  schemas:
+    Estado:
+      type: string
+      enum:
+        - SOLICITADA
+        - ANIMAL_RESERVADO
+        - AGUARDANDO_APROVACAO
+        - APROVADA
+        - COMPENSANDO
+        - CONCLUIDA
+        - REJEITADA_INDISPONIVEL
+        - PERFIL_INVALIDO
+        - RECUSADA
+        - CANCELADA
+        - EXPIRADA
+        - FALHOU
+    Desfecho:
+      type: string
+      description: Estado final que será gravado quando as compensações terminarem.
+      enum: [PERFIL_INVALIDO, RECUSADA, CANCELADA, EXPIRADA, FALHOU]
+    AnimalId:
+      type: string
+      description: Identificador do animal no serviço Animais (ObjectId do MongoDB).
+      pattern: '^[0-9a-f]{24}$'
+    NovaSolicitacao:
+      type: object
+      additionalProperties: false
+      required: [animalId]
+      properties:
+        animalId:
+          $ref: '#/components/schemas/AnimalId'
+    Recusa:
+      type: object
+      additionalProperties: false
+      properties:
+        motivo:
+          type: string
+          maxLength: 500
+    Link:
+      type: object
+      additionalProperties: false
+      required: [href]
+      properties:
+        href:
+          type: string
+          format: uri-reference
+        method:
+          type: string
+          description: Omitido para navegação (GET); POST nas ações.
+          enum: [POST]
+    LinksSolicitacao:
+      type: object
+      description: >-
+        self, animal e historico estão sempre presentes. aprovar e recusar só
+        aparecem para o responsável em AGUARDANDO_APROVACAO; cancelar, só para
+        o adotante nesse mesmo estado.
+      additionalProperties: false
+      required: [self, animal, historico]
+      properties:
+        self:
+          $ref: '#/components/schemas/Link'
+        animal:
+          $ref: '#/components/schemas/Link'
+        historico:
+          $ref: '#/components/schemas/Link'
+        aprovar:
+          $ref: '#/components/schemas/Link'
+        recusar:
+          $ref: '#/components/schemas/Link'
+        cancelar:
+          $ref: '#/components/schemas/Link'
+    Solicitacao:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - estado
+        - desfecho
+        - motivo
+        - animalId
+        - animalNome
+        - adotanteId
+        - responsavelId
+        - expiraEm
+        - criadoEm
+        - atualizadoEm
+        - _links
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Igual ao sagaId.
+        estado:
+          $ref: '#/components/schemas/Estado'
+        desfecho:
+          description: Preenchido a partir de COMPENSANDO; null nos demais casos.
+          oneOf:
+            - $ref: '#/components/schemas/Desfecho'
+            - type: 'null'
+        motivo:
+          type: [string, 'null']
+          description: Motivo da recusa, quando informado pelo responsável.
+        animalId:
+          $ref: '#/components/schemas/AnimalId'
+        animalNome:
+          type: [string, 'null']
+          description: Cópia vinda de AnimalReservado; null antes da reserva.
+        adotanteId:
+          type: string
+          format: uuid
+        responsavelId:
+          type: [string, 'null']
+          format: uuid
+          description: Vem de AnimalReservado; null antes da reserva.
+        expiraEm:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            Gravado ao entrar em AGUARDANDO_APROVACAO, a partir de
+            ADOCAO_PRAZO_EXPIRACAO (72 h em produção, 2 min na demo).
+        requerIntervencao:
+          type: boolean
+          description: >-
+            true quando um passo atingiu o teto de reenvios e a SAGA espera a
+            retomada manual de um ADMIN (desde a 1.1.0).
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+        _links:
+          $ref: '#/components/schemas/LinksSolicitacao'
+    PaginaSolicitacoes:
+      type: object
+      additionalProperties: false
+      required: [_embedded, _links]
+      properties:
+        _embedded:
+          type: object
+          additionalProperties: false
+          required: [solicitacoes]
+          properties:
+            solicitacoes:
+              type: array
+              items:
+                $ref: '#/components/schemas/Solicitacao'
+        _links:
+          type: object
+          additionalProperties: false
+          required: [self]
+          properties:
+            self:
+              $ref: '#/components/schemas/Link'
+            next:
+              $ref: '#/components/schemas/Link'
+    Resumo:
+      type: object
+      additionalProperties: false
+      required: [porEstado, ativasPorAnimal, concluidasNoMes]
+      properties:
+        porEstado:
+          type: object
+          description: Quantidade por estado; estados sem solicitação são omitidos.
+          propertyNames:
+            $ref: '#/components/schemas/Estado'
+          additionalProperties:
+            type: integer
+            minimum: 1
+        ativasPorAnimal:
+          type: object
+          description: Solicitações em estado ativo, por animalId.
+          propertyNames:
+            $ref: '#/components/schemas/AnimalId'
+          additionalProperties:
+            type: integer
+            minimum: 1
+        concluidasNoMes:
+          type: integer
+          minimum: 0
+    ItemHistorico:
+      type: object
+      additionalProperties: false
+      required: [de, para, evento, passo, em]
+      properties:
+        de:
+          description: Estado anterior; null na criação.
+          oneOf:
+            - $ref: '#/components/schemas/Estado'
+            - type: 'null'
+        para:
+          $ref: '#/components/schemas/Estado'
+        evento:
+          type: string
+          description: Gatilho da transição (resposta, ação ou timeout).
+        passo:
+          type: [string, 'null']
+          description: >-
+            Passo da SAGA cuja resposta ou timeout disparou a transição; null
+            na criação e nas ações (aprovar, recusar, cancelar, expirar).
+          enum: [T1, T2, T4, T5, C1, C2, null]
+        em:
+          type: string
+          format: date-time
+    Historico:
+      type: object
+      additionalProperties: false
+      required: [itens, _links]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemHistorico'
+        _links:
+          type: object
+          additionalProperties: false
+          required: [self, solicitacao]
+          properties:
+            self:
+              $ref: '#/components/schemas/Link'
+            solicitacao:
+              $ref: '#/components/schemas/Link'
+    Problema:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

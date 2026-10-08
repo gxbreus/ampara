@@ -57,7 +57,7 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 | RA-03 | Diagrama de componentes e de comunicação (`E-4.1`) | 🟡 | atualizar com BFFs, outbox, read model, Assistente e vector DB |
 | RA-04 | Contrato OpenAPI completo de cada serviço (`E-4.2`) | ❌ | `docs/contratos/*.yaml` |
 | RA-05 | Uso correto de recursos, verbos e status HTTP (`E-4.2`) | ❌ | 201 + `Location`, 202 para iniciar a SAGA, 409 para animal reservado, 422 de validação, 404, 401/403 |
-| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão na URI (`/api/v1`) para APIs e campo `version` nos eventos |
+| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão maior na URI, depois do cliente nas rotas externas (`/web/v1`, `/mobile/v1`, `/auth/v1`) e sozinha nas internas (`/v1`), com os dois eixos independentes; campo `version` nos eventos (ADR-006, #124) |
 | RA-07 | Ao menos 1 recurso com HATEOAS (`E-4.2`) | ❌ | proposta: `SolicitacaoAdocao` com links que dependem do estado (`aprovar`, `recusar`, `cancelar`, `animal`, `adotante`) |
 | RA-08 | Gateway com regras de roteamento (`E-4.3`) | 🟡 | definir a tecnologia e a tabela de rotas |
 | RA-09 | Responsabilidades do gateway (`E-4.3`) | 🟡 | validação de JWT, rate limiting, correlation ID e CORS |
@@ -167,17 +167,17 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 
 | Componente | Tecnologia | Banco | Papel |
 | --- | --- | --- | --- |
-| API Gateway | Kong DB-less *(a confirmar)* | — | roteamento, JWT, rate limit, correlation ID |
-| BFF Web | Node/TS *(a confirmar)* | — | agrega dados para o painel de ONGs |
-| BFF Mobile | Node/TS *(a confirmar)* | — | payloads enxutos e agregação para o adotante |
+| API Gateway | Kong 3.8 DB-less (Kong Ingress Controller na Parte 3) | — | roteamento, JWT, rate limit, correlation ID |
+| BFF Web | Node 22 + TypeScript + Fastify | — | agrega dados para o painel de ONGs |
+| BFF Mobile | Node 22 + TypeScript + Fastify | — | payloads enxutos e agregação para o adotante |
 | Identidade | NestJS | PostgreSQL | contas, perfis, verificação, limite de solicitações ativas |
 | Animais | FastAPI | MongoDB (escrita) + projeção de leitura | catálogo, reserva, **CQRS** |
 | Adoção | Go | PostgreSQL (+ tabela outbox) | **orquestrador da SAGA**, HATEOAS |
 | Notificações | FastAPI | Redis (AOF) | consumo de eventos, caixa de entrada por usuário |
-| **Assistente** (novo) | Python + LangChain | base vetorial (Qdrant ou pgvector) *(a confirmar)* | RAG, tool de busca de animais, resiliência do LLM |
+| **Assistente** (novo) | Python + LangChain | Qdrant + cache em `redis-assistente` | RAG, tool de busca de animais, resiliência do LLM |
 | Broker | RabbitMQ | — | comandos e eventos, DLQ |
-| App Web | React + Vite *(a confirmar)* | — | protetores e ONGs |
-| App Mobile | React Native/Expo *(a confirmar)* | — | adotantes |
+| App Web | React + Vite | — | protetores e ONGs |
+| App Mobile | Expo (React Native) | — | adotantes |
 
 **Por que o Assistente é um serviço próprio:** o LLM é uma dependência remota lenta, cara e falível. Isolado, ele tem a própria política de escala, circuit breaker e cache, e uma queda não afeta a busca nem a SAGA.
 
@@ -189,7 +189,7 @@ Rotas propostas:
 
 | Rota externa | Destino | Autenticação |
 | --- | --- | --- |
-| `/api/v1/auth/*` | Identidade | pública (rate limit mais rígido) |
+| `/auth/v1/*` | Identidade | pública (rate limit mais rígido) |
 | `/web/v1/*` | BFF Web | JWT, roles `PROTETOR`, `ONG` e `ADMIN` |
 | `/mobile/v1/*` | BFF Mobile | JWT, role `ADOTANTE` (busca pública) |
 
@@ -303,7 +303,7 @@ HU-20 a HU-25, segundo read model (painel de impacto), cache semântico, observa
 - Chat entre adotante e ONG: o contato acontece depois da aprovação, por fora.
 - Verificação documental real de ONGs (CNPJ ou documentos): no MVP é manual ou por seed.
 - Publicação nas lojas de apps e deploy em nuvem: o enunciado aceita ambiente local.
-- Upload de fotos para storage externo (S3): no MVP as fotos ficam como URL ou no GridFS *(a confirmar)*.
+- Upload de fotos para storage externo (S3): no MVP as fotos ficam como URL.
 
 ## 11. Decisões confirmadas (2026-10-06)
 
@@ -312,10 +312,31 @@ HU-20 a HU-25, segundo read model (painel de impacto), cache semântico, observa
 - **Avistamentos e denúncias** entram como *Should*, depois do MVP.
 - O desenvolvimento será **dividido por integrante** (ver `docs/planejamento.md`).
 
+### Decisões do kickoff (2026-10-07, #19)
+
+Votadas de forma assíncrona; o grupo aprovou todas as recomendações.
+
+| # | Decisão | Escolha |
+| --- | --- | --- |
+| 1 | Donos por serviço | divisão de `docs/planejamento.md` §4, sem trocas |
+| 2 | API Gateway | Kong 3.8 DB-less; Kong Ingress Controller na Parte 3 |
+| 3 | Framework dos BFFs | Node 22 + TypeScript + Fastify |
+| 4 | Base vetorial do Assistente | Qdrant + cache de respostas em `redis-assistente` |
+| 5 | App Web | React + Vite |
+| 6 | App Mobile | Expo (React Native) |
+| 7 | LLM e orçamento | custo zero: free tier da Groq como modelo principal (ex.: `gpt-oss-120b`, com suporte a tools), Ollama local como fallback e embeddings locais multilíngues (ex.: `bge-m3`); a troca de provedor depende só de variáveis de ambiente (#67) |
+| 8 | Cluster local | kind |
+| 9 | Fotos dos animais | URL no MVP |
+| 10 | Algoritmo do JWT | RS256: a Identidade assina; gateway, BFFs e serviços validam com a chave pública |
+| 11 | Read model do CQRS | database `animais_leitura` na mesma instância `mongo-animais` |
+| 12 | Formato do HATEOAS | HAL (`_links`, `_embedded`) |
+| 13 | Versionamento | versão maior na URI; `version` no envelope dos eventos |
+| 14 | MongoDB | replica set de 1 nó (`rs0`) |
+| 15 | Filas | quorum queues com `x-delivery-limit: 5` e DLX `ampara.dlx` |
+| 16 | Merge | squash nos PRs para `develop`; merge commit nos releases `develop` → `main` |
+| 17 | Ritmo | check-in assíncrono toda terça (entregue, próximo, bloqueios); chamada de 15 min só sob demanda; 1 PR aberto e 1 revisado por pessoa por semana |
+
 ## 12. Premissas e pontos a confirmar
 
-1. Divisão das responsabilidades por integrante proposta em `docs/planejamento.md`. *(a confirmar com o grupo)*
-2. Tecnologias de gateway (Kong DB-less), BFFs (Node/TS), base vetorial (Qdrant), App Web (React + Vite) e App Mobile (Expo). *(a confirmar)*
-3. Provedor de LLM e orçamento de API (ex.: Claude Haiku pelo custo, com fallback local via Ollama). *(a confirmar)*
-4. Cluster local: kind ou Minikube. *(a confirmar)*
-5. Armazenamento de fotos: URL ou GridFS. *(a confirmar)*
+1. Canal assíncrono do grupo para o check-in semanal (WhatsApp, Discord ou discussões do GitHub). *(a confirmar)*
+2. Quem cria a chave da Groq usada na demo e como ela chega ao Kubernetes (Secret criado à mão, nunca no repositório). Para desenvolvimento, cada integrante usa a própria chave, porque o limite do free tier vale por organização. *(a confirmar)*

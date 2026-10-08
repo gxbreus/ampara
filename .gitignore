@@ -25,3 +25,8 @@ apps/mobile/android/
 # Segredos locais (Kubernetes e chaves JWT)
 secret.env
 *.pem
+
+# Kubernetes: gerados por scripts/k8s-prep.sh a partir do .env
+k8s/**/secret.env
+k8s/**/jwt.key
+k8s/**/jwt.pub
