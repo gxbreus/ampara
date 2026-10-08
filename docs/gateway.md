@@ -9,7 +9,7 @@ de domínio não possuem rota externa.
 | Nome | Rota externa | Destino interno | Autenticação | Limite | Roles esperadas |
 | --- | --- | --- | --- | --- | --- |
 | `auth` | `/api/v1/auth/*` | `identidade:3001/v1/auth/*` | Pública | 20/min por IP | — |
-| `mobile-publico` | GET `/mobile/v1/animais*` | `bff-mobile:3020` | Pública; o BFF lê o token se existir | 600/min por IP | — |
+| `mobile-publico` | GET `/mobile/v1/animais*` | `bff-mobile:3020` | Pública; se vier token, o BFF valida assinatura e `exp` antes de usar | 600/min por IP | — |
 | `mobile` | `/mobile/v1/*` | `bff-mobile:3020` | JWT RS256 | 600/min por IP | ADOTANTE |
 | `web` | `/web/v1/*` | `bff-web:3010` | JWT RS256 | 300/min por IP | PROTETOR, ONG, ADMIN |
 
