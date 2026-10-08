@@ -384,3 +384,71 @@ func TestDuasReplicasPublicamCadaComandoUmaVez(t *testing.T) {
 		t.Errorf("transições %v", got)
 	}
 }
+
+// #86: Animais falha na LiberarReserva (mensagem envenenada); a Adoção para no teto,
+// marca a intervenção, e um ADMIN retoma depois da correção.
+func TestTetoIntervencaoERetomada(t *testing.T) {
+	a := preparar(t, cenario{})
+	id := a.criar(t)
+	a.esperar(t, id, saga.AguardandoAprovacao, 5*time.Second)
+
+	a.pararAnimais() // o handler de Animais "quebrado": não responde
+	time.Sleep(200 * time.Millisecond)
+	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRecusa}); err != nil {
+		t.Fatal(err)
+	}
+	// teto de 5 reenvios, com backoff a partir de 1 s (até ~31 s); espera a intervenção
+	fim := time.Now().Add(60 * time.Second)
+	var intervencao bool
+	for time.Now().Before(fim) && !intervencao {
+		_ = a.pool.QueryRow(context.Background(), `SELECT requer_intervencao FROM solicitacoes WHERE id = $1`, id).Scan(&intervencao)
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !intervencao {
+		t.Fatal("a solicitação deveria ter parado no teto e pedido intervenção")
+	}
+	itens, _, err := a.repo.Listar(context.Background(), repositorio.Filtro{RequerIntervencao: ptr(true)})
+	if err != nil || len(itens) != 1 || itens[0].ID != id {
+		t.Fatalf("a fila de intervenção deveria listar a solicitação: %v %v", itens, err)
+	}
+	var status string
+	var tentativas int
+	_ = a.pool.QueryRow(context.Background(), `SELECT status, tentativas FROM saga_passos WHERE saga_id = $1 AND passo = 'C1'`, id).Scan(&status, &tentativas)
+	if status != "ESGOTADO" || tentativas != 5 {
+		t.Fatalf("C1: status %s, tentativas %d", status, tentativas)
+	}
+	// parado no teto, nada mais é reenviado
+	var antes, depois int
+	_ = a.pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva'`, id).Scan(&antes)
+	time.Sleep(2 * time.Second)
+	_ = a.pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva'`, id).Scan(&depois)
+	if antes != depois {
+		t.Fatalf("depois do teto, a LiberarReserva não deveria ser reenviada (%d -> %d)", antes, depois)
+	}
+
+	// a causa foi corrigida: Animais volta, e o ADMIN retoma
+	_, _ = a.admin.Channel() // mantém a conexão de admin viva
+	if q, err := mustCanal(t, a).QueuePurge("animais.comandos", false); err != nil {
+		t.Fatalf("limpar a fila (%d): %v", q, err)
+	}
+	a.ligarAnimais(context.Background(), t)
+	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRetomada}); err != nil {
+		t.Fatal(err)
+	}
+	a.esperar(t, id, saga.Recusada, 10*time.Second)
+	var ids int
+	_ = a.pool.QueryRow(context.Background(), `SELECT count(DISTINCT message_id) FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva'`, id).Scan(&ids)
+	if ids != 1 {
+		t.Fatalf("a retomada deveria reenviar com o mesmo messageId: %d ids distintos", ids)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func mustCanal(t *testing.T, a *ambiente) *amqp.Channel {
+	c, err := a.admin.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}

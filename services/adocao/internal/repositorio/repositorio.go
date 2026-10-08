@@ -130,17 +130,18 @@ func (r *Repositorio) porChave(ctx context.Context, adotanteID, chave string) (s
 
 // Visao é a solicitação como a API a representa (docs/contratos/adocao.v1.yaml).
 type Visao struct {
-	ID            string
-	Estado        saga.Estado
-	Desfecho      saga.Estado
-	Motivo        string
-	AnimalID      string
-	AnimalNome    string
-	AdotanteID    string
-	ResponsavelID string
-	ExpiraEm      *time.Time
-	CriadoEm      time.Time
-	AtualizadoEm  time.Time
+	ID                string
+	Estado            saga.Estado
+	Desfecho          saga.Estado
+	Motivo            string
+	AnimalID          string
+	AnimalNome        string
+	AdotanteID        string
+	ResponsavelID     string
+	ExpiraEm          *time.Time
+	RequerIntervencao bool
+	CriadoEm          time.Time
+	AtualizadoEm      time.Time
 }
 
 // Obter lê a solicitação para a API.
@@ -202,6 +203,13 @@ func (r *Repositorio) AplicarTimeout(ctx context.Context, sagaID string, passo s
 		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
 	})
 	return saida, err
+}
+
+// MessageID devolve o messageId gravado para o passo (para os logs de operação).
+func (r *Repositorio) MessageID(ctx context.Context, sagaID string, passo saga.Passo) string {
+	var id string
+	_ = r.pool.QueryRow(ctx, `SELECT message_id FROM saga_passos WHERE saga_id = $1 AND passo = $2`, sagaID, passo).Scan(&id)
+	return id
 }
 
 // Vencido é um passo com prazo estourado.
@@ -375,7 +383,7 @@ func (r *Repositorio) alterarPasso(ctx context.Context, tx pgx.Tx, sagaID string
 		sql = `UPDATE saga_passos SET status = 'EXPIRADO', prazo = NULL, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
 	case saga.Esgotar:
 		sql = `UPDATE saga_passos SET status = 'ESGOTADO', prazo = NULL, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-	case saga.Reenviar, saga.Reemitir:
+	case saga.Reenviar, saga.Reemitir, saga.Retomar:
 		// mesmo comando e mesmo messageId: a inbox do participante devolve a resposta gravada
 		var tentativas int
 		var comando []byte
@@ -393,6 +401,11 @@ func (r *Repositorio) alterarPasso(ctx context.Context, tx pgx.Tx, sagaID string
 		}
 		if alt.Acao == saga.Reemitir {
 			return nil
+		}
+		if alt.Acao == saga.Retomar {
+			sql = `UPDATE saga_passos SET status = 'PENDENTE', tentativas = 0, prazo = $4, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
+			args = append(args, agora.Add(r.cfg.TimeoutPasso))
+			break
 		}
 		sql = `UPDATE saga_passos SET tentativas = tentativas + 1, prazo = $4, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
 		args = append(args, agora.Add(r.backoff(tentativas)))

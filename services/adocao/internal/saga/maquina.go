@@ -49,6 +49,9 @@ func Transicao(s Solicitacao, ev Evento, r Regras) (Saida, error) {
 
 	case EvTimeout:
 		return timeout(out, ev.Passo, r)
+
+	case EvRetomada:
+		return retomada(out)
 	}
 
 	return resposta(out, ev, r)
@@ -73,6 +76,32 @@ func acaoHumana(out Saida, ev Evento) (Saida, error) {
 		// 10. cancelamento -> COMPENSANDO (CANCELADA), C2 + C1 bloqueantes
 		return compensar(out, 10, Cancelada, "", true, true), nil
 	}
+}
+
+// retomada: depois do teto de reenvios (#86), um ADMIN corrige a causa e retoma. Os passos
+// esgotados voltam a pendente com as tentativas zeradas e são reenviados com o mesmo
+// messageId; a inbox do participante impede efeito duplicado. Sem passo esgotado, não há o
+// que retomar (409). É um reenvio manual: conta como a transição 13 (compensação) ou 16 (T4/T5).
+func retomada(out Saida) (Saida, error) {
+	s := out.Solicitacao
+	var esgotados []Passo
+	for _, p := range []Passo{T4, T5, C1, C2} {
+		if s.Passos[p].Status == Esgotado {
+			esgotados = append(esgotados, p)
+		}
+	}
+	if !s.RequerIntervencao || len(esgotados) == 0 {
+		return out, ErrEstadoNaoPermite
+	}
+	for _, p := range esgotados {
+		out.Passos = append(out.Passos, AlteracaoPasso{p, Retomar})
+	}
+	out.Solicitacao.RequerIntervencao = false
+	out.Transicao = 13
+	if s.Estado == Aprovada {
+		out.Transicao = 16
+	}
+	return out, nil
 }
 
 func timeout(out Saida, passo Passo, r Regras) (Saida, error) {

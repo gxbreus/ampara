@@ -17,9 +17,13 @@ import (
 type Repositorio interface {
 	PassosVencidos(ctx context.Context, limite int) ([]repositorio.Vencido, error)
 	AplicarTimeout(ctx context.Context, sagaID string, passo saga.Passo) (saga.Saida, error)
+	MessageID(ctx context.Context, sagaID string, passo saga.Passo) string
 	AExpirar(ctx context.Context, limite int) ([]string, error)
 	Aplicar(ctx context.Context, sagaID string, ev saga.Evento) (saga.Saida, error)
 }
+
+// NivelCritico é o nível CRITICAL dos logs (acima de ERROR); o main o imprime com esse nome.
+const NivelCritico = slog.Level(12)
 
 type Verificador struct {
 	repo      Repositorio
@@ -63,12 +67,14 @@ func (v *Verificador) Ciclo(ctx context.Context) int {
 			continue // outra réplica tratou primeiro
 		}
 		aplicadas++
-		nivel := slog.LevelWarn
 		if saida.Solicitacao.RequerIntervencao {
-			nivel = slog.LevelError // teto de reenvios atingido (#86)
+			// teto de reenvios atingido: a SAGA parou e espera um ADMIN (#86)
+			v.log.Log(ctx, NivelCritico, "passo esgotado: a solicitação requer intervenção", "sagaId", p.SagaID, "passo", p.Passo,
+				"messageId", v.repo.MessageID(ctx, p.SagaID, p.Passo), "estado", saida.Solicitacao.Estado)
+			continue
 		}
-		v.log.Log(ctx, nivel, "timeout de passo", "sagaId", p.SagaID, "passo", p.Passo,
-			"transicao", saida.Transicao, "estado", saida.Solicitacao.Estado, "requerIntervencao", saida.Solicitacao.RequerIntervencao)
+		v.log.Warn("timeout de passo", "sagaId", p.SagaID, "passo", p.Passo,
+			"transicao", saida.Transicao, "estado", saida.Solicitacao.Estado)
 	}
 
 	ids, err := v.repo.AExpirar(ctx, v.Lote)

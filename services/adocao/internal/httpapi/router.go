@@ -62,6 +62,7 @@ func NovoRouter(d Dependencias) http.Handler {
 		mux.HandleFunc("POST /v1/solicitacoes/{id}/aprovacao", h.acao(saga.EvAprovacao, Responsavel))
 		mux.HandleFunc("POST /v1/solicitacoes/{id}/recusa", h.acao(saga.EvRecusa, Responsavel))
 		mux.HandleFunc("POST /v1/solicitacoes/{id}/cancelamento", h.acao(saga.EvCancelamento, Adotante))
+		mux.HandleFunc("POST /v1/solicitacoes/{id}/compensacao/retomada", h.retomar)
 	}
 	return middleware(mux, log, d.ServidoPor)
 }

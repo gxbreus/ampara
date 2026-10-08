@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,4 +159,72 @@ func TestConsumidorComBrokerReal(t *testing.T) {
 	}) {
 		t.Fatal("a mensagem inválida não chegou à adocao.respostas.dlq")
 	}
+}
+
+func TestAlertaDLQRegistraUmaVezSemTirarDaFila(t *testing.T) {
+	amqpURL, adminURL := os.Getenv("ADOCAO_TEST_AMQP_URL"), os.Getenv("ADOCAO_TEST_AMQP_ADMIN_URL")
+	if amqpURL == "" || adminURL == "" {
+		t.Skip("variáveis de integração não definidas")
+	}
+	admin, err := amqp.Dial(adminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	canal, _ := admin.Channel()
+	_, _ = canal.QueuePurge(FilaDLQ, false)
+	_, _ = canal.QueuePurge(Fila, false)
+	// duas mensagens mortas de verdade: publicadas na fila de origem e rejeitadas sem requeue,
+	// para o próprio RabbitMQ preencher o x-death (cliente não consegue forjar esse cabeçalho)
+	for i, id := range []string{"aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000002"} {
+		if err := canal.PublishWithContext(context.Background(), "ampara.respostas", "adocao", false, false, amqp.Publishing{
+			MessageId: id, Type: "AnimalReservado", Body: corpo(id, "AnimalReservado", fmt.Sprintf("saga-%d", i), `{}`, 9),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		var m amqp.Delivery
+		var ok bool
+		for tentativa := 0; tentativa < 50 && !ok; tentativa++ {
+			m, ok, _ = canal.Get(Fila, false)
+			if !ok {
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+		if !ok {
+			t.Fatal("a mensagem não chegou à fila de origem")
+		}
+		_ = m.Nack(false, false) // vai para a DLX, como uma mensagem inválida
+	}
+	for i := 0; i < 50; i++ {
+		if q, err := canal.QueueDeclarePassive(FilaDLQ, true, false, false, false, amqp.Table{"x-queue-type": "quorum"}); err == nil && q.Messages == 2 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	var logs strings.Builder
+	alerta := NovoAlertaDLQ(slog.New(slog.NewJSONHandler(&logs, nil)))
+	n1, err := alerta.Ciclo(amqpURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n2, _ := alerta.Ciclo(amqpURL)
+	if n1 != 2 || n2 != 0 {
+		t.Fatalf("primeiro ciclo registrou %d, segundo %d; esperado 2 e 0", n1, n2)
+	}
+	if strings.Count(logs.String(), `"level":"ERROR"`) != 2 || !strings.Contains(logs.String(), `"filaDeOrigem":"adocao.respostas"`) ||
+		!strings.Contains(logs.String(), `"sagaId":"saga-0"`) {
+		t.Fatalf("logs: %s", logs.String())
+	}
+	// a contagem da quorum queue leva um instante para refletir o nack com requeue
+	var q amqp.Queue
+	for i := 0; i < 50; i++ {
+		if q, err = canal.QueueDeclarePassive(FilaDLQ, true, false, false, false, amqp.Table{"x-queue-type": "quorum"}); err == nil && q.Messages == 2 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("as mensagens deveriam continuar na DLQ: %d (%v)", q.Messages, err)
 }

@@ -18,19 +18,20 @@ var ErrCursorInvalido = errors.New("cursor inválido")
 
 // Filtro da listagem GET /v1/solicitacoes. Campos vazios não filtram.
 type Filtro struct {
-	AdotanteID    string
-	AnimalID      string
-	ResponsavelID string
-	Estado        saga.Estado
-	Ativa         *bool
-	Cursor        string
-	Limite        int
+	AdotanteID        string
+	AnimalID          string
+	ResponsavelID     string
+	Estado            saga.Estado
+	Ativa             *bool
+	RequerIntervencao *bool
+	Cursor            string
+	Limite            int
 }
 
 var estadosAtivos = []string{"SOLICITADA", "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO", "APROVADA", "COMPENSANDO"}
 
 const colunasVisao = `id, estado, desfecho, motivo, animal_id, animal_nome, adotante_id, responsavel_id,
-	expira_em, criado_em, atualizado_em`
+	expira_em, requer_intervencao, criado_em, atualizado_em`
 
 // Listar devolve uma página, da mais recente para a mais antiga, e o cursor da próxima
 // ("" quando não há mais). O cursor é a posição (criado_em, id) do último item.
@@ -57,6 +58,9 @@ func (r *Repositorio) Listar(ctx context.Context, f Filtro) ([]Visao, string, er
 		} else {
 			cond = append(cond, "estado <> ALL("+arg(estadosAtivos)+")")
 		}
+	}
+	if f.RequerIntervencao != nil {
+		cond = append(cond, "requer_intervencao = "+arg(*f.RequerIntervencao))
 	}
 	if f.Cursor != "" {
 		criado, id, err := lerCursor(f.Cursor)
@@ -96,7 +100,8 @@ func lerVisao(row pgx.Row) (Visao, error) {
 	var v Visao
 	var estado string
 	var desfecho, motivo, nome, responsavel *string
-	err := row.Scan(&v.ID, &estado, &desfecho, &motivo, &v.AnimalID, &nome, &v.AdotanteID, &responsavel, &v.ExpiraEm, &v.CriadoEm, &v.AtualizadoEm)
+	err := row.Scan(&v.ID, &estado, &desfecho, &motivo, &v.AnimalID, &nome, &v.AdotanteID, &responsavel, &v.ExpiraEm,
+		&v.RequerIntervencao, &v.CriadoEm, &v.AtualizadoEm)
 	v.Estado, v.Desfecho = saga.Estado(estado), saga.Estado(valor(desfecho))
 	v.Motivo, v.AnimalNome, v.ResponsavelID = valor(motivo), valor(nome), valor(responsavel)
 	return v, err

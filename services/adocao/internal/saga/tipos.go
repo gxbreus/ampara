@@ -96,6 +96,8 @@ const (
 	// sistema
 	EvPrazoExpirado TipoEvento = "PrazoExpirado"
 	EvTimeout       TipoEvento = "Timeout"
+	// operação: um ADMIN retoma os passos esgotados depois de corrigir a causa (#86)
+	EvRetomada TipoEvento = "Retomada"
 	// respostas dos participantes (docs/contratos/eventos.md)
 	EvAnimalReservado     TipoEvento = "AnimalReservado"
 	EvReservaRecusada     TipoEvento = "ReservaRecusada"
@@ -145,6 +147,7 @@ const (
 	Reenviar AcaoPasso = "REENVIAR" // mesmo messageId, mais uma tentativa
 	Esgotar  AcaoPasso = "ESGOTAR"
 	Reemitir AcaoPasso = "REEMITIR" // compensação reemitida por resposta tardia (transição 18)
+	Retomar  AcaoPasso = "RETOMAR"  // passo esgotado volta a pendente, tentativas zeradas, mesmo messageId (#86)
 )
 
 // AlteracaoPasso aplica uma ação a um passo já aberto.

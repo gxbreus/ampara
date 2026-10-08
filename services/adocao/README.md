@@ -31,6 +31,8 @@ go test ./...                          # testes, dentro de services/adocao
 
 Ação em estado errado responde 409, e ação de quem não pode responde 403. O contrato completo está em `docs/contratos/adocao.v1.yaml`.
 
+**Operação (#86):** `POST /v1/solicitacoes/{id}/compensacao/retomada` (só ADMIN) retoma uma SAGA parada no teto de reenvios, e o alerta da DLQ registra cada mensagem que cai em `adocao.respostas.dlq`. O roteiro completo está em [`docs/operacao/dlq.md`](../../docs/operacao/dlq.md).
+
 - **Configuração:** só por variáveis de ambiente (`ADOCAO_DATABASE_URL`, `ADOCAO_PORTA`); o `compose.yaml` monta a URL do banco a partir do `.env`.
 - **Migrations:** ficam em `internal/db/migrations/`, embutidas no binário com `go:embed`, e são aplicadas na subida.
 - **Healthcheck:** a imagem final é distroless, sem shell nem `curl`, então o contêiner usa o subcomando `/adocao healthcheck`.
