@@ -85,7 +85,7 @@ export function criarLookup(resolver4 = criarResolvedor()) {
         if (opcoes.all) callback(null, enderecos.map((address) => ({ address, family: 4 })));
         else callback(null, enderecos[0], 4);
       },
-      (erro) => callback(erro, ""),
+      (erro: unknown) => callback(erro as NodeJS.ErrnoException, ""),
     );
   };
 }

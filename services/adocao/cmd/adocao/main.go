@@ -30,7 +30,12 @@ func main() {
 		os.Exit(healthcheck())
 	}
 
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("servico", "adocao")
+	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.LevelKey && a.Value.Any() == prazos.NivelCritico {
+			a.Value = slog.StringValue("CRITICAL")
+		}
+		return a
+	}})).With("servico", "adocao")
 	if err := executar(log); err != nil {
 		log.Error("serviço encerrado com erro", "erro", err.Error())
 		os.Exit(1)
@@ -70,6 +75,7 @@ func executar(log *slog.Logger) error {
 		TimeoutPasso: cfg.TimeoutPasso, PrazoDecisao: cfg.PrazoDecisao, MaxReenvios: cfg.MaxReenvios,
 	})
 	go consumidor.Novo(repo, log).Rodar(ctx, cfg.AMQPURL)
+	go consumidor.NovoAlertaDLQ(log).Rodar(ctx, cfg.AMQPURL)
 	// timeouts, expiração e retomada depois de um reinício
 	go prazos.Novo(repo, log).Rodar(ctx)
 

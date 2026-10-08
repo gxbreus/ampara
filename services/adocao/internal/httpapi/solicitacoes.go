@@ -165,9 +165,11 @@ func representar(v repositorio.Visao, p Papel) map[string]any {
 		"adotanteId":    v.AdotanteID,
 		"responsavelId": nuloSeVazio(v.ResponsavelID),
 		"expiraEm":      data(v.ExpiraEm),
-		"criadoEm":      v.CriadoEm.UTC().Format(time.RFC3339),
-		"atualizadoEm":  v.AtualizadoEm.UTC().Format(time.RFC3339),
-		"_links":        Links(v, p),
+		// true quando uma compensação atingiu o teto de reenvios e espera um ADMIN (#86)
+		"requerIntervencao": v.RequerIntervencao,
+		"criadoEm":          v.CriadoEm.UTC().Format(time.RFC3339),
+		"atualizadoEm":      v.AtualizadoEm.UTC().Format(time.RFC3339),
+		"_links":            Links(v, p),
 	}
 }
 

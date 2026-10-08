@@ -91,6 +91,40 @@ func (h *handlerSolicitacoes) acao(tipo saga.TipoEvento, exigido Papel) http.Han
 	}
 }
 
+// retomar: POST /v1/solicitacoes/{id}/compensacao/retomada, só ADMIN (#86). Depois de
+// corrigir a causa de uma mensagem envenenada, reenvia os passos esgotados com o mesmo
+// messageId. Sem passo esgotado, responde 409.
+func (h *handlerSolicitacoes) retomar(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.autenticar(w, r)
+	if !ok {
+		return
+	}
+	if u.Role != admin {
+		semPermissao(w, "Só ADMIN pode retomar uma compensação.")
+		return
+	}
+	id := r.PathValue("id")
+	_, err := h.repo.Aplicar(r.Context(), id, saga.Evento{Tipo: saga.EvRetomada})
+	switch {
+	case errors.Is(err, repositorio.ErrNaoEncontrada):
+		naoEncontrada(w)
+		return
+	case errors.Is(err, saga.ErrEstadoNaoPermite):
+		escreverProblema(w, http.StatusConflict, "nada-a-retomar", "Nada a retomar", "A solicitação não tem passo esgotado esperando intervenção.")
+		return
+	case err != nil:
+		h.erroInterno(w, r, "retomar compensação", err)
+		return
+	}
+	h.log.WarnContext(r.Context(), "compensação retomada manualmente", "correlationId", CorrelationID(r.Context()), "sagaId", id, "admin", u.Sub)
+	v, err := h.repo.Obter(r.Context(), id)
+	if err != nil {
+		h.erroInterno(w, r, "obter solicitação", err)
+		return
+	}
+	escreverHAL(w, http.StatusAccepted, representar(v, papel(v, u)))
+}
+
 func lerMotivo(w http.ResponseWriter, r *http.Request) (string, bool) {
 	corpo, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
 	if err != nil {
@@ -122,7 +156,7 @@ func (h *handlerSolicitacoes) listar(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := repositorio.Filtro{AdotanteID: q.Get("adotanteId"), AnimalID: q.Get("animalId"), ResponsavelID: q.Get("responsavelId"),
 		Estado: saga.Estado(q.Get("estado")), Cursor: q.Get("cursor"), Limite: 20}
-	if f.AdotanteID == "" && f.AnimalID == "" && f.ResponsavelID == "" && f.Estado == "" && q.Get("ativa") == "" {
+	if f.AdotanteID == "" && f.AnimalID == "" && f.ResponsavelID == "" && f.Estado == "" && q.Get("ativa") == "" && q.Get("requerIntervencao") == "" {
 		invalido(w, "Informe pelo menos um filtro.")
 		return
 	}
@@ -138,6 +172,14 @@ func (h *handlerSolicitacoes) listar(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Ativa = &b
 	}
+	if ri := q.Get("requerIntervencao"); ri != "" {
+		b, err := strconv.ParseBool(ri)
+		if err != nil {
+			invalido(w, "requerIntervencao deve ser true ou false.")
+			return
+		}
+		f.RequerIntervencao = &b
+	}
 	if l := q.Get("limite"); l != "" {
 		n, err := strconv.Atoi(l)
 		if err != nil || n < 1 || n > 100 {
@@ -147,6 +189,7 @@ func (h *handlerSolicitacoes) listar(w http.ResponseWriter, r *http.Request) {
 		f.Limite = n
 	}
 	if u.Role != admin && f.AdotanteID != u.Sub && f.ResponsavelID != u.Sub {
+		// a fila de intervenção (requerIntervencao=true sem outro filtro) é só para ADMIN
 		semPermissao(w, "Filtre por adotanteId ou responsavelId igual ao seu usuário.")
 		return
 	}

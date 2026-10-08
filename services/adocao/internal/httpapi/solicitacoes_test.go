@@ -89,8 +89,12 @@ func (r *repoFalso) Obter(_ context.Context, id string) (repositorio.Visao, erro
 
 // Aplicar usa a máquina de estados de verdade, só sem banco.
 func (r *repoFalso) Aplicar(_ context.Context, id string, ev saga.Evento) (saga.Saida, error) {
-	v := r.visoes[id]
-	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado}
+	v, ok := r.visoes[id]
+	if !ok {
+		return saga.Saida{}, repositorio.ErrNaoEncontrada // como o repositório real
+	}
+	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado,
+		RequerIntervencao: v.RequerIntervencao}
 	out, err := saga.Transicao(s, ev, saga.Regras{Agora: time.Now(), PrazoDecisao: time.Hour, MaxReenvios: 3})
 	if err != nil {
 		return out, err
@@ -198,7 +202,7 @@ func TestPostRecusas(t *testing.T) {
 func TestPostIdempotente(t *testing.T) {
 	repo := novoRepo()
 	auth := "Bearer " + token(t, adotanteID, "ADOTANTE", chave)
-	cab := map[string]string{"Idempotency-Key": "3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63"}
+	cab := map[string]string{"Idempotency-Key": "3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63"} // gitleaks:allow (UUID de teste)
 	a := postar(t, repo, auth, `{"animalId":"`+animalID+`"}`, cab)
 	b := postar(t, repo, auth, `{"animalId":"`+animalID+`"}`, cab)
 	if a.Code != 202 || b.Code != 202 || a.Header().Get("Location") != b.Header().Get("Location") || len(repo.criados) != 1 {

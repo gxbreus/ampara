@@ -72,7 +72,7 @@ describe("ready", () => {
     const { instancia } = await app();
     const r = await instancia.inject({ url: "/web/v1/ready" });
     assert.equal(r.statusCode, 200);
-    assert.deepEqual(r.json().dependencias, { identidade: "ok", animais: "ok", adocao: "ok" });
+    assert.deepEqual(r.json<{ dependencias: Record<string, string> }>().dependencias, { identidade: "ok", animais: "ok", adocao: "ok" });
   });
 
   it("responde 503 e diz qual serviço está fora", async () => {
@@ -82,7 +82,7 @@ describe("ready", () => {
     });
     const r = await instancia.inject({ url: "/web/v1/ready" });
     assert.equal(r.statusCode, 503);
-    assert.deepEqual(r.json().dependencias, { identidade: "ok", animais: "indisponivel", adocao: "indisponivel" });
+    assert.deepEqual(r.json<{ dependencias: Record<string, string> }>().dependencias, { identidade: "ok", animais: "indisponivel", adocao: "indisponivel" });
   });
 
   it("repassa o X-Correlation-Id para os serviços chamados", async () => {
