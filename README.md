@@ -198,6 +198,7 @@ Ainda não há implementação executável. As tarefas de cada etapa, com respon
 | --- | --- |
 | [Arquitetura técnica](docs/arquitetura.md) | limites dos serviços, comunicação, dados, SAGA e diretrizes de implementação |
 | [Documento de concepção](docs/apresentacao/Ampara_Documento_Parte1.pdf) | problema, referências, impacto social e proposta inicial |
+| [Apresentação da Parte 2](docs/apresentacao/parte2/README.md) | slides da arquitetura, com o PDF e o roteiro de quem apresenta cada parte |
 | [Decisão arquitetural](docs/decisoes/ADR-001-arquitetura-distribuida.md) | registro da arquitetura escolhida para a Parte 1 |
 | [Contratos](docs/contratos/README.md) | convenções para os futuros contratos HTTP e eventos |
 | [Requisitos](docs/requisitos.md) | requisitos das Partes 2 a 4, lacunas da arquitetura atual, histórias de usuário e MVP |
