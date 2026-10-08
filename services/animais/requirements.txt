@@ -2,3 +2,5 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic-settings==2.7.1
+pymongo==4.10.1
+python-json-logger==3.2.1

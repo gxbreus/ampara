@@ -5,7 +5,7 @@ Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage 
 | Imagem | Single-stage | Multi-stage | Ganho | Observação |
 | --- | ---: | ---: | ---: | --- |
 | `ampara/identidade` | | | | |
-| `ampara/animais` | | | | |
+| `ampara/animais` | 215 MB | 185 MB | −14,0% | etapa `builder` em `python:3.12-slim` com virtualenv isolado → `runtime` sem resíduos de cache de instalação, com usuário não-root `appuser` |
 | `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
 | `ampara/notificacoes` | | | | |
 | `ampara/assistente` | | | | |

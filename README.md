@@ -198,7 +198,7 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 | --- | --- | --- |
 | Adoção (SAGA) | [`services/adocao`](services/adocao) | implementado: SAGA, outbox, DLQ, Dockerfile e manifests do k8s |
 | BFF Web | [`bff/web`](bff/web) | implementado: Dockerfile e manifests do k8s |
-| Animais | [`services/animais`](services/animais) | base pronta (`/health`, testes, regras); o resto na #39 |
+| Animais | [`services/animais`](services/animais) | esqueleto pronto: MongoDB, `/ready`, logs JSON, Dockerfile e no compose (#39) |
 | Notificações | [`services/notificacoes`](services/notificacoes) | base pronta (`/health`, testes, regras); o resto na #41 |
 | Assistente | [`services/assistente`](services/assistente) | base pronta (`/health`, testes, regras); o resto na #42 |
 | Identidade | [`services/identidade`](services/identidade) | esqueleto em revisão (#98) |
@@ -217,7 +217,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, Animais e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 

@@ -176,6 +176,24 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+  animais:
+    build: ./services/animais
+    image: ampara/animais:dev
+    environment:
+      ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
+      ANIMAIS_LEITURA_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais_leitura?replicaSet=rs0&authSource=admin
+    networks: [services, data-animais]
+    depends_on:
+      mongo-animais: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8001/ready\")' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
   bff-web:
     build: ./bff/web
     image: ampara/bff-web:dev
@@ -186,8 +204,9 @@ services:
       ADOCAO_URL: http://adocao:8080
     networks: [edge, services]
     depends_on:
-      # identidade e animais entram aqui quando os blocos deles chegarem (#38, #39)
+      # identidade entra aqui quando o bloco dele chegar (#38)
       adocao: { condition: service_healthy }
+      animais: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/web/v1/health >/dev/null || exit 1"]
       interval: 10s

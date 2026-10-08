@@ -5,18 +5,32 @@ Nos testes, troque qualquer dependência com app.dependency_overrides.
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.config import Settings, get_settings
 
 ConfigDep = Annotated[Settings, Depends(get_settings)]
 
-# Molde para a #39. O banco é aberto no lifespan, guardado em app.state e entregue à rota:
-#
-#     def get_banco_escrita(request: Request) -> AsyncDatabase:
-#         return request.app.state.banco_escrita
-#
-#     BancoEscrita = Annotated[AsyncDatabase, Depends(get_banco_escrita)]
-#
-# A busca (#56) recebe só o banco de leitura, e a escrita (#55) só o de escrita: é o CQRS
-# visível na assinatura das funções.
+
+def get_banco_escrita(request: Request) -> AsyncDatabase:
+    return request.app.state.banco_escrita
+
+
+def get_banco_leitura(request: Request) -> AsyncDatabase:
+    return request.app.state.banco_leitura
+
+
+def get_cliente_mongo_escrita(request: Request) -> AsyncMongoClient:
+    return request.app.state.cliente_mongo_escrita
+
+
+def get_cliente_mongo_leitura(request: Request) -> AsyncMongoClient:
+    return request.app.state.cliente_mongo_leitura
+
+
+BancoEscrita = Annotated[AsyncDatabase, Depends(get_banco_escrita)]
+BancoLeitura = Annotated[AsyncDatabase, Depends(get_banco_leitura)]
+ClienteMongoEscrita = Annotated[AsyncMongoClient, Depends(get_cliente_mongo_escrita)]
+ClienteMongoLeitura = Annotated[AsyncMongoClient, Depends(get_cliente_mongo_leitura)]
