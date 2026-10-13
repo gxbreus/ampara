@@ -1,0 +1,1251 @@
+openapi: 3.1.0
+info:
+  title: Ampara — BFF Mobile
+  version: 1.0.0
+  description: |
+    Backend for Frontend do App Mobile, voltado aos adotantes.
+    Fica posicionado atrás do API Gateway Kong em `/mobile/v1/*` e roda internamente
+    na porta 3020 (`http://bff-mobile:3020`), agregando Animais, Adoção, Notificações,
+    Identidade e o Assistente (LLM) em respostas enxutas sob medida para dispositivos móveis.
+
+    ## Por que um BFF exclusivo para o Mobile
+
+    O adotante opera em redes móveis (3G/4G/5G) com instabilidade de conexão e restrições
+    de dados e bateria. Este BFF garante:
+    - **Payloads enxutos:** O cartão de animal (`AnimalCard`) tem estritamente 8 campos e
+      pesa apenas ~298 bytes (contra 1.865 bytes no painel Web da ONG). Uma página de 20 cartões
+      consome ~6 KB de rede em vez de ~37 KB. A comparação campo a campo está em
+      `docs/contratos/bff-comparacao.md`.
+    - **Agregação sem N+1:** Uma tela de busca ou lista de solicitações é atendida em uma
+      única viagem de rede celular (Single Round-Trip), agregando dados de domínio em paralelo
+      dentro da rede do cluster e cruzando em lote (`?ids=`).
+    - **Proteção e Privacidade (LGPD):** Nenhum dado pessoal de outros adotantes e nenhuma
+      coordenada residencial exata trafega para o aplicativo móvel.
+    - **Estado da própria solicitação:** O card de busca informa `minhaSolicitacao` com o
+      estado do processo do adotante logado para aquele animal sem chamadas separadas.
+
+    ## Comunicação e Resiliência (#87)
+
+    - Repassa o header `Authorization` Bearer original e propaga `X-Correlation-Id`.
+    - Segue a política de chamadas internas: timeout de 2 s em leitura, 5 s em escrita e
+      20 s para o Assistente (LLM). Retry automático com backoff exponencial e jitter apenas
+      para operações `GET` idempotentes. Circuit breaker individualizado por serviço de destino.
+    - O schema de validação do Fastify corta qualquer propriedade excedente fora deste contrato.
+
+    ## Matriz de Falha Parcial
+
+    Cada rota possui um serviço essencial e serviços complementares. Se o essencial falhar,
+    a rota retorna erro (503/504). Se um complementar falhar ou estiver com circuito aberto,
+    a rota responde **200 OK** de forma degradada, preenchendo os dados faltantes como `null`
+    ou vazios e adicionando o diagnóstico no array `avisos[]`:
+
+    | Rota Mobile | Serviço Essencial | Serviços Complementares | Comportamento se o complementar falhar |
+    | --- | --- | --- | --- |
+    | `GET /mobile/v1/animais` | Animais (`/busca`) | Adoção (`/solicitacoes`) | Retorna os animais; `minhaSolicitacao` vem `null` e adiciona item em `avisos[]`. |
+    | `GET /mobile/v1/animais/{id}` | Animais (`/busca/{id}`) | Adoção (`/solicitacoes`) | Retorna a ficha pública; `minhaSolicitacao` vem `null`. |
+    | `GET /mobile/v1/solicitacoes` | Adoção (`/solicitacoes`) | Animais (`/animais?ids=`) | Retorna as solicitações; se Animais falhar, o card do animal vem básico e adiciona item em `avisos[]`. |
+    | `/mobile/v1/assistente/*` | Assistente | — | Em caso de indisponibilidade ou timeout (20s), retorna fallback com `degradado: true`. |
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://bff-mobile:3020
+    description: Rede interna; exposto externamente pelo API Gateway em /mobile/v1/*
+tags:
+  - name: Animais
+    description: Busca geográfica por raio e detalhes de animais disponíveis para adoção.
+  - name: Solicitações
+    description: Criação, acompanhamento e cancelamento de solicitações de adoção do adotante.
+  - name: Notificações
+    description: Caixa de entrada in-app e confirmação de leitura de avisos.
+  - name: Conta
+    description: Dados cadastrais e formulário de perfil de adoção do usuário logado.
+  - name: Assistente
+    description: Tira-dúvidas de adoção responsável (RAG) e recomendação personalizada de pets.
+paths:
+  /mobile/v1/animais:
+    get:
+      tags: [Animais]
+      summary: Busca geográfica de animais disponíveis
+      description: |
+        Retorna a lista paginada de animais disponíveis próximos ao adotante.
+        Esta rota é pública e pode ser acessada sem token JWT.
+        
+        **Agregação interna:**
+        1. Chama Animais `GET /v1/animais/busca?lat=&lng=&raioKm=&...` (serviço essencial).
+        2. Se o cabeçalho Authorization estiver presente com token válido de ADOTANTE,
+           faz **uma única chamada** a Adoção `GET /v1/solicitacoes?adotanteId={sub}&ativa=true`
+           (serviço complementar) e cruza em memória para preencher o campo `minhaSolicitacao`.
+        3. Se o serviço de Adoção estiver fora do ar ou com circuito aberto, a busca responde 200
+           com `minhaSolicitacao: null` e registra o aviso em `avisos[]`.
+      operationId: buscarAnimaisMobile
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude do adotante (-90 a 90).
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          example: -21.2453
+        - name: lng
+          in: query
+          required: true
+          description: Longitude do adotante (-180 a 180).
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          example: -44.9998
+        - name: raioKm
+          in: query
+          required: false
+          description: Raio de busca em quilômetros.
+          schema:
+            type: number
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+        - name: especie
+          in: query
+          required: false
+          description: Filtro opcional por espécie.
+          schema:
+            $ref: '#/components/schemas/EspecieAnimal'
+        - name: porte
+          in: query
+          required: false
+          description: Filtro opcional por porte.
+          schema:
+            $ref: '#/components/schemas/PorteAnimal'
+        - name: idadeMaxMeses
+          in: query
+          required: false
+          description: Idade máxima em meses.
+          schema:
+            type: integer
+            minimum: 0
+          example: 48
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor opaco para paginação.
+          schema:
+            type: string
+        - name: limite
+          in: query
+          required: false
+          description: Quantidade máxima de cartões por página.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Lista paginada de cartões enxutos de animais.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaBuscaMobile'
+              examples:
+                sucessoComSolicitacao:
+                  summary: Busca com animal Thor e solicitação ativa do adotante
+                  value:
+                    itens:
+                      - id: 65a2f1c4e8b9d3a7f0c1b2e9
+                        nome: Thor
+                        fotoThumb: https://exemplo.ampara.dev/fotos/thor-1-thumb.jpg
+                        porte: MEDIO
+                        distanciaKm: 2.4
+                        cidade: Lavras
+                        minhaSolicitacao:
+                          id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                          estado: AGUARDANDO_APROVACAO
+                        atualizadoEm: '2026-11-17T15:00:03Z'
+                    proximoCursor: eyJkaXN0YW5jaWFLbSI6Mi40LCJpZCI6IjY1YTJmMWM0ZThiOWQzYTdmMGMxYjJlOSJ9
+                    avisos: []
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/animais/{id}:
+    get:
+      tags: [Animais]
+      summary: Detalhe público enxuto de um animal
+      description: |
+        Retorna a ficha pública do animal formatada para o aplicativo móvel.
+        
+        **Agregação interna:**
+        1. Chama Animais `GET /v1/animais/busca/{id}` (essencial).
+        2. Se houver token JWT de ADOTANTE, chama Adoção
+           `GET /v1/solicitacoes?adotanteId={sub}&animalId={id}&ativa=true` (complementar).
+        3. Se Adoção falhar, responde 200 com `minhaSolicitacao: null`.
+      operationId: obterDetalheAnimalMobile
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ObjectId do animal.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{24}$'
+          example: 65a2f1c4e8b9d3a7f0c1b2e9
+      responses:
+        '200':
+          description: Ficha detalhada do animal para o adotante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalDetalheMobile'
+              example:
+                id: 65a2f1c4e8b9d3a7f0c1b2e9
+                nome: Thor
+                especie: CAO
+                porte: MEDIO
+                sexo: MACHO
+                idadeMeses: 36
+                temperamento: [dócil, brincalhão]
+                descricao: Cão carinhoso, vacinado e castrado pela ONG Patas de Lavras.
+                fotos:
+                  - https://exemplo.ampara.dev/fotos/thor-1.jpg
+                  - https://exemplo.ampara.dev/fotos/thor-2.jpg
+                fotoThumb: https://exemplo.ampara.dev/fotos/thor-1-thumb.jpg
+                bairro: Centro
+                cidade: Lavras
+                responsavel:
+                  id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                  nome: ONG Patas de Lavras
+                  verificado: true
+                status: DISPONIVEL
+                minhaSolicitacao:
+                  id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                  estado: AGUARDANDO_APROVACAO
+                atualizadoEm: '2026-11-17T15:00:03Z'
+                avisos: []
+        '400':
+          $ref: '#/components/responses/IdentificadorInvalido'
+        '404':
+          $ref: '#/components/responses/RecursoNaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/solicitacoes:
+    post:
+      tags: [Solicitações]
+      summary: Solicita a adoção de um animal
+      description: |
+        Inicia a SAGA de adoção para o animal informado.
+        Exige autenticação de conta ADOTANTE.
+        
+        **Agregação interna:**
+        Repassa a requisição para o serviço de Adoção (`POST /v1/solicitacoes`),
+        enviando `Idempotency-Key` (se fornecido pelo app) e o token JWT.
+        A SAGA processa assincronamente a reserva e validação de perfil.
+      operationId: criarSolicitacaoMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Chave de idempotência UUID gerada pelo app para evitar duplicidade em reconexões.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaSolicitacaoMobileEntrada'
+            example:
+              animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+      responses:
+        '202':
+          description: Solicitação aceita e SAGA iniciada com sucesso.
+          headers:
+            Location:
+              description: URI da solicitação criada.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+              example: /mobile/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitacaoCriadaMobile'
+              example:
+                id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                estado: SOLICITADA
+                animalId: 65a2f1c4e8b9d3a7f0c1b2e9
+                criadoEm: '2026-11-17T15:00:00Z'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '409':
+          description: Conflito. O animal já possui reserva ou o adotante já tem pedido ativo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+    get:
+      tags: [Solicitações]
+      summary: Lista as solicitações de adoção do adotante
+      description: |
+        Retorna o histórico de solicitações de adoção feitas pelo adotante logado.
+        
+        **Agregação interna sem N+1:**
+        1. Chama Adoção `GET /v1/solicitacoes?adotanteId={sub}` (essencial).
+        2. Extrai os IDs únicos dos animais e faz **uma única chamada em lote** para
+           Animais `GET /v1/animais?ids={ids}` (complementar) para hidratar o card resumido.
+        3. Se Animais falhar ou circuito abrir, responde 200 com os dados da solicitação,
+           animal preenchido apenas com o ID, e aviso correspondente em `avisos[]`.
+      operationId: listarMinhasSolicitacoesMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ativa
+          in: query
+          required: false
+          description: Filtra apenas solicitações em andamento ativo.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de solicitações do adotante com dados resumidos do pet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaSolicitacoesMobile'
+              example:
+                itens:
+                  - id: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                    estado: AGUARDANDO_APROVACAO
+                    criadoEm: '2026-11-17T15:00:00Z'
+                    expiraEm: '2026-11-20T15:00:00Z'
+                    animal:
+                      id: 65a2f1c4e8b9d3a7f0c1b2e9
+                      nome: Thor
+                      fotoThumb: https://exemplo.ampara.dev/fotos/thor-1-thumb.jpg
+                      porte: MEDIO
+                      cidade: Lavras
+                avisos: []
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/solicitacoes/{id}:
+    get:
+      tags: [Solicitações]
+      summary: Detalhe de uma solicitação de adoção
+      description: |
+        Retorna o estado completo da solicitação, dados do animal e links de ação.
+        Chama Adoção `GET /v1/solicitacoes/{id}` e Animais `GET /v1/animais/busca/{animalId}`.
+      operationId: obterSolicitacaoMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID da solicitação.
+          schema:
+            type: string
+            format: uuid
+          example: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+      responses:
+        '200':
+          description: Detalhes da solicitação.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitacaoDetalheMobile'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/RecursoNaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/solicitacoes/{id}/linha-do-tempo:
+    get:
+      tags: [Solicitações]
+      summary: Linha do tempo dos eventos da solicitação
+      description: |
+        Retorna as etapas cronológicas da solicitação (criação, reserva do animal,
+        validação de perfil, aprovação/recusa) consumidas da máquina de estados da SAGA.
+        Chama Adoção `GET /v1/solicitacoes/{id}/historico`.
+      operationId: obterLinhaDoTempoMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID da solicitação.
+          schema:
+            type: string
+            format: uuid
+          example: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+      responses:
+        '200':
+          description: Histórico cronológico das etapas da solicitação.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinhaDoTempoMobile'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/RecursoNaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/solicitacoes/{id}/cancelamento:
+    post:
+      tags: [Solicitações]
+      summary: Cancela uma solicitação em andamento
+      description: |
+        Permite ao adotante desistir da solicitação antes da conclusão.
+        Dispara a compensação da SAGA (liberação da reserva do animal).
+        Chama Adoção `POST /v1/solicitacoes/{id}/cancelamento`.
+      operationId: cancelarSolicitacaoMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID da solicitação.
+          schema:
+            type: string
+            format: uuid
+          example: 7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo:
+                  type: string
+                  maxLength: 500
+              example:
+                motivo: Mudança imprevista na rotina familiar.
+      responses:
+        '202':
+          description: Cancelamento aceito e compensação da SAGA iniciada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, estado]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  estado:
+                    type: string
+                    enum: [CANCELADA, COMPENSANDO]
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/RecursoNaoEncontrado'
+        '409':
+          description: A solicitação já está em estado final ou não pode ser cancelada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/notificacoes:
+    get:
+      tags: [Notificações]
+      summary: Caixa de entrada de notificações do adotante
+      description: |
+        Lista as notificações do usuário logado (mudanças de status da SAGA, lembretes).
+        Chama Notificações `GET /v1/notificacoes?usuarioId={sub}` (armazenadas em Redis).
+      operationId: listarNotificacoesMobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de notificações in-app.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaNotificacoesMobile'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/notificacoes/{id}/leitura:
+    post:
+      tags: [Notificações]
+      summary: Marca uma notificação específica como lida
+      description: Chama Notificações `POST /v1/notificacoes/{id}/leitura`.
+      operationId: marcarNotificacaoLidaMobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador da notificação.
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Notificação marcada como lida com sucesso.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '404':
+          $ref: '#/components/responses/RecursoNaoEncontrado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/notificacoes/leitura-todas:
+    post:
+      tags: [Notificações]
+      summary: Marca todas as notificações do usuário como lidas
+      description: Chama Notificações `POST /v1/notificacoes/leitura-todas?usuarioId={sub}`.
+      operationId: marcarTodasNotificacoesLidasMobile
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Todas as notificações foram marcadas como lidas.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/eu:
+    get:
+      tags: [Conta]
+      summary: Dados cadastrais da conta logada
+      description: Chama Identidade `GET /v1/contas/{sub}`.
+      operationId: obterMinhaContaMobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dados básicos da conta autenticada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MinhaContaMobile'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/eu/perfil-adocao:
+    get:
+      tags: [Conta]
+      summary: Obtém o perfil de aptidão para adoção
+      description: |
+        Consulta o formulário de aptidão do adotante (tipo de moradia, quintal,
+        rotina de ausência e aceite do termo responsável).
+        Chama Identidade `GET /v1/contas/{sub}/perfil-adocao`.
+      operationId: obterPerfilAdocaoMobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Perfil de adoção do adotante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilAdocaoMobile'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+    put:
+      tags: [Conta]
+      summary: Atualiza o perfil de aptidão para adoção
+      description: |
+        Salva as respostas do questionário de adoção responsável.
+        Chama Identidade `PUT /v1/contas/{sub}/perfil-adocao`.
+      operationId: atualizarPerfilAdocaoMobile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarPerfilAdocaoEntrada'
+            example:
+              tipoMoradia: CASA
+              temQuintal: true
+              outrosAnimais: false
+              horasForaDeCasa: 4
+              aceiteTermo: true
+      responses:
+        '200':
+          description: Perfil atualizado com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilAdocaoMobile'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+
+  /mobile/v1/assistente/perguntas:
+    post:
+      tags: [Assistente]
+      summary: Tira dúvidas sobre adoção responsável com IA (RAG)
+      description: |
+        Encaminha a dúvida do usuário para a chain de RAG do serviço Assistente,
+        que busca fontes nos guias oficiais de posse responsável.
+        
+        **Resiliência:**
+        Timeout estendido de 20 s. Se o modelo LLM ou o serviço falharem ou derem timeout,
+        o BFF não quebra com 500: retorna resposta com `degradado: true` e mensagem orientativa.
+      operationId: fazerPerguntaAssistenteMobile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pergunta]
+              properties:
+                pergunta:
+                  type: string
+                  minLength: 3
+                  maxLength: 500
+              example:
+                pergunta: Quais os primeiros cuidados ao levar um filhote resgatado para casa?
+      responses:
+        '200':
+          description: Resposta com fontes citadas ou fallback degradado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaAssistentePerguntaMobile'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+
+  /mobile/v1/assistente/recomendacoes:
+    post:
+      tags: [Assistente]
+      summary: Solicita recomendação de animais compatíveis com a rotina
+      description: |
+        Usa o agente do Assistente com tool que consulta animais reais e cruza com a
+        rotina descrita pelo adotante. Timeout de 20 s; degradação graciosa em caso de falha.
+      operationId: obterRecomendacoesAssistenteMobile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [descricaoRotina]
+              properties:
+                descricaoRotina:
+                  type: string
+                  minLength: 10
+                  maxLength: 1000
+              example:
+                descricaoRotina: Moro em apartamento pequeno, trabalho 6 horas fora e gosto de caminhar no parque aos finais de semana.
+      responses:
+        '200':
+          description: Recomendações personalizadas de animais.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaAssistenteRecomendacaoMobile'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT assinado em RS256 com claims sub e role ADOTANTE.
+
+  responses:
+    ParametrosInvalidos:
+      description: Parâmetros obrigatórios ausentes ou em formato inválido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/parametros-invalidos
+            title: Parâmetros inválidos
+            status: 400
+            detail: As coordenadas 'lat' e 'lng' são obrigatórias.
+
+    IdentificadorInvalido:
+      description: Identificador fora do padrão esperado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+
+    NaoAutenticado:
+      description: Token Bearer ausente ou inválido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-autenticado
+            title: Não autenticado
+            status: 401
+            detail: Esta operação exige que o adotante esteja logado.
+
+    SemPermissao:
+      description: O usuário não possui permissão para este recurso.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+
+    RecursoNaoEncontrado:
+      description: Recurso não localizado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/recurso-nao-encontrado
+            title: Não encontrado
+            status: 404
+            detail: O recurso solicitado não foi localizado.
+
+    DadosInvalidos:
+      description: Erro de validação semântica nos campos da requisição.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+
+    ServicoIndisponivel:
+      description: O serviço de domínio essencial está temporariamente indisponível.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/servico-indisponivel
+            title: Serviço indisponível
+            status: 503
+            detail: Não foi possível completar a operação no momento. Tente novamente mais tarde.
+
+  schemas:
+    EspecieAnimal:
+      type: string
+      enum: [CAO, GATO, OUTRO]
+
+    PorteAnimal:
+      type: string
+      enum: [PEQUENO, MEDIO, GRANDE]
+
+    SexoAnimal:
+      type: string
+      enum: [MACHO, FEMEA]
+
+    MinhaSolicitacaoItem:
+      type: object
+      description: Estado da solicitação do adotante logado para um animal.
+      additionalProperties: false
+      required: [id, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          example: AGUARDANDO_APROVACAO
+
+    AnimalCard:
+      type: object
+      description: |
+        Cartão enxuto de exibição de animal para o mobile.
+        Possui exatamente 8 campos para otimização de banda de rede móvel (298 bytes).
+      additionalProperties: false
+      required:
+        - id
+        - nome
+        - fotoThumb
+        - porte
+        - distanciaKm
+        - cidade
+        - minhaSolicitacao
+        - atualizadoEm
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+        nome:
+          type: string
+        fotoThumb:
+          type: string
+          format: uri
+          description: URL da imagem em miniatura otimizada para feed móvel (~320px).
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        distanciaKm:
+          type: number
+          description: Distância em km calculada a partir do ponto geográfico da busca.
+          example: 2.4
+        cidade:
+          type: string
+          example: Lavras
+        minhaSolicitacao:
+          description: Dados da solicitação ativa do adotante logado; null se anônimo ou sem solicitação.
+          oneOf:
+            - $ref: '#/components/schemas/MinhaSolicitacaoItem'
+            - type: 'null'
+        atualizadoEm:
+          type: string
+          format: date-time
+          description: Timestamp de atualização da projeção (evidencia a defasagem CQRS).
+
+    PaginaBuscaMobile:
+      type: object
+      description: Envelope paginado por cursor da busca de animais.
+      additionalProperties: false
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnimalCard'
+        proximoCursor:
+          type: string
+          description: Cursor para requisição da próxima página de resultados.
+        avisos:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Diagnósticos de falha parcial ou degradação de serviços complementares.
+
+    AnimalDetalheMobile:
+      type: object
+      description: Detalhes públicos e anonimizados do animal para visualização no aplicativo.
+      additionalProperties: false
+      required:
+        - id
+        - nome
+        - especie
+        - porte
+        - sexo
+        - idadeMeses
+        - fotos
+        - fotoThumb
+        - bairro
+        - cidade
+        - responsavel
+        - status
+        - minhaSolicitacao
+        - atualizadoEm
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+        nome:
+          type: string
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+        temperamento:
+          type: array
+          items:
+            type: string
+        descricao:
+          type: string
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+        fotoThumb:
+          type: string
+          format: uri
+        bairro:
+          type: string
+          description: "Bairro do abrigo ou protetor (LGPD: sem rua/número)."
+        cidade:
+          type: string
+        responsavel:
+          type: object
+          required: [id, nome, verificado]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nome:
+              type: string
+            verificado:
+              type: boolean
+        status:
+          type: string
+          enum: [DISPONIVEL, EM_TRATAMENTO, INDISPONIVEL, RESERVADO, ADOTADO]
+        minhaSolicitacao:
+          oneOf:
+            - $ref: '#/components/schemas/MinhaSolicitacaoItem'
+            - type: 'null'
+        atualizadoEm:
+          type: string
+          format: date-time
+        avisos:
+          type: array
+          items:
+            type: string
+          default: []
+
+    NovaSolicitacaoMobileEntrada:
+      type: object
+      additionalProperties: false
+      required: [animalId]
+      properties:
+        animalId:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+          description: ObjectId do animal a ser adotado.
+
+    SolicitacaoCriadaMobile:
+      type: object
+      additionalProperties: false
+      required: [id, estado, animalId, criadoEm]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          example: SOLICITADA
+        animalId:
+          type: string
+        criadoEm:
+          type: string
+          format: date-time
+
+    AnimalResumoSolicitacaoMobile:
+      type: object
+      description: Dados mínimos do pet associado a uma solicitação.
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        fotoThumb:
+          type: string
+          format: uri
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        cidade:
+          type: string
+
+    SolicitacaoResumoMobile:
+      type: object
+      additionalProperties: false
+      required: [id, estado, criadoEm, animal]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+        criadoEm:
+          type: string
+          format: date-time
+        expiraEm:
+          type: string
+          format: date-time
+        animal:
+          $ref: '#/components/schemas/AnimalResumoSolicitacaoMobile'
+
+    ListaSolicitacoesMobile:
+      type: object
+      additionalProperties: false
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/SolicitacaoResumoMobile'
+        avisos:
+          type: array
+          items:
+            type: string
+          default: []
+
+    SolicitacaoDetalheMobile:
+      type: object
+      additionalProperties: false
+      required: [id, estado, criadoEm, animal]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+        criadoEm:
+          type: string
+          format: date-time
+        expiraEm:
+          type: string
+          format: date-time
+        animal:
+          $ref: '#/components/schemas/AnimalDetalheMobile'
+        podeCancelar:
+          type: boolean
+          description: Indica se a solicitação ainda pode ser cancelada pelo adotante.
+        avisos:
+          type: array
+          items:
+            type: string
+          default: []
+
+    EtapaLinhaDoTempo:
+      type: object
+      additionalProperties: false
+      required: [etapa, descricao, concluidaEm]
+      properties:
+        etapa:
+          type: string
+          example: ANIMAL_RESERVADO
+        descricao:
+          type: string
+          example: Animal reservado temporariamente para sua solicitação.
+        concluidaEm:
+          type: string
+          format: date-time
+
+    LinhaDoTempoMobile:
+      type: object
+      additionalProperties: false
+      required: [solicitacaoId, etapas]
+      properties:
+        solicitacaoId:
+          type: string
+          format: uuid
+        etapas:
+          type: array
+          items:
+            $ref: '#/components/schemas/EtapaLinhaDoTempo'
+
+    ItemNotificacaoMobile:
+      type: object
+      additionalProperties: false
+      required: [id, titulo, mensagem, lida, criadoEm]
+      properties:
+        id:
+          type: string
+        titulo:
+          type: string
+        mensagem:
+          type: string
+        lida:
+          type: boolean
+        criadoEm:
+          type: string
+          format: date-time
+
+    ListaNotificacoesMobile:
+      type: object
+      additionalProperties: false
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemNotificacaoMobile'
+
+    MinhaContaMobile:
+      type: object
+      additionalProperties: false
+      required: [id, nome, email, role, cidade]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADOTANTE]
+        cidade:
+          type: string
+
+    PerfilAdocaoMobile:
+      type: object
+      additionalProperties: false
+      required: [completo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        aceiteTermo:
+          type: boolean
+        completo:
+          type: boolean
+          description: Indica se todos os campos obrigatórios para estar apto à SAGA foram preenchidos.
+
+    AtualizarPerfilAdocaoEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipoMoradia, aceiteTermo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        aceiteTermo:
+          type: boolean
+
+    FonteCitada:
+      type: object
+      additionalProperties: false
+      required: [titulo, paginaOuSecao]
+      properties:
+        titulo:
+          type: string
+        paginaOuSecao:
+          type: string
+
+    RespostaAssistentePerguntaMobile:
+      type: object
+      additionalProperties: false
+      required: [resposta, degradado]
+      properties:
+        resposta:
+          type: string
+        fontes:
+          type: array
+          items:
+            $ref: '#/components/schemas/FonteCitada'
+          default: []
+        degradado:
+          type: boolean
+          description: Indica se a resposta foi gerada com fallback devido a falha ou timeout no LLM.
+
+    AnimalRecomendadoMobile:
+      type: object
+      additionalProperties: false
+      required: [animalId, nome, motivoRecomendacao]
+      properties:
+        animalId:
+          type: string
+        nome:
+          type: string
+        motivoRecomendacao:
+          type: string
+        fotoThumb:
+          type: string
+          format: uri
+
+    RespostaAssistenteRecomendacaoMobile:
+      type: object
+      additionalProperties: false
+      required: [animais, explicacao, degradado]
+      properties:
+        animais:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnimalRecomendadoMobile'
+        explicacao:
+          type: string
+        degradado:
+          type: boolean
+
+    Problema:
+      type: object
+      description: RFC 9457 / RFC 7807 Problem Details.
+      additionalProperties: false
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

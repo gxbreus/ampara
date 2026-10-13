@@ -10,7 +10,7 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
 | Rota | `GET /web/v1/animais/{id}` | `GET /mobile/v1/animais/{id}` ou a lista de "minhas solicitações" |
 | Serviços chamados | Animais (modelo de escrita), Adoção e Identidade | Animais (projeção de leitura) e Adoção |
 | Tamanho da resposta | 1.865 bytes | 298 bytes |
-| Contrato | [`bff-web.v1.yaml`](bff-web.v1.yaml) | `bff-mobile.v1.yaml` (#30) |
+| Contrato | [`bff-web.v1.yaml`](bff-web.v1.yaml) | [`bff-mobile.v1.yaml`](bff-mobile.v1.yaml) |
 
 ## Web: o que a ONG vê
 
@@ -156,7 +156,7 @@ O `AnimalCard` tem exatamente os 8 campos definidos na #30. O BFF Mobile usa o m
 | `solicitacoes[]` com o `adotante` e o perfil | sim | não | a ONG avalia quem pediu; mandar isso ao celular exporia dados pessoais de outros adotantes |
 | `_links` `aprovar` e `recusar` | sim | não | só o responsável decide (HATEOAS da Adoção, traduzido pelo BFF) |
 | `minhaSolicitacao` | não | sim | o adotante vê o estado do próprio pedido; para a ONG o campo não faz sentido |
-| `avisos[]` | sim | definido na #30 | o painel avisa qual serviço faltou numa resposta parcial |
+| `avisos[]` | sim | sim | lista diagnósticos de serviços complementares em caso de falha parcial ou degradação |
 | `atualizadoEm` | sim | sim | no web, vem do modelo de escrita; no mobile, da projeção, o que torna a defasagem do CQRS visível |
 
 ## Por que não um endpoint só
