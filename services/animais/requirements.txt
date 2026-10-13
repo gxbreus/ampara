@@ -4,3 +4,5 @@ uvicorn[standard]==0.34.0
 pydantic-settings==2.7.1
 pymongo==4.10.1
 python-json-logger==3.2.1
+PyJWT[crypto]==2.15.1
+aio-pika==10.1.1
