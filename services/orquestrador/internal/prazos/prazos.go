@@ -1,5 +1,5 @@
-// Package prazos vigia os prazos da SAGA: o timeout de cada passo (ADOCAO_TIMEOUT_PASSO)
-// e o prazo da decisão humana (ADOCAO_PRAZO_EXPIRACAO). Como todo estado está no banco,
+// Package prazos vigia os prazos da SAGA: o timeout de cada passo (ORQUESTRADOR_TIMEOUT_PASSO)
+// e o prazo da decisão humana (ORQUESTRADOR_PRAZO_EXPIRACAO). Como todo estado está no banco,
 // ele também é a retomada depois de um reinício: o que travou com o serviço fora do ar
 // vence o prazo e é tratado aqui.
 package prazos
@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
-	"github.com/gxbreus/ampara/services/adocao/internal/saga"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/repositorio"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/saga"
 )
 
 // Repositorio é a parte do repositório que o verificador usa.

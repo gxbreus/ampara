@@ -55,6 +55,7 @@ jobs:
           # cada chave é a pasta do componente; a matriz usa o nome como caminho
           filters: |
             services/adocao: services/adocao/**
+            services/orquestrador: services/orquestrador/**
             services/identidade: services/identidade/**
             services/animais: services/animais/**
             services/notificacoes: services/notificacoes/**
@@ -74,8 +75,8 @@ jobs:
               - docs/contratos/**
               - services/**
 
-  servicos:
-    name: servicos (${{ matrix.componente }})
+  componentes:
+    name: componente (${{ matrix.componente }})
     needs: mudancas
     if: needs.mudancas.outputs.componentes != '[]'
     runs-on: ubuntu-latest
@@ -139,9 +140,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.componente }}/requirements*.txt
+      - if: steps.tipo.outputs.python == 'true'
+        name: dependências
+        run: pip install -r requirements-dev.txt
       - if: steps.tipo.outputs.python == 'true'
         name: ruff
-        run: pipx run ruff check .
+        run: |
+          ruff check .
+          ruff format --check .
+      - if: steps.tipo.outputs.python == 'true'
+        name: pytest
+        run: pytest
 
       # --- imagem
       - if: steps.tipo.outputs.docker == 'true'
@@ -154,6 +165,25 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.componente }}
           cache-to: type=gha,mode=max,scope=${{ matrix.componente }}
+
+  # Check fixo para a ruleset: os nomes da matriz mudam com o componente e a matriz
+  # é pulada quando nenhum componente muda. Pulada conta como sucesso; falha ou
+  # cancelamento de qualquer componente reprova.
+  servicos:
+    name: servicos
+    needs: [mudancas, componentes]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: resultado dos componentes
+        env:
+          MUDANCAS: ${{ needs.mudancas.result }}
+          COMPONENTES: ${{ needs.componentes.result }}
+        run: |
+          echo "mudancas=$MUDANCAS componentes=$COMPONENTES"
+          [ "$MUDANCAS" = success ] || exit 1
+          case "$COMPONENTES" in success|skipped) ;; *) exit 1 ;; esac
 
   # #88: os testes de contrato (respostas e mensagens reais contra os contratos) entram
   # neste job. Por enquanto, ele garante que todo contrato OpenAPI é válido.

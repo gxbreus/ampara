@@ -1,0 +1,11 @@
+# Só para as probes e o diagnóstico (/health e /ready): nenhum serviço chama o Orquestrador
+# por HTTP, e ele não tem rota no gateway.
+apiVersion: v1
+kind: Service
+metadata:
+  name: orquestrador
+  labels: { app: orquestrador }
+spec:
+  selector: { app: orquestrador }
+  ports:
+    - { name: http, port: 8081, targetPort: 8081 }

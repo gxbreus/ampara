@@ -1,9 +1,10 @@
 openapi: 3.1.0
 info:
   title: Ampara — Adoção
-  version: 1.1.0
+  version: 1.2.0
   description: |
-    Solicitações de adoção e orquestração da SAGA. Todas as rotas pertencem à
+    Solicitações de adoção como o usuário as vê. A SAGA é conduzida pelo
+    Orquestrador (ADR-008), que recebe as ações por mensagem. Todas as rotas pertencem à
     rede interna e são consumidas pelos BFFs, que repassam o `Authorization`
     original e o `X-Correlation-Id`. O adotante e o responsável são
     identificados pelo `sub` do JWT; não existe header `X-Usuario`.
@@ -11,14 +12,16 @@ info:
     ## Processo assíncrono
 
     Criar, aprovar, recusar e cancelar respondem **202**: a requisição só
-    registra a transição e enfileira os comandos da SAGA pelo outbox. O
-    cliente acompanha o andamento pelo `Location` e pelos `_links` da
-    solicitação.
+    registra a solicitação ou a decisão e publica, pelo outbox, a mensagem
+    `solicitacao.*` para o Orquestrador. O estado muda quando o Orquestrador
+    devolve o `saga.transicao`, em milissegundos; até lá, a decisão aparece
+    no campo `decisao` (1.2.0) e as ações somem dos `_links`. O cliente
+    acompanha o andamento pelo `Location` e pelos `_links` da solicitação.
 
     ## Intervenção manual (1.1.0)
 
     Se uma compensação (ou o T4/T5) atinge o teto de reenvios
-    (`ADOCAO_MAX_REENVIOS_COMPENSACAO`), a SAGA para e a solicitação fica com
+    (`ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO`), a SAGA para e a solicitação fica com
     `requerIntervencao: true`. Um ADMIN encontra essas solicitações com
     `GET /v1/solicitacoes?requerIntervencao=true`, corrige a causa e chama
     `POST /v1/solicitacoes/{id}/compensacao/retomada`. O roteiro está em
@@ -29,7 +32,7 @@ info:
     A solicitação é representada em HAL (`application/hal+json`). Os `_links`
     dependem do **estado** e do **papel de quem pede**. Toda representação traz
     `self`, `animal` e `historico`; ações só aparecem em
-    `AGUARDANDO_APROVACAO`.
+    `AGUARDANDO_APROVACAO` e enquanto ninguém decidiu (`decisao` null).
 
     | Estado | Responsável pelo animal | Adotante | ADMIN |
     | --- | --- | --- | --- |
@@ -387,7 +390,7 @@ paths:
         Só ADMIN. Depois de corrigir a causa (por exemplo, uma mensagem
         envenenada), os passos esgotados voltam a pendentes, com as tentativas
         zeradas, e são reenviados com o mesmo messageId: a inbox do participante
-        impede efeito duplicado. Responde 202, e requerIntervencao volta a false.
+        impede efeito duplicado. Responde 202; requerIntervencao volta a false quando o Orquestrador processa a retomada (solicitacao.retomada) e devolve o saga.transicao.
       operationId: retomarCompensacao
       security:
         - bearerAuth: []
@@ -921,12 +924,20 @@ components:
           format: date-time
           description: >-
             Gravado ao entrar em AGUARDANDO_APROVACAO, a partir de
-            ADOCAO_PRAZO_EXPIRACAO (72 h em produção, 2 min na demo).
+            ORQUESTRADOR_PRAZO_EXPIRACAO (72 h em produção, 2 min na demo).
         requerIntervencao:
           type: boolean
           description: >-
             true quando um passo atingiu o teto de reenvios e a SAGA espera a
             retomada manual de um ADMIN (desde a 1.1.0).
+        decisao:
+          type: [string, 'null']
+          enum: [APROVADA, RECUSADA, CANCELADA, null]
+          description: >-
+            Decisão já registrada (aprovação ou recusa do responsável,
+            cancelamento do adotante) e entregue ao Orquestrador; null enquanto
+            ninguém decidiu. Depois dela, a solicitação não aceita outra ação
+            (409) e os links de ação somem (desde a 1.2.0).
         criadoEm:
           type: string
           format: date-time

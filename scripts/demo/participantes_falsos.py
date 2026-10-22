@@ -9,7 +9,7 @@ Imitam as garantias que os participantes reais precisam ter:
 Variáveis de ambiente:
   AMQP_HOST                 rabbitmq
   ANIMAIS_SENHA, IDENTIDADE_SENHA
-  ATRASO_S=0                espera antes de cada resposta (para derrubar a Adoção no meio)
+  ATRASO_S=0                espera antes de cada resposta (para derrubar o Orquestrador no meio)
   PERFIL=completo           completo | incompleto  (resposta do ValidarPerfil)
   ANIMAL=disponivel         disponivel | reservado (resposta do ReservarAnimal)
   IDENTIDADE=no-ar          no-ar | fora           (fora: não consome identidade.comandos)
@@ -74,7 +74,7 @@ class Participante:
                         self.inbox[cmd["messageId"]] = resposta
                     else:
                         print(f"[{self.usuario}] {cmd['type']} repetido: mesma resposta", flush=True)
-                    canal.basic_publish("ampara.respostas", "adocao", json.dumps(resposta),
+                    canal.basic_publish("ampara.respostas", "orquestrador", json.dumps(resposta),
                                         pika.BasicProperties(content_type="application/json", delivery_mode=2,
                                                              message_id=resposta["messageId"], type=resposta["type"],
                                                              correlation_id=resposta["correlationId"]))

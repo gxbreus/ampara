@@ -1,0 +1,30 @@
+# Configuração das ferramentas do serviço. As dependências ficam nos requirements*.txt,
+# que é o que o Dockerfile instala.
+[project]
+name = "ampara-notificacoes"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# ASYNC: chamada bloqueante dentro de async def. S: senha ou chave no código.
+# DTZ: datetime sem fuso. TID251: APIs proibidas (lista abaixo).
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "DTZ", "TID251"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"] # assert é o normal em teste
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"redis.Redis".msg = "Síncrono: trava o event loop. Use redis.asyncio.Redis, aberto no lifespan."
+"redis.StrictRedis".msg = "Síncrono: trava o event loop. Use redis.asyncio.Redis, aberto no lifespan."
+"pika".msg = "Síncrono. Use aio_pika.connect_robust, aberto no lifespan."
+"requests".msg = "Síncrono. Use httpx.AsyncClient, aberto no lifespan."
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

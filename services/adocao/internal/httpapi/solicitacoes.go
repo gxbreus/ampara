@@ -19,7 +19,8 @@ import (
 type Solicitacoes interface {
 	CriarIdempotente(ctx context.Context, n repositorio.NovaSolicitacao, chave string) (string, bool, error)
 	Obter(ctx context.Context, id string) (repositorio.Visao, error)
-	Aplicar(ctx context.Context, id string, ev saga.Evento) (saga.Saida, error)
+	Decidir(ctx context.Context, id string, d saga.Decisao, motivo, por string) error
+	Retomar(ctx context.Context, id, por string) error
 	Listar(ctx context.Context, f repositorio.Filtro) ([]repositorio.Visao, string, error)
 	Resumir(ctx context.Context, responsavelID string) (repositorio.Resumo, error)
 	Historico(ctx context.Context, id string) ([]repositorio.ItemHistorico, error)
@@ -38,7 +39,8 @@ type handlerSolicitacoes struct {
 var objectID = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
 // criar: POST /v1/solicitacoes (docs/contratos/adocao.v1.yaml). O 202 significa que a
-// SAGA começou, não que a adoção foi aceita: o cliente acompanha pelo Location.
+// solicitação foi registrada e entregue ao Orquestrador, não que a adoção foi aceita: o
+// cliente acompanha pelo Location.
 func (h *handlerSolicitacoes) criar(w http.ResponseWriter, r *http.Request) {
 	usuario, ok := h.autenticar(w, r)
 	if !ok {
@@ -128,7 +130,8 @@ type link struct {
 }
 
 // Links segue a tabela do contrato: self, animal e historico sempre; ações só em
-// AGUARDANDO_APROVACAO, conforme o papel. Não existe link adotante.
+// AGUARDANDO_APROVACAO e enquanto ninguém decidiu, conforme o papel. Não existe link
+// adotante.
 func Links(v repositorio.Visao, p Papel) map[string]link {
 	self := "/v1/solicitacoes/" + v.ID
 	l := map[string]link{
@@ -136,7 +139,7 @@ func Links(v repositorio.Visao, p Papel) map[string]link {
 		"animal":    {Href: "/v1/animais/" + v.AnimalID},
 		"historico": {Href: self + "/historico"},
 	}
-	if v.Estado == saga.AguardandoAprovacao {
+	if v.Estado == saga.AguardandoAprovacao && v.Decisao == "" {
 		switch p {
 		case Responsavel:
 			l["aprovar"] = link{Href: self + "/aprovacao", Method: http.MethodPost}
@@ -167,9 +170,11 @@ func representar(v repositorio.Visao, p Papel) map[string]any {
 		"expiraEm":      data(v.ExpiraEm),
 		// true quando uma compensação atingiu o teto de reenvios e espera um ADMIN (#86)
 		"requerIntervencao": v.RequerIntervencao,
-		"criadoEm":          v.CriadoEm.UTC().Format(time.RFC3339),
-		"atualizadoEm":      v.AtualizadoEm.UTC().Format(time.RFC3339),
-		"_links":            Links(v, p),
+		// a decisão já registrada, enquanto o Orquestrador a processa (ADR-008)
+		"decisao":      nuloSeVazio(string(v.Decisao)),
+		"criadoEm":     v.CriadoEm.UTC().Format(time.RFC3339),
+		"atualizadoEm": v.AtualizadoEm.UTC().Format(time.RFC3339),
+		"_links":       Links(v, p),
 	}
 }
 

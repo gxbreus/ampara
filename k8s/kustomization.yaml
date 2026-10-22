@@ -6,4 +6,5 @@ resources:
   - namespace.yaml
   - rabbitmq
   - adocao
+  - orquestrador
   - bff-web

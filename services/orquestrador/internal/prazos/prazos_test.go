@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gxbreus/ampara/services/adocao/internal/db"
-	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
-	"github.com/gxbreus/ampara/services/adocao/internal/saga"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/db"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/repositorio"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/saga"
 )
 
 var silencioso = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -29,9 +29,9 @@ func (r *relogio) avancar(d time.Duration) { r.mu.Lock(); r.t = r.t.Add(d); r.mu
 
 func preparar(t *testing.T) (*pgxpool.Pool, *repositorio.Repositorio, *relogio) {
 	t.Helper()
-	url := os.Getenv("ADOCAO_TEST_DATABASE_URL")
+	url := os.Getenv("ORQUESTRADOR_TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("ADOCAO_TEST_DATABASE_URL não definida")
+		t.Skip("ORQUESTRADOR_TEST_DATABASE_URL não definida")
 	}
 	ctx := context.Background()
 	pool, err := db.Conectar(ctx, url)
@@ -50,7 +50,7 @@ func preparar(t *testing.T) (*pgxpool.Pool, *repositorio.Repositorio, *relogio) 
 
 func criar(t *testing.T, repo *repositorio.Repositorio) string {
 	id := repositorio.NovoUUID()
-	if _, err := repo.Criar(context.Background(), repositorio.NovaSolicitacao{ID: id, AdotanteID: "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55", AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
+	if _, _, err := repo.Criar(context.Background(), repositorio.NovoUUID(), repositorio.NovaSaga{ID: id, AdotanteID: "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55", AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
 		t.Fatal(err)
 	}
 	return id
@@ -70,7 +70,7 @@ func contar(t *testing.T, pool *pgxpool.Pool, id, tipo string) int {
 
 func estado(t *testing.T, pool *pgxpool.Pool, id string) (e, desfecho string) {
 	var d *string
-	_ = pool.QueryRow(context.Background(), `SELECT estado, desfecho FROM solicitacoes WHERE id = $1`, id).Scan(&e, &d)
+	_ = pool.QueryRow(context.Background(), `SELECT estado, desfecho FROM sagas WHERE id = $1`, id).Scan(&e, &d)
 	if d != nil {
 		desfecho = *d
 	}
@@ -146,7 +146,7 @@ func TestDoisVerificadoresReenviamUmaVez(t *testing.T) {
 	var ids []string
 	for i := 0; i < 10; i++ {
 		id := repositorio.NovoUUID()
-		if _, err := repo.Criar(context.Background(), repositorio.NovaSolicitacao{ID: id, AdotanteID: repositorio.NovoUUID(), AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
+		if _, _, err := repo.Criar(context.Background(), repositorio.NovoUUID(), repositorio.NovaSaga{ID: id, AdotanteID: repositorio.NovoUUID(), AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
 			t.Fatal(err)
 		}
 		aplicar(t, repo, id, saga.Evento{Tipo: saga.EvAnimalReservado, ResponsavelID: "c50a83ab-7db0-41b4-9436-4144c36f97d5", AnimalNome: "Thor"})

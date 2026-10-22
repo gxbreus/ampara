@@ -85,6 +85,22 @@ services:
     deploy: { resources: { limits: { memory: 256m } } }
     restart: unless-stopped
 
+  postgres-orquestrador:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: orquestrador
+      POSTGRES_USER: ${ORQUESTRADOR_DB_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${ORQUESTRADOR_DB_PASSWORD:?defina no .env}
+    volumes: [pg-orquestrador:/var/lib/postgresql/data]
+    networks: [data-orquestrador]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d orquestrador"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
   redis-notificacoes:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
@@ -139,6 +155,7 @@ services:
       RABBITMQ_ANIMAIS_PASSWORD: ${RABBITMQ_ANIMAIS_PASSWORD:?defina no .env}
       RABBITMQ_IDENTIDADE_PASSWORD: ${RABBITMQ_IDENTIDADE_PASSWORD:?defina no .env}
       RABBITMQ_NOTIFICACOES_PASSWORD: ${RABBITMQ_NOTIFICACOES_PASSWORD:?defina no .env}
+      RABBITMQ_ORQUESTRADOR_PASSWORD: ${RABBITMQ_ORQUESTRADOR_PASSWORD:?defina no .env}
     ports: ["127.0.0.1:15672:15672"]   # painel, só em desenvolvimento e só nesta máquina
     volumes: [rabbitmq-data:/var/lib/rabbitmq]
     networks: [services]
@@ -159,9 +176,6 @@ services:
       ADOCAO_DATABASE_URL: postgres://${ADOCAO_DB_USER}:${ADOCAO_DB_PASSWORD}@postgres-adocao:5432/adocao?sslmode=disable
       ADOCAO_AMQP_URL: amqp://adocao:${RABBITMQ_ADOCAO_PASSWORD}@rabbitmq:5672/
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
-      ADOCAO_TIMEOUT_PASSO: ${ADOCAO_TIMEOUT_PASSO:-10s}
-      ADOCAO_PRAZO_EXPIRACAO: ${ADOCAO_PRAZO_EXPIRACAO:-72h}
-      ADOCAO_MAX_REENVIOS_COMPENSACAO: ${ADOCAO_MAX_REENVIOS_COMPENSACAO:-10}
     networks: [services, data-adocao]
     depends_on:
       postgres-adocao: { condition: service_healthy }
@@ -176,6 +190,67 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+
+  # Orquestrador da SAGA (ADR-008): sem rota externa nem chamada HTTP de outro serviço;
+  # tudo chega pelo RabbitMQ.
+  orquestrador:
+    build: ./services/orquestrador
+    image: ampara/orquestrador:dev
+    environment:
+      ORQUESTRADOR_DATABASE_URL: postgres://${ORQUESTRADOR_DB_USER}:${ORQUESTRADOR_DB_PASSWORD}@postgres-orquestrador:5432/orquestrador?sslmode=disable
+      ORQUESTRADOR_AMQP_URL: amqp://orquestrador:${RABBITMQ_ORQUESTRADOR_PASSWORD}@rabbitmq:5672/
+      ORQUESTRADOR_TIMEOUT_PASSO: ${ORQUESTRADOR_TIMEOUT_PASSO:-10s}
+      ORQUESTRADOR_PRAZO_EXPIRACAO: ${ORQUESTRADOR_PRAZO_EXPIRACAO:-72h}
+      ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO: ${ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO:-10}
+    networks: [services, data-orquestrador]
+    depends_on:
+      postgres-orquestrador: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      # a imagem distroless não tem curl: o próprio binário confere o /health
+      test: ["CMD", "/orquestrador", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+  identidade:
+    build: ./services/identidade
+    image: ampara/identidade:dev
+    environment:
+      IDENTIDADE_DATABASE_URL: postgresql://${IDENTIDADE_DB_USER}:${IDENTIDADE_DB_PASSWORD}@postgres-identidade:5432/identidade
+    # edge: o gateway encaminha /auth/v1 direto para a Identidade
+    networks: [edge, services, data-identidade]
+    depends_on:
+      postgres-identidade: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
+  animais:
+    build: ./services/animais
+    image: ampara/animais:dev
+    environment:
+      ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
+      ANIMAIS_LEITURA_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais_leitura?replicaSet=rs0&authSource=admin
+    networks: [services, data-animais]
+    depends_on:
+      mongo-animais: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8001/ready\")' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
   bff-web:
     build: ./bff/web
     image: ampara/bff-web:dev
@@ -186,8 +261,9 @@ services:
       ADOCAO_URL: http://adocao:8080
     networks: [edge, services]
     depends_on:
-      # identidade e animais entram aqui quando os blocos deles chegarem (#38, #39)
+      identidade: { condition: service_healthy }
       adocao: { condition: service_healthy }
+      animais: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/web/v1/health >/dev/null || exit 1"]
       interval: 10s
@@ -203,6 +279,7 @@ networks:
   data-identidade: { internal: true }
   data-animais: { internal: true }
   data-adocao: { internal: true }
+  data-orquestrador: { internal: true }
   data-notificacoes: { internal: true }
   data-assistente: { internal: true }
 
@@ -210,6 +287,7 @@ volumes:
   pg-identidade: {}
   mongo-animais: {}
   pg-adocao: {}
+  pg-orquestrador: {}
   redis-notificacoes: {}
   qdrant-assistente: {}
   rabbitmq-data: {}

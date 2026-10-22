@@ -20,7 +20,7 @@ kind create cluster --config k8s/kind-config.yaml
 
 # 4. imagens: o kind não enxerga as imagens do Docker local, é preciso carregá-las
 docker compose build
-for img in rabbitmq adocao bff-web; do kind load docker-image ampara/$img:dev --name ampara; done
+for img in rabbitmq adocao orquestrador bff-web; do kind load docker-image ampara/$img:dev --name ampara; done
 
 # 5. tudo
 kubectl apply -k k8s/
@@ -72,6 +72,7 @@ O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porqu
 | --- | --- | --- |
 | `rabbitmq/` | StatefulSet (1 réplica, PVC 1 Gi) e Service 5672/15672 | a imagem `ampara/rabbitmq:dev` já traz a topologia e cria um usuário por serviço a partir do `rabbitmq-secret` |
 | `adocao/` | Deployment (2 réplicas), Service 8080, ConfigMap e StatefulSet `postgres-adocao` (PVC 1 Gi) | o pod do serviço recebe só `ADOCAO_DATABASE_URL` e `ADOCAO_AMQP_URL`; as credenciais de superusuário ficam com o banco |
+| `orquestrador/` | Deployment (2 réplicas), Service 8081 (só probes), ConfigMap e StatefulSet `postgres-orquestrador` (PVC 1 Gi) | conduz a SAGA (ADR-008); recebe só `ORQUESTRADOR_DATABASE_URL` e `ORQUESTRADOR_AMQP_URL`, e os prazos vêm do ConfigMap |
 | `bff-web/` | Deployment (2 réplicas), Service 3010 e ConfigMaps | a chave pública do JWT vem do `jwt.pub` gerado pelo `k8s-prep.sh` |
 
 O BFF Web usa `/web/v1/health` também como readiness. O `/web/v1/ready` dele checa os serviços chamados: como readiness, um serviço fora do ar tiraria o BFF inteiro do balanceamento, quando o contrato prevê resposta parcial com `avisos[]` (#29).

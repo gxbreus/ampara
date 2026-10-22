@@ -31,7 +31,7 @@ type Filtro struct {
 var estadosAtivos = []string{"SOLICITADA", "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO", "APROVADA", "COMPENSANDO"}
 
 const colunasVisao = `id, estado, desfecho, motivo, animal_id, animal_nome, adotante_id, responsavel_id,
-	expira_em, requer_intervencao, criado_em, atualizado_em`
+	expira_em, requer_intervencao, decisao, criado_em, atualizado_em`
 
 // Listar devolve uma página, da mais recente para a mais antiga, e o cursor da próxima
 // ("" quando não há mais). O cursor é a posição (criado_em, id) do último item.
@@ -99,10 +99,10 @@ func (r *Repositorio) Listar(ctx context.Context, f Filtro) ([]Visao, string, er
 func lerVisao(row pgx.Row) (Visao, error) {
 	var v Visao
 	var estado string
-	var desfecho, motivo, nome, responsavel *string
+	var desfecho, motivo, nome, responsavel, decisao *string
 	err := row.Scan(&v.ID, &estado, &desfecho, &motivo, &v.AnimalID, &nome, &v.AdotanteID, &responsavel, &v.ExpiraEm,
-		&v.RequerIntervencao, &v.CriadoEm, &v.AtualizadoEm)
-	v.Estado, v.Desfecho = saga.Estado(estado), saga.Estado(valor(desfecho))
+		&v.RequerIntervencao, &decisao, &v.CriadoEm, &v.AtualizadoEm)
+	v.Estado, v.Desfecho, v.Decisao = saga.Estado(estado), saga.Estado(valor(desfecho)), saga.Decisao(valor(decisao))
 	v.Motivo, v.AnimalNome, v.ResponsavelID = valor(motivo), valor(nome), valor(responsavel)
 	return v, err
 }
@@ -180,10 +180,12 @@ type ItemHistorico struct {
 	Em     time.Time
 }
 
-// Historico devolve todas as transições da solicitação, em ordem.
+// Historico devolve todas as transições da solicitação, na ordem da SAGA. As linhas vêm de
+// saga.transicao; a versão ordena mesmo que as mensagens tenham chegado fora de ordem (as
+// linhas anteriores ao Orquestrador não têm versão e vêm primeiro, pelo id).
 func (r *Repositorio) Historico(ctx context.Context, id string) ([]ItemHistorico, error) {
 	rows, err := r.pool.Query(ctx, `SELECT coalesce(de, ''), para, evento, coalesce(passo, ''), em
-		FROM saga_historico WHERE saga_id = $1 ORDER BY id`, id)
+		FROM historico WHERE saga_id = $1 ORDER BY versao NULLS FIRST, id`, id)
 	if err != nil {
 		return nil, err
 	}

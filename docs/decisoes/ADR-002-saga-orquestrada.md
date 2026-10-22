@@ -1,7 +1,9 @@
 # ADR 002: SAGA de adoção orquestrada por mensagens
 
-- Status: aceita
+- Status: aceita; o ponto 1 foi substituído pela [ADR-008](ADR-008-orquestrador.md)
 - Data: 2026-10-07
+
+> **Atualização (ADR-008).** A orquestração continua por mensagens, como decidido aqui, mas saiu da Adoção: um microsserviço próprio, o **Orquestrador**, guarda a máquina de estados, envia os comandos e recebe as respostas. A Adoção ficou com a solicitação e a decisão humana e conversa com o Orquestrador por eventos. Onde este documento diz "Adoção" no papel de orquestradora, leia "Orquestrador".
 
 ## Contexto
 

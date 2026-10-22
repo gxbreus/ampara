@@ -12,3 +12,14 @@ paths = [
   '''^k8s/.*/secret\.env\.example$''',
   '''^docs/contratos/.*\.ya?ml$''',
 ]
+
+# A regra genérica do gitleaks não aceita "+" nem "/", que aparecem em quase toda chave
+# secreta da AWS. Sem esta regra, um AWS_SECRET_ACCESS_KEY sozinho (sem o Access Key ID
+# ao lado) passaria pela CI.
+[[rules]]
+id = "aws-secret-access-key"
+description = "AWS Secret Access Key atribuída a uma variável"
+regex = '''(?i)aws_?secret_?access_?key["']?\s*[:=]\s*["']?([A-Za-z0-9/+=]{40})(?:["'\s]|$)'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["secret_access_key", "secretaccesskey"]

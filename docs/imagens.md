@@ -4,9 +4,10 @@ Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage 
 
 | Imagem | Single-stage | Multi-stage | Ganho | Observação |
 | --- | ---: | ---: | ---: | --- |
-| `ampara/identidade` | | | | |
-| `ampara/animais` | | | | |
+| `ampara/identidade` | 511 MB | 325 MB | −36,4% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; só `dist/` e dependências de produção na final, sem `src/` nem TypeScript |
+| `ampara/animais` | 215 MB | 185 MB | −14,0% | etapa `builder` em `python:3.12-slim` com virtualenv isolado → `runtime` sem resíduos de cache de instalação, com usuário não-root `appuser` |
 | `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
+| `ampara/orquestrador` | 645 MB | 21,2 MB | −96,7% | o mesmo molde da Adoção: `golang:1.23-alpine` → `distroless/static-debian12:nonroot`, binário estático com as migrations embutidas, sem shell |
 | `ampara/notificacoes` | | | | |
 | `ampara/assistente` | | | | |
 | `ampara/bff-web` | 336 MB | 261 MB | −22,3% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; sem TypeScript nem tsx na final. O ganho é menor porque o binário do `node` sozinho tem 123 MB; o código e as dependências somam 17 MB |

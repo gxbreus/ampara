@@ -57,7 +57,7 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 | RA-03 | Diagrama de componentes e de comunicação (`E-4.1`) | 🟡 | atualizar com BFFs, outbox, read model, Assistente e vector DB |
 | RA-04 | Contrato OpenAPI completo de cada serviço (`E-4.2`) | ❌ | `docs/contratos/*.yaml` |
 | RA-05 | Uso correto de recursos, verbos e status HTTP (`E-4.2`) | ❌ | 201 + `Location`, 202 para iniciar a SAGA, 409 para animal reservado, 422 de validação, 404, 401/403 |
-| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão na URI (`/api/v1`) para APIs e campo `version` nos eventos |
+| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão maior na URI, depois do cliente nas rotas externas (`/web/v1`, `/mobile/v1`, `/auth/v1`) e sozinha nas internas (`/v1`), com os dois eixos independentes; campo `version` nos eventos (ADR-006, #124) |
 | RA-07 | Ao menos 1 recurso com HATEOAS (`E-4.2`) | ❌ | proposta: `SolicitacaoAdocao` com links que dependem do estado (`aprovar`, `recusar`, `cancelar`, `animal`, `adotante`) |
 | RA-08 | Gateway com regras de roteamento (`E-4.3`) | 🟡 | definir a tecnologia e a tabela de rotas |
 | RA-09 | Responsabilidades do gateway (`E-4.3`) | 🟡 | validação de JWT, rate limiting, correlation ID e CORS |
@@ -172,7 +172,8 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 | BFF Mobile | Node 22 + TypeScript + Fastify | — | payloads enxutos e agregação para o adotante |
 | Identidade | NestJS | PostgreSQL | contas, perfis, verificação, limite de solicitações ativas |
 | Animais | FastAPI | MongoDB (escrita) + projeção de leitura | catálogo, reserva, **CQRS** |
-| Adoção | Go | PostgreSQL (+ tabela outbox) | **orquestrador da SAGA**, HATEOAS |
+| Adoção | Go | PostgreSQL (+ tabela outbox) | solicitações, decisão humana e linha do tempo, HATEOAS |
+| **Orquestrador** (novo, ADR-008) | Go | PostgreSQL (+ tabela outbox) | **orquestrador da SAGA**: estado, prazos, reenvios e compensações |
 | Notificações | FastAPI | Redis (AOF) | consumo de eventos, caixa de entrada por usuário |
 | **Assistente** (novo) | Python + LangChain | Qdrant + cache em `redis-assistente` | RAG, tool de busca de animais, resiliência do LLM |
 | Broker | RabbitMQ | — | comandos e eventos, DLQ |
@@ -189,7 +190,7 @@ Rotas propostas:
 
 | Rota externa | Destino | Autenticação |
 | --- | --- | --- |
-| `/api/v1/auth/*` | Identidade | pública (rate limit mais rígido) |
+| `/auth/v1/*` | Identidade | pública (rate limit mais rígido) |
 | `/web/v1/*` | BFF Web | JWT, roles `PROTETOR`, `ONG` e `ADMIN` |
 | `/mobile/v1/*` | BFF Mobile | JWT, role `ADOTANTE` (busca pública) |
 
@@ -199,7 +200,9 @@ Diferença de resposta a demonstrar (`RA-11`), usando o mesmo animal:
 - **mobile:** `id`, `nome`, `fotoThumb`, `distanciaKm`, `porte` e `statusMinhaSolicitacao`;
 - **web:** todos os campos, histórico de status, solicitações vinculadas com dados do adotante e contadores.
 
-### 6.2 SAGA de adoção (orquestrada pelo serviço de Adoção)
+### 6.2 SAGA de adoção (orquestrada pelo Orquestrador)
+
+> Até a revisão da Parte 2, a SAGA era orquestrada pelo serviço de Adoção. Desde a ADR-008 (2026-10-22), um microsserviço próprio, o Orquestrador, conduz a SAGA, e a Adoção entrega a ele o pedido e a decisão humana por eventos.
 
 **Comunicação proposta:** comandos e respostas via RabbitMQ, saindo pelo outbox, em vez de HTTP síncrono. Assim a SAGA sobrevive à indisponibilidade temporária de um participante e o outbox fica com uso real. *(A confirmar, porque muda o diagrama atual do README.)*
 
@@ -208,7 +211,7 @@ Diferença de resposta a demonstrar (`RA-11`), usando o mesmo animal:
 | T1 | Reservar o animal (`DISPONIVEL` → `RESERVADO`) | Animais | C1: liberar a reserva (`RESERVADO` → `DISPONIVEL`) |
 | T2 | Validar o perfil e ocupar uma vaga de solicitação ativa (limite: 1 por adotante) | Identidade | C2: liberar a vaga |
 | T3 | Notificar o responsável | Notificações | sem compensação (é idempotente e pode ser repetido) |
-| — | *Aguarda a decisão humana: aprovar, recusar, expirar ou cancelar* | Adoção | — |
+| — | *Aguarda a decisão humana: aprovar, recusar, expirar ou cancelar* | Adoção registra a decisão; Orquestrador controla o prazo | — |
 | T4 | Confirmar a adoção (`RESERVADO` → `ADOTADO`) — **pivô** | Animais | após o pivô, só seguem passos retentáveis |
 | T5 | Registrar a adoção no histórico do adotante e liberar a vaga | Identidade | retentável |
 | T6 | Notificar o adotante e o responsável | Notificações | retentável |
@@ -235,7 +238,7 @@ Requisitos do orquestrador:
 - caixa de notificações.
 
 **Riscos de dual write:**
-- Adoção grava o estado e publica o comando → resolvido pelo **outbox** (tabela `outbox` na mesma transação PG + relay que publica no RabbitMQ);
+- Orquestrador grava o estado e publica o comando (e a Adoção grava a decisão e publica `solicitacao.decidida`) → resolvido pelo **outbox** (tabela `outbox` na mesma transação PG + relay que publica no RabbitMQ);
 - Animais grava no Mongo e publica `animal.atualizado` → outbox em coleção Mongo, também com relay;
 - Identidade publica `conta.verificada` → outbox *(Should)*.
 
@@ -307,7 +310,7 @@ HU-20 a HU-25, segundo read model (painel de impacto), cache semântico, observa
 
 ## 11. Decisões confirmadas (2026-10-06)
 
-- A SAGA se comunica por **comandos e respostas via RabbitMQ**, com outbox no serviço de Adoção.
+- A SAGA se comunica por **comandos e respostas via RabbitMQ**, com outbox no serviço de Adoção. *(Atualizado em 2026-10-22 pela ADR-008: o outbox dos comandos fica no Orquestrador.)*
 - O LLM fica em um **5º serviço, o Assistente** (Python + LangChain), com base vetorial própria.
 - **Avistamentos e denúncias** entram como *Should*, depois do MVP.
 - O desenvolvimento será **dividido por integrante** (ver `docs/planejamento.md`).

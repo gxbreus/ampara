@@ -1,0 +1,4 @@
+# Dependências de execução, com versão fixada. A #42 acrescenta o LangChain, qdrant-client, redis e python-json-logger.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic-settings==2.7.1

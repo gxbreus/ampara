@@ -4,29 +4,28 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/gxbreus/ampara/services/adocao/internal/saga"
 )
-
-const responsavel = "c50a83ab-7db0-41b4-9436-4144c36f97d5"
 
 // solicitação de um adotante novo, para não esbarrar no índice de ativa única
 func nova(t *testing.T, r *Repositorio, animal string) string {
 	t.Helper()
 	id := NovoUUID()
-	if _, err := r.Criar(context.Background(), NovaSolicitacao{ID: id, AdotanteID: NovoUUID(), AnimalID: animal}); err != nil {
+	if err := r.Criar(context.Background(), NovaSolicitacao{ID: id, AdotanteID: NovoUUID(), AnimalID: animal}); err != nil {
 		t.Fatal(err)
 	}
 	return id
 }
 
 func reservar(t *testing.T, r *Repositorio, id string) {
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvAnimalReservado, ResponsavelID: responsavel, AnimalNome: "Thor"})
+	mover(t, r, id, "SOLICITADA:SolicitacaoCriada", "ANIMAL_RESERVADO:AnimalReservado")
 }
 
 func TestListarPaginaSemRepetirNemPular(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	criadas := map[string]bool{}
 	for i := 0; i < 7; i++ {
 		id := nova(t, r, "65a2f1c4e8b9d3a7f0c1b2e9")
@@ -62,11 +61,17 @@ func TestListarPaginaSemRepetirNemPular(t *testing.T) {
 
 func TestListarFiltros(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	ativa := nova(t, r, "65a2f1c4e8b9d3a7f0c1b201")
 	reservar(t, r, ativa)
 	encerrada := nova(t, r, "65a2f1c4e8b9d3a7f0c1b202")
-	aplicar(t, r, encerrada, saga.Evento{Tipo: saga.EvReservaRecusada, Motivo: "INDISPONIVEL"})
+	// recusada logo na reserva: o saga.transicao não traz responsável
+	for i, e := range []string{"SOLICITADA", "REJEITADA_INDISPONIVEL"} {
+		if _, err := r.AplicarTransicao(context.Background(), NovoUUID(), Transicao{SolicitacaoID: encerrada, Versao: i + 1,
+			Estado: e, Evento: "ReservaRecusada", Em: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	sim, nao := true, false
 	casos := []struct {
@@ -91,25 +96,19 @@ func TestListarFiltros(t *testing.T) {
 
 func TestResumoComTresEstados(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	// 1 aguardando, 1 recusada e 1 concluída, do mesmo responsável
 	aguardando := nova(t, r, "65a2f1c4e8b9d3a7f0c1b201")
 	reservar(t, r, aguardando)
-	aplicar(t, r, aguardando, saga.Evento{Tipo: saga.EvPerfilValidado})
+	mover(t, r, aguardando, "AGUARDANDO_APROVACAO:PerfilValidado")
 
 	recusada := nova(t, r, "65a2f1c4e8b9d3a7f0c1b202")
 	reservar(t, r, recusada)
-	aplicar(t, r, recusada, saga.Evento{Tipo: saga.EvPerfilValidado})
-	aplicar(t, r, recusada, saga.Evento{Tipo: saga.EvRecusa})
-	aplicar(t, r, recusada, saga.Evento{Tipo: saga.EvVagaLiberada})
-	aplicar(t, r, recusada, saga.Evento{Tipo: saga.EvReservaLiberada})
+	mover(t, r, recusada, "AGUARDANDO_APROVACAO:PerfilValidado", "COMPENSANDO:Recusa", "COMPENSANDO:VagaLiberada", "RECUSADA:ReservaLiberada")
 
 	concluida := nova(t, r, "65a2f1c4e8b9d3a7f0c1b203")
 	reservar(t, r, concluida)
-	aplicar(t, r, concluida, saga.Evento{Tipo: saga.EvPerfilValidado})
-	aplicar(t, r, concluida, saga.Evento{Tipo: saga.EvAprovacao})
-	aplicar(t, r, concluida, saga.Evento{Tipo: saga.EvAdocaoConfirmada})
-	aplicar(t, r, concluida, saga.Evento{Tipo: saga.EvAdocaoRegistrada})
+	mover(t, r, concluida, "AGUARDANDO_APROVACAO:PerfilValidado", "APROVADA:Aprovacao", "APROVADA:AdocaoConfirmada", "CONCLUIDA:AdocaoRegistrada")
 
 	res, err := r.Resumir(context.Background(), responsavel)
 	if err != nil {
