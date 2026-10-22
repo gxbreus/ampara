@@ -55,23 +55,25 @@ flowchart LR
     C[Clientes] -->|HTTP| GW[Kong]
     GW -->|HTTP| BFF[BFFs]
     BFF -->|HTTP| S[Serviços de domínio]
-    AD[Adoção] -.->|"adocao.solicitada<br/>adocao.decidida"| MQ{{RabbitMQ}}
-    MQ -.->|eventos| OR[Orquestrador]
+    AD[Adoção] -.->|"solicitacao.criada<br/>solicitacao.decidida"| MQ{{RabbitMQ}}
+    MQ -.->|"solicitacao.*"| OR[Orquestrador]
     OR -.->|comandos| MQ
     MQ -.->|comandos| P[Animais e Identidade]
     P -.->|respostas| MQ
     MQ -.->|respostas| OR
-    OR -.->|"adocao.*"| MQ
-    MQ -.->|eventos| CONS[Adoção, Notificações,<br/>projeção de Animais e BFFs]
+    OR -.->|"adocao.* e saga.transicao"| MQ
+    MQ -.->|saga.transicao| AD
+    MQ -.->|eventos| CONS[Notificações, projeção<br/>de Animais e BFFs]
 ```
 
 | Interação | Tipo | Por quê |
 | --- | --- | --- |
 | cliente → gateway → BFF → serviço | HTTP síncrono | o usuário espera a resposta na tela |
 | Assistente → Animais (busca) | HTTP síncrono | a recomendação precisa dos animais disponíveis agora, dentro da mesma pergunta |
-| Adoção → Orquestrador | eventos `adocao.solicitada` e `adocao.decidida` | a Adoção registra o pedido e a decisão humana sem depender de o Orquestrador estar no ar |
+| Adoção → Orquestrador | eventos `solicitacao.criada`, `solicitacao.decidida` e `solicitacao.retomada` | a Adoção registra o pedido e a decisão humana sem depender de o Orquestrador estar no ar |
 | Orquestrador → participantes da SAGA | comandos e respostas no RabbitMQ | a SAGA sobrevive a um participante fora do ar: o comando espera na fila e o Orquestrador compensa no timeout |
-| Orquestrador → Adoção, Notificações e BFFs | eventos `adocao.*` | a Adoção atualiza a solicitação, Notificações avisa as pessoas e os BFFs atualizam a tela aberta |
+| Orquestrador → Adoção | evento `saga.transicao`, um por transição, com versão | a Adoção mantém o estado e a linha do tempo que as telas mostram, sem consultar o Orquestrador |
+| Orquestrador → Notificações e BFFs | eventos `adocao.*` | Notificações avisa as pessoas e os BFFs atualizam a tela aberta |
 | Animais → projeção de busca | eventos `animal.*` | a busca aceita alguns segundos de defasagem em troca de um modelo próprio para consultas por raio |
 | Identidade → Notificações e Animais | evento `conta.verificada` | o aviso e a projeção não podem atrasar a verificação |
 
@@ -103,7 +105,7 @@ Cada subseção diz pelo que o serviço responde, os dados que só ele possui, o
 
 ### Adoção
 
-- **Responsável por:** a solicitação de adoção como o usuário a vê: o pedido do adotante, a decisão do responsável (aprovar ou recusar), o cancelamento e a linha do tempo mostrada nas telas. Inicia a SAGA publicando `adocao.solicitada` e entrega o pivô ao Orquestrador em `adocao.decidida`. Atualiza a solicitação a partir dos eventos `adocao.*` do Orquestrador.
+- **Responsável por:** a solicitação de adoção como o usuário a vê: o pedido do adotante, a decisão do responsável (aprovar ou recusar), o cancelamento e a linha do tempo mostrada nas telas. Inicia a SAGA publicando `solicitacao.criada` e entrega o pivô ao Orquestrador em `solicitacao.decidida`. Atualiza a solicitação a partir dos `saga.transicao` do Orquestrador e aceita uma única decisão por solicitação.
 - **Dados que possui:** solicitações, decisões, linha do tempo, o outbox, a inbox e as chaves de idempotência do `POST`. Guarda uma cópia do nome do animal e do responsável para as telas.
 - **Não faz:** não conduz a SAGA: não envia comandos, não controla prazos e não decide compensações, o que é papel do Orquestrador. Não muda o status do animal nem ocupa a vaga do adotante. Não envia avisos: Notificações decide quem avisar e como.
 - **Corte alternativo rejeitado: Adoção dentro de Animais.** A reserva fica em Animais, então juntar os dois parece natural. Só que a adoção também envolve a vaga do adotante, que é da Identidade, e uma espera humana de até 72 horas com estado próprio. Dentro de Animais, o catálogo, que muda pouco e é muito lido, passaria a carregar solicitações, decisões e prazos. Separados, cada um escala e falha sozinho: Animais pode ter 3 réplicas atendendo buscas sem mudar nada na adoção.
@@ -160,13 +162,13 @@ A adoção é o único fluxo que altera dados de vários serviços: a reserva em
 
 A divisão segue uma regra simples: **a Adoção é dona do que o usuário vê; o Orquestrador é dono do processo.**
 
-1. O adotante pede a adoção pelo BFF Mobile. A Adoção grava a solicitação e publica `adocao.solicitada`.
+1. O adotante pede a adoção pelo BFF Mobile. A Adoção grava a solicitação e publica `solicitacao.criada`.
 2. O Orquestrador cria a SAGA, reserva o animal em Animais (T1), valida o perfil e ocupa a vaga na Identidade (T2) e avisa o responsável (T3).
-3. O responsável decide pelo BFF Web. A Adoção grava a decisão e publica `adocao.decidida`. A aprovação é o **pivô**.
+3. O responsável decide pelo BFF Web. A Adoção grava a decisão e publica `solicitacao.decidida`. A aprovação é o **pivô**.
 4. Depois do pivô, o Orquestrador confirma a adoção em Animais (T4), registra no histórico do adotante (T5) e avisa os dois lados (T6), reenviando cada passo até dar certo.
 5. Antes do pivô, toda falha (animal indisponível, perfil inválido, recusa, cancelamento ou prazo expirado) desfaz o que já foi feito: libera a vaga (C2) e a reserva (C1).
 
-A Adoção consome os eventos `adocao.*` e atualiza a solicitação; Notificações e os BFFs consomem os mesmos eventos para avisar e atualizar as telas. A máquina de estados, as 18 transições, os 17 cenários de falha e os diagramas de sequência estão em [`saga.md`](saga.md), e a escolha de orquestrar por mensagens, na [ADR-002](decisoes/ADR-002-saga-orquestrada.md). Os dois documentos ainda descrevem a Adoção como orquestradora e serão revisados junto com a extração.
+A Adoção atualiza a solicitação a cada `saga.transicao`; Notificações e os BFFs consomem os eventos `adocao.*` para avisar e atualizar as telas. A máquina de estados, as 18 transições, os 18 cenários de falha e os diagramas de sequência estão em [`saga.md`](saga.md); a escolha de orquestrar por mensagens, na [ADR-002](decisoes/ADR-002-saga-orquestrada.md); e a separação entre Adoção e Orquestrador, na [ADR-008](decisoes/ADR-008-orquestrador.md).
 
 ## 6. Diretrizes para a implementação
 
@@ -185,7 +187,7 @@ A Adoção consome os eventos `adocao.*` e atualiza a solicitação; Notificaç�
 | Decisão | Motivo | Consequência |
 | --- | --- | --- |
 | banco por serviço | autonomia e nenhum acoplamento pelo banco | consultas entre domínios exigem chamada ou evento |
-| Orquestrador separado da Adoção | o controle do processo distribuído não se mistura com a regra da solicitação, e o estado da SAGA fica num só lugar | a Adoção vira participante e precisa de dois eventos novos (`adocao.solicitada` e `adocao.decidida`); um PostgreSQL a mais |
+| Orquestrador separado da Adoção | o controle do processo distribuído não se mistura com a regra da solicitação, e o estado da SAGA fica num só lugar | a Adoção vira participante e conversa com o Orquestrador por `solicitacao.*` e `saga.transicao`; um PostgreSQL a mais |
 | SAGA orquestrada por mensagens | a SAGA sobrevive a um participante fora do ar | o Orquestrador precisa de outbox, inbox, timeouts e retomada |
 | outbox e inbox | nenhuma mensagem se perde e nenhum efeito se repete | todo consumidor precisa ser idempotente |
 | RabbitMQ como camada comum, sem ligação com o gateway | desacoplar produtores e consumidores; o gateway só encaminha HTTP e não tem o que publicar | consumidores precisam tratar reentrega e indisponibilidade temporária |
@@ -195,14 +197,14 @@ A Adoção consome os eventos `adocao.*` e atualiza a solicitação; Notificaç�
 | Assistente como serviço próprio | o LLM é lento, caro e falível; isolado, não derruba a busca nem a SAGA | mais um banco (vetorial) e uma chamada HTTP a Animais |
 | arquitetura poliglota | a tecnologia adequada a cada responsabilidade | execução local e observabilidade precisam ser padronizadas |
 
-## Pendências da extração do Orquestrador
+## Estado da extração do Orquestrador
 
-A máquina de estados da SAGA foi implementada em `services/adocao`. Para a arquitetura acima valer no código, faltam:
-
-- uma ADR registrando a separação entre Adoção e Orquestrador;
-- revisar a [ADR-002](decisoes/ADR-002-saga-orquestrada.md), o [`saga.md`](saga.md) e o [catálogo de mensagens](contratos/eventos.md), que ainda descrevem a Adoção como orquestradora (fila `adocao.respostas` e produtor de `ampara.comandos`);
-- incluir no catálogo `adocao.solicitada`, `adocao.decidida` e as filas dos BFFs (`bff-web.eventos` e `bff-mobile.eventos`);
-- criar `services/orquestrador` com o pacote da SAGA, o `postgres-orquestrador`, o Dockerfile e as entradas no `compose.yaml` e no `k8s/`.
+| O quê | Onde |
+| --- | --- |
+| decisão registrada | [ADR-008](decisoes/ADR-008-orquestrador.md) (#138, PR #143) |
+| código: `services/orquestrador`, Adoção enxuta, filas, compose, k8s e CI | #140, PR #144 |
+| `saga.md`, catálogo de mensagens, `dados.md` e roteiro da DLQ | #139, PR #145 |
+| filas dos BFFs (`bff-web.eventos` e `bff-mobile.eventos`) e entrega por SSE ou WebSocket | #61 e #62 |
 
 ## Documentos da arquitetura
 
@@ -213,6 +215,6 @@ A máquina de estados da SAGA foi implementada em `services/adocao`. Para a arqu
 | [`cqrs.md`](cqrs.md) | modelo de escrita, projeção de busca e defasagem em Animais |
 | [`gateway.md`](gateway.md) | rotas externas e políticas do Kong |
 | [`contratos/`](contratos/) | contratos OpenAPI de cada serviço e BFF, e o catálogo de mensagens |
-| [`decisoes/`](decisoes/) | ADRs publicadas: arquitetura (001), SAGA (002), outbox (003), CQRS (004), gateway e BFFs (005) e versionamento (006). Em andamento: Assistente (007, #35) |
+| [`decisoes/`](decisoes/) | ADRs publicadas: arquitetura (001), SAGA (002), outbox (003), CQRS (004), gateway e BFFs (005), versionamento (006) e Orquestrador (008). Em andamento: Assistente (007, #35) |
 | [`operacao/dlq.md`](operacao/dlq.md) | como identificar uma mensagem envenenada, reprocessar ou descartar e retomar a SAGA |
 | [`compose.yaml`](../compose.yaml) e [`k8s/`](../k8s/) | execução local no Docker Compose e no Kubernetes (kind) |
