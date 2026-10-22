@@ -55,6 +55,7 @@ jobs:
           # cada chave é a pasta do componente; a matriz usa o nome como caminho
           filters: |
             services/adocao: services/adocao/**
+            services/orquestrador: services/orquestrador/**
             services/identidade: services/identidade/**
             services/animais: services/animais/**
             services/notificacoes: services/notificacoes/**

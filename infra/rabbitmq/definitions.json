@@ -86,7 +86,7 @@
       }
     },
     {
-      "name": "adocao.respostas",
+      "name": "orquestrador.respostas",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
@@ -94,11 +94,53 @@
         "x-queue-type": "quorum",
         "x-delivery-limit": 5,
         "x-dead-letter-exchange": "ampara.dlx",
-        "x-dead-letter-routing-key": "adocao.respostas.dlq"
+        "x-dead-letter-routing-key": "orquestrador.respostas.dlq"
       }
     },
     {
-      "name": "adocao.respostas.dlq",
+      "name": "orquestrador.respostas.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "orquestrador.solicitacoes",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "orquestrador.solicitacoes.dlq"
+      }
+    },
+    {
+      "name": "orquestrador.solicitacoes.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "adocao.saga",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ampara.dlx",
+        "x-dead-letter-routing-key": "adocao.saga.dlq"
+      }
+    },
+    {
+      "name": "adocao.saga.dlq",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
@@ -169,9 +211,25 @@
     {
       "source": "ampara.dlx",
       "vhost": "/",
-      "destination": "adocao.respostas.dlq",
+      "destination": "orquestrador.respostas.dlq",
       "destination_type": "queue",
-      "routing_key": "adocao.respostas.dlq",
+      "routing_key": "orquestrador.respostas.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "orquestrador.solicitacoes.dlq",
+      "destination_type": "queue",
+      "routing_key": "orquestrador.solicitacoes.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.dlx",
+      "vhost": "/",
+      "destination": "adocao.saga.dlq",
+      "destination_type": "queue",
+      "routing_key": "adocao.saga.dlq",
       "arguments": {}
     },
     {
@@ -209,9 +267,25 @@
     {
       "source": "ampara.respostas",
       "vhost": "/",
-      "destination": "adocao.respostas",
+      "destination": "orquestrador.respostas",
       "destination_type": "queue",
-      "routing_key": "adocao",
+      "routing_key": "orquestrador",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "orquestrador.solicitacoes",
+      "destination_type": "queue",
+      "routing_key": "solicitacao.*",
+      "arguments": {}
+    },
+    {
+      "source": "ampara.eventos",
+      "vhost": "/",
+      "destination": "adocao.saga",
+      "destination_type": "queue",
+      "routing_key": "saga.transicao",
       "arguments": {}
     },
     {

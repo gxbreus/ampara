@@ -10,6 +10,7 @@ set -eu
 : "${RABBITMQ_ANIMAIS_PASSWORD:?defina RABBITMQ_ANIMAIS_PASSWORD}"
 : "${RABBITMQ_IDENTIDADE_PASSWORD:?defina RABBITMQ_IDENTIDADE_PASSWORD}"
 : "${RABBITMQ_NOTIFICACOES_PASSWORD:?defina RABBITMQ_NOTIFICACOES_PASSWORD}"
+: "${RABBITMQ_ORQUESTRADOR_PASSWORD:?defina RABBITMQ_ORQUESTRADOR_PASSWORD}"
 
 PRONTO=/tmp/ampara-usuarios-prontos
 rm -f "$PRONTO"
@@ -53,7 +54,8 @@ permitir() {
 }
 
 permitir "$RABBITMQ_ADMIN_USER" "$RABBITMQ_ADMIN_PASSWORD" administrator '.*' '.*' '.*'
-permitir adocao       "$RABBITMQ_ADOCAO_PASSWORD"       "" '^$' '^ampara\.(comandos|eventos)$'  '^adocao\.respostas(\.dlq)?$'
+permitir orquestrador "$RABBITMQ_ORQUESTRADOR_PASSWORD" "" '^$' '^ampara\.(comandos|eventos)$'  '^orquestrador\.(respostas|solicitacoes)(\.dlq)?$'
+permitir adocao       "$RABBITMQ_ADOCAO_PASSWORD"       "" '^$' '^ampara\.eventos$'             '^adocao\.saga(\.dlq)?$'
 permitir animais      "$RABBITMQ_ANIMAIS_PASSWORD"      "" '^$' '^ampara\.(respostas|eventos)$' '^animais\.(comandos|projecao)(\.dlq)?$'
 permitir identidade   "$RABBITMQ_IDENTIDADE_PASSWORD"   "" '^$' '^ampara\.(respostas|eventos)$' '^identidade\.comandos(\.dlq)?$'
 permitir notificacoes "$RABBITMQ_NOTIFICACOES_PASSWORD" "" '^$' '^$'                            '^notificacoes\.eventos(\.dlq)?$'

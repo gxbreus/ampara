@@ -1,0 +1,55 @@
+# Orquestrador da SAGA (ADR-008). Com 2 réplicas, os consumidores dividem as filas, e o
+# relay do outbox e o verificador de prazos rodam nas duas: SELECT ... FOR UPDATE SKIP
+# LOCKED e a conferência do prazo com a SAGA travada garantem que nenhum comando sai em dobro.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orquestrador
+  labels: { app: orquestrador }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: orquestrador }
+  template:
+    metadata:
+      labels: { app: orquestrador }
+    spec:
+      # espalha as réplicas pelos workers, quando houver espaço
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: orquestrador }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532     # usuário nonroot da imagem distroless
+      containers:
+        - name: orquestrador
+          image: ampara/orquestrador:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8081 }
+          envFrom:
+            - configMapRef: { name: orquestrador-config }
+          # só as duas chaves do serviço; POSTGRES_USER e POSTGRES_PASSWORD ficam com o banco
+          env:
+            - name: ORQUESTRADOR_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: orquestrador-secret, key: ORQUESTRADOR_DATABASE_URL } }
+            - name: ORQUESTRADOR_AMQP_URL
+              valueFrom: { secretKeyRef: { name: orquestrador-secret, key: ORQUESTRADOR_AMQP_URL } }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          # liveness em /health, nunca em /ready: com o banco fora, o pod reiniciaria em loop
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }

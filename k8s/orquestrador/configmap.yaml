@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orquestrador-config
+data:
+  ORQUESTRADOR_PORTA: "8081"
+  ORQUESTRADOR_TIMEOUT_PASSO: "10s"
+  # 72h em produção; para a demo, troque por 2m e reinicie: kubectl rollout restart deploy/orquestrador
+  ORQUESTRADOR_PRAZO_EXPIRACAO: "72h"
+  ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO: "10"

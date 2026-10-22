@@ -101,7 +101,7 @@ A SAGA aparece no único fluxo que altera dados de vários serviços ao mesmo te
 
 Quem coordena é o **Orquestrador**, um microsserviço só para isso. A Adoção fica com o que o usuário vê (a solicitação e a decisão), e o Orquestrador fica com o controle do processo (qual passo está em andamento, o que fazer se um participante não responder e o que desfazer). O fluxo completo está na [próxima seção](#saga-de-adoção).
 
-> **Mudança em andamento.** A máquina de estados da SAGA foi implementada dentro de [`services/adocao`](services/adocao) e será extraída para o Orquestrador. Até lá, a [ADR-002](docs/decisoes/ADR-002-saga-orquestrada.md), o [`docs/saga.md`](docs/saga.md) e o [catálogo de mensagens](docs/contratos/eventos.md) ainda descrevem a Adoção como orquestradora.
+> **Mudança em andamento.** A SAGA já roda em [`services/orquestrador`](services/orquestrador) (#140), e a decisão está na [ADR-008](docs/decisoes/ADR-008-orquestrador.md). O [`docs/saga.md`](docs/saga.md) e o [catálogo de mensagens](docs/contratos/eventos.md) ainda descrevem a Adoção como orquestradora até a #139.
 
 ### CQRS em Animais: no banco, não só no código
 
@@ -137,7 +137,7 @@ sequenceDiagram
     actor ONG as Protetor/ONG
 
     Adotante->>AD: Solicita a adoção (BFF Mobile)
-    AD->>R: adocao.solicitada
+    AD->>R: solicitacao.criada
     R->>O: inicia a SAGA
     O->>R: T1 ReservarAnimal
     R->>AN: comando
@@ -149,7 +149,7 @@ sequenceDiagram
     R->>N: evento
     N-->>ONG: Nova solicitação
     ONG->>AD: Aprova (BFF Web): pivô
-    AD->>R: adocao.decidida
+    AD->>R: solicitacao.decidida
     R->>O: decisão
     O->>R: T4 ConfirmarAdocao
     R->>AN: comando
@@ -224,13 +224,13 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 
 | Componente | Pasta | Situação |
 | --- | --- | --- |
-| Adoção (SAGA) | [`services/adocao`](services/adocao) | implementado: SAGA, outbox, DLQ, Dockerfile e manifests do k8s |
+| Adoção | [`services/adocao`](services/adocao) | implementado: solicitações, decisões e linha do tempo (espelho da SAGA via `saga.transicao`), outbox, DLQ, Dockerfile e manifests do k8s |
 | BFF Web | [`bff/web`](bff/web) | implementado: Dockerfile e manifests do k8s |
 | Animais | [`services/animais`](services/animais) | esqueleto (#39) e escrita com transições de status e outbox (#55); o projetor do CQRS na #56 |
 | Notificações | [`services/notificacoes`](services/notificacoes) | base pronta (`/health`, testes, regras); o resto na #41 |
 | Assistente | [`services/assistente`](services/assistente) | base pronta (`/health`, testes, regras); o resto na #42 |
 | Identidade | [`services/identidade`](services/identidade) | esqueleto pronto (#98) |
-| Orquestrador | `services/orquestrador` | planejado: recebe a máquina de estados da SAGA que hoje está em `services/adocao` |
+| Orquestrador | [`services/orquestrador`](services/orquestrador) | implementado: SAGA extraída da Adoção (#140), outbox, inbox, prazos, DLQ, Dockerfile, compose e manifests do k8s |
 | Gateway, BFF Mobile e apps | [`gateway`](gateway), [`bff/mobile`](bff/mobile), [`apps`](apps) | planejados; o README de cada pasta descreve o escopo |
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
@@ -246,7 +246,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, Animais, a Identidade e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
@@ -272,7 +272,7 @@ A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação d
 ├── apps/              # front-ends web e mobile
 ├── bff/               # BFF Web e BFF Mobile
 ├── gateway/           # API Gateway, única porta exposta
-├── services/          # adocao, animais, identidade, notificacoes, assistente e, em breve, orquestrador
+├── services/          # adocao, orquestrador, animais, identidade, notificacoes, assistente
 ├── infra/             # imagens próprias do MongoDB e do RabbitMQ (definitions.json)
 ├── k8s/               # manifests do cluster local (kind + kustomize)
 ├── scripts/           # chaves do JWT, DLQ e roteiro da demo
