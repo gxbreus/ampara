@@ -2,8 +2,10 @@ package repositorio
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,188 +39,241 @@ func banco(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func repo(pool *pgxpool.Pool, max int) *Repositorio {
-	return Novo(pool, Config{TimeoutPasso: 10 * time.Second, PrazoDecisao: 72 * time.Hour, MaxReenvios: max})
-}
+func repo(pool *pgxpool.Pool) *Repositorio { return Novo(pool, Config{}) }
 
-const adotante = "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55"
+const (
+	adotante    = "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55"
+	responsavel = "c50a83ab-7db0-41b4-9436-4144c36f97d5"
+	admin       = "ad000000-0000-4000-8000-000000000001"
+)
 
 func criar(t *testing.T, r *Repositorio) string {
 	t.Helper()
 	id := NovoUUID()
-	if _, err := r.Criar(context.Background(), NovaSolicitacao{ID: id, AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9", CorrelationID: "c-teste"}); err != nil {
+	if err := r.Criar(context.Background(), NovaSolicitacao{ID: id, AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9", CorrelationID: "c-teste"}); err != nil {
 		t.Fatal(err)
 	}
 	return id
 }
 
-func aplicar(t *testing.T, r *Repositorio, id string, ev saga.Evento) saga.Saida {
+func ptr[T any](v T) *T { return &v }
+
+// mover aplica, em ordem, os saga.transicao que o Orquestrador publicaria, a partir da
+// versão atual do espelho. Cada passo é "ESTADO" ou "ESTADO:Evento".
+func mover(t *testing.T, r *Repositorio, id string, passos ...string) {
 	t.Helper()
-	s, err := r.Aplicar(context.Background(), id, ev)
-	if err != nil {
-		t.Fatalf("%s: %v", ev.Tipo, err)
+	var versao int
+	var estado string
+	_ = r.pool.QueryRow(context.Background(), `SELECT versao, estado FROM solicitacoes WHERE id = $1`, id).Scan(&versao, &estado)
+	if versao == 0 {
+		estado = "" // a primeira transição sai do nada
 	}
-	return s
+	for _, p := range passos {
+		para, evento, _ := strings.Cut(p, ":")
+		versao++
+		tr := Transicao{SolicitacaoID: id, Versao: versao, Estado: para, Evento: evento, Transicao: versao, Em: time.Now().UTC(),
+			AnimalNome: ptr("Thor"), ResponsavelID: ptr(responsavel)}
+		if estado != "" {
+			tr.De = ptr(estado)
+		}
+		if _, err := r.AplicarTransicao(context.Background(), NovoUUID(), tr); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		estado = para
+	}
 }
 
-// ateAguardando leva a solicitação a AGUARDANDO_APROVACAO.
+// ateAguardando leva o espelho a AGUARDANDO_APROVACAO.
 func ateAguardando(t *testing.T, r *Repositorio, id string) {
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvAnimalReservado, ResponsavelID: "c50a83ab-7db0-41b4-9436-4144c36f97d5", AnimalNome: "Thor"})
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvPerfilValidado})
+	mover(t, r, id, "SOLICITADA:SolicitacaoCriada", "ANIMAL_RESERVADO:AnimalReservado", "AGUARDANDO_APROVACAO:PerfilValidado")
 }
 
-func outboxTipos(t *testing.T, pool *pgxpool.Pool, id string) []string {
+// outbox devolve as mensagens gravadas para a solicitação, em ordem: tipo e payload.
+func outbox(t *testing.T, pool *pgxpool.Pool, id string) ([]string, []map[string]any) {
 	t.Helper()
-	rows, _ := pool.Query(context.Background(), `SELECT tipo FROM outbox WHERE saga_id = $1 ORDER BY id`, id)
+	rows, _ := pool.Query(context.Background(), `SELECT tipo, exchange, routing_key, payload FROM outbox WHERE saga_id = $1 ORDER BY id`, id)
 	defer rows.Close()
 	var tipos []string
+	var payloads []map[string]any
 	for rows.Next() {
-		var tipo string
-		_ = rows.Scan(&tipo)
-		tipos = append(tipos, tipo)
+		var tipo, exchange, rk string
+		var corpo []byte
+		_ = rows.Scan(&tipo, &exchange, &rk, &corpo)
+		var env Envelope
+		if err := json.Unmarshal(corpo, &env); err != nil || env.Type != tipo || env.SagaID != id || exchange != "ampara.eventos" || rk != tipo {
+			t.Fatalf("mensagem mal formada: %s %s %s %s", tipo, exchange, rk, corpo)
+		}
+		tipos, payloads = append(tipos, tipo), append(payloads, env.Payload)
 	}
-	return tipos
+	return tipos, payloads
 }
 
-func TestCriarGravaSolicitacaoPassoEOutbox(t *testing.T) {
+func TestCriarGravaSolicitacaoEPublicaCriada(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	id := criar(t, r)
 
-	var estado, correlation string
-	_ = pool.QueryRow(context.Background(), `SELECT estado, correlation_id FROM solicitacoes WHERE id = $1`, id).Scan(&estado, &correlation)
-	if estado != "SOLICITADA" || correlation != "c-teste" {
-		t.Fatalf("estado %s, correlation %s", estado, correlation)
+	v, err := r.Obter(context.Background(), id)
+	if err != nil || v.Estado != saga.Solicitada || v.AdotanteID != adotante || v.Decisao != "" {
+		t.Fatalf("Obter: %+v %v", v, err)
 	}
-	var status string
-	var prazo *time.Time
-	_ = pool.QueryRow(context.Background(), `SELECT status, prazo FROM saga_passos WHERE saga_id = $1 AND passo = 'T1'`, id).Scan(&status, &prazo)
-	if status != "PENDENTE" || prazo == nil {
-		t.Fatalf("T1: status %s, prazo %v", status, prazo)
+	tipos, payloads := outbox(t, pool, id)
+	if len(tipos) != 1 || tipos[0] != TipoCriada {
+		t.Fatalf("outbox = %v, esperado só solicitacao.criada", tipos)
 	}
-	var envMsgID, passoMsgID, sagaID, tipo string
-	_ = pool.QueryRow(context.Background(), `SELECT o.message_id, p.message_id, o.payload->>'sagaId', o.payload->>'type'
-		FROM outbox o JOIN saga_passos p ON p.saga_id = o.saga_id AND p.passo = 'T1' WHERE o.saga_id = $1`, id).Scan(&envMsgID, &passoMsgID, &sagaID, &tipo)
-	if envMsgID != passoMsgID || sagaID != id || tipo != "ReservarAnimal" {
-		t.Fatalf("outbox e passo divergem: %s %s %s %s", envMsgID, passoMsgID, sagaID, tipo)
+	if p := payloads[0]; p["solicitacaoId"] != id || p["adotanteId"] != adotante || p["animalId"] != "65a2f1c4e8b9d3a7f0c1b2e9" {
+		t.Fatalf("payload: %v", p)
 	}
-}
-
-func TestFluxoAteAguardandoAprovacao(t *testing.T) {
-	pool := banco(t)
-	r := repo(pool, 10)
-	id := criar(t, r)
-	ateAguardando(t, r, id)
-
-	got := outboxTipos(t, pool, id)
-	want := []string{"ReservarAnimal", "ValidarPerfil", "adocao.aguardando_aprovacao"}
-	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
-		t.Fatalf("outbox = %v, esperado %v", got, want)
-	}
-	var linhas int
-	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM saga_historico WHERE saga_id = $1`, id).Scan(&linhas)
-	if linhas != 3 {
-		t.Fatalf("histórico com %d linhas, esperado 3", linhas)
-	}
-	var nome string
-	var expira *time.Time
-	_ = pool.QueryRow(context.Background(), `SELECT animal_nome, expira_em FROM solicitacoes WHERE id = $1`, id).Scan(&nome, &expira)
-	if nome != "Thor" || expira == nil {
-		t.Fatalf("animal_nome %q, expira_em %v", nome, expira)
+	if _, err := r.Obter(context.Background(), NovoUUID()); !errors.Is(err, ErrNaoEncontrada) {
+		t.Fatalf("Obter de id inexistente: %v", err)
 	}
 }
 
 func TestSolicitacaoAtivaDuplicada(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	criar(t, r)
-	_, err := r.Criar(context.Background(), NovaSolicitacao{ID: NovoUUID(), AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"})
+	err := r.Criar(context.Background(), NovaSolicitacao{ID: NovoUUID(), AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"})
 	if !errors.Is(err, ErrSolicitacaoAtiva) {
 		t.Fatalf("erro = %v, esperado ErrSolicitacaoAtiva", err)
 	}
+	var mensagens int
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&mensagens)
+	if mensagens != 1 {
+		t.Fatalf("a recusada não pode deixar mensagem no outbox: %d", mensagens)
+	}
 }
 
-func TestReenvioUsaOMesmoMessageID(t *testing.T) {
+func TestDecidirSoEmAguardandoEUmaVez(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	id := criar(t, r)
+	if err := r.Decidir(context.Background(), id, saga.Aprovar, "", responsavel); !errors.Is(err, ErrEstadoNaoPermite) {
+		t.Fatalf("antes de AGUARDANDO_APROVACAO: %v", err)
+	}
 	ateAguardando(t, r, id)
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvRecusa})
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvTimeout, Passo: saga.C1})
+	if err := r.Decidir(context.Background(), id, saga.Recusar, "sem tela", responsavel); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Decidir(context.Background(), id, saga.Cancelar, "", adotante); !errors.Is(err, ErrEstadoNaoPermite) {
+		t.Fatalf("segunda decisão: %v", err)
+	}
+	if err := r.Decidir(context.Background(), NovoUUID(), saga.Aprovar, "", responsavel); !errors.Is(err, ErrNaoEncontrada) {
+		t.Fatalf("inexistente: %v", err)
+	}
 
-	var ids []string
-	rows, _ := pool.Query(context.Background(), `SELECT message_id FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva' ORDER BY id`, id)
-	for rows.Next() {
-		var m string
-		_ = rows.Scan(&m)
-		ids = append(ids, m)
+	v, _ := r.Obter(context.Background(), id)
+	if v.Decisao != saga.Recusar || v.Estado != saga.AguardandoAprovacao {
+		t.Fatalf("a decisão fica registrada e o estado espera o Orquestrador: %+v", v)
 	}
-	rows.Close()
-	if len(ids) != 2 || ids[0] != ids[1] {
-		t.Fatalf("o reenvio deveria repetir o messageId: %v", ids)
+	tipos, payloads := outbox(t, pool, id)
+	if len(tipos) != 2 || tipos[1] != TipoDecidida {
+		t.Fatalf("outbox = %v", tipos)
 	}
-	var tentativas int
-	_ = pool.QueryRow(context.Background(), `SELECT tentativas FROM saga_passos WHERE saga_id = $1 AND passo = 'C1'`, id).Scan(&tentativas)
-	if tentativas != 1 {
-		t.Fatalf("tentativas = %d", tentativas)
+	if p := payloads[1]; p["decisao"] != "RECUSADA" || p["motivo"] != "sem tela" || p["decididaPor"] != responsavel || p["solicitacaoId"] != id {
+		t.Fatalf("payload: %v", p)
 	}
 }
 
-func TestTetoDeReenviosMarcaIntervencao(t *testing.T) {
+func TestAprovarECancelarAoMesmoTempo(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 1)
-	id := criar(t, r)
-	ateAguardando(t, r, id)
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvCancelamento})
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvTimeout, Passo: saga.C1}) // 1º reenvio
-	aplicar(t, r, id, saga.Evento{Tipo: saga.EvTimeout, Passo: saga.C1}) // teto
-
-	var intervencao bool
-	var status string
-	_ = pool.QueryRow(context.Background(), `SELECT s.requer_intervencao, p.status FROM solicitacoes s
-		JOIN saga_passos p ON p.saga_id = s.id AND p.passo = 'C1' WHERE s.id = $1`, id).Scan(&intervencao, &status)
-	if !intervencao || status != "ESGOTADO" {
-		t.Fatalf("requer_intervencao %v, status %s", intervencao, status)
-	}
-}
-
-func TestAprovacaoEExpiracaoSimultaneas(t *testing.T) {
-	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	for i := 0; i < 20; i++ {
 		id := criar(t, r)
 		ateAguardando(t, r, id)
-
 		var wg sync.WaitGroup
-		var errAprovacao error
-		var expiracao saga.Saida
+		erros := make([]error, 2)
 		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			_, errAprovacao = r.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvAprovacao})
-		}()
-		go func() {
-			defer wg.Done()
-			expiracao, _ = r.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvPrazoExpirado})
-		}()
+		go func() { defer wg.Done(); erros[0] = r.Decidir(context.Background(), id, saga.Aprovar, "", responsavel) }()
+		go func() { defer wg.Done(); erros[1] = r.Decidir(context.Background(), id, saga.Cancelar, "", adotante) }()
 		wg.Wait()
-
-		aprovou := errAprovacao == nil
-		expirou := !expiracao.Ignorada
-		if aprovou == expirou {
-			t.Fatalf("rodada %d: exatamente uma deveria vencer (aprovou=%v expirou=%v, erro=%v)", i, aprovou, expirou, errAprovacao)
+		venceram := 0
+		for _, err := range erros {
+			if err == nil {
+				venceram++
+			} else if !errors.Is(err, ErrEstadoNaoPermite) {
+				t.Fatalf("rodada %d: %v", i, err)
+			}
 		}
-		if !aprovou && !errors.Is(errAprovacao, saga.ErrEstadoNaoPermite) {
-			t.Fatalf("rodada %d: a aprovação perdedora deveria dar 409: %v", i, errAprovacao)
+		if venceram != 1 {
+			t.Fatalf("rodada %d: exatamente uma decisão deveria vencer: %v", i, erros)
 		}
 		// encerra a solicitação para liberar o índice único da próxima rodada
-		_, _ = pool.Exec(context.Background(), `UPDATE solicitacoes SET estado = 'FALHOU' WHERE id = $1`, id)
+		mover(t, r, id, "FALHOU")
+	}
+}
+
+func TestRetomarSoComIntervencao(t *testing.T) {
+	pool := banco(t)
+	r := repo(pool)
+	id := criar(t, r)
+	if err := r.Retomar(context.Background(), id, admin); !errors.Is(err, ErrEstadoNaoPermite) {
+		t.Fatalf("sem intervenção: %v", err)
+	}
+	if err := r.Retomar(context.Background(), NovoUUID(), admin); !errors.Is(err, ErrNaoEncontrada) {
+		t.Fatalf("inexistente: %v", err)
+	}
+	if _, err := r.AplicarTransicao(context.Background(), NovoUUID(), Transicao{SolicitacaoID: id, Versao: 1, Estado: "COMPENSANDO",
+		Desfecho: ptr("RECUSADA"), RequerIntervencao: true, Evento: "Timeout", Passo: ptr("C1"), Transicao: 13, Em: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Retomar(context.Background(), id, admin); err != nil {
+		t.Fatal(err)
+	}
+	tipos, payloads := outbox(t, pool, id)
+	if len(tipos) != 2 || tipos[1] != TipoRetomada || payloads[1]["pedidaPor"] != admin {
+		t.Fatalf("outbox = %v %v", tipos, payloads)
+	}
+}
+
+func TestAplicarTransicaoForaDeOrdemEDuplicada(t *testing.T) {
+	pool := banco(t)
+	r := repo(pool)
+	id := criar(t, r)
+	ctx := context.Background()
+	expira := time.Now().Add(72 * time.Hour).UTC().Truncate(time.Second)
+	v1 := Transicao{SolicitacaoID: id, Versao: 1, Estado: "SOLICITADA", Evento: "SolicitacaoCriada", Transicao: 1, Em: time.Now().UTC()}
+	v2 := Transicao{SolicitacaoID: id, Versao: 2, De: ptr("SOLICITADA"), Estado: "ANIMAL_RESERVADO", Evento: "AnimalReservado",
+		Passo: ptr("T1"), Transicao: 2, AnimalNome: ptr("Thor"), ResponsavelID: ptr(responsavel), Em: time.Now().UTC()}
+	v3 := Transicao{SolicitacaoID: id, Versao: 3, De: ptr("ANIMAL_RESERVADO"), Estado: "AGUARDANDO_APROVACAO", Evento: "PerfilValidado",
+		Passo: ptr("T2"), Transicao: 5, ExpiraEm: &expira, Em: time.Now().UTC()}
+
+	// chegam fora de ordem: 2, 3 e só depois 1
+	msg2 := NovoUUID()
+	for _, c := range []struct {
+		msg string
+		t   Transicao
+	}{{msg2, v2}, {NovoUUID(), v3}, {NovoUUID(), v1}} {
+		if dup, err := r.AplicarTransicao(ctx, c.msg, c.t); err != nil || dup {
+			t.Fatalf("versão %d: %v %v", c.t.Versao, dup, err)
+		}
+	}
+	// a reentrega da versão 2 cai na inbox
+	if dup, err := r.AplicarTransicao(ctx, msg2, v2); err != nil || !dup {
+		t.Fatalf("reentrega: %v %v", dup, err)
+	}
+	// a mesma versão com outro messageId não duplica a linha do tempo
+	if _, err := r.AplicarTransicao(ctx, NovoUUID(), v2); err != nil {
+		t.Fatal(err)
+	}
+
+	v, _ := r.Obter(ctx, id)
+	// a versão 1, atrasada, não volta o estado; a 3 não traz nome, e o da 2 continua
+	if v.Estado != saga.AguardandoAprovacao || v.AnimalNome != "Thor" || v.ResponsavelID != responsavel || v.ExpiraEm == nil || !v.ExpiraEm.Equal(expira) {
+		t.Fatalf("espelho: %+v", v)
+	}
+	h, err := r.Historico(ctx, id)
+	if err != nil || len(h) != 3 || h[0].Para != "SOLICITADA" || h[1].Para != "ANIMAL_RESERVADO" || h[2].Para != "AGUARDANDO_APROVACAO" || h[2].Passo != "T2" {
+		t.Fatalf("linha do tempo: %+v %v", h, err)
+	}
+	if _, err := r.AplicarTransicao(ctx, NovoUUID(), Transicao{SolicitacaoID: NovoUUID(), Versao: 1, Estado: "SOLICITADA", Em: time.Now()}); !errors.Is(err, ErrNaoEncontrada) {
+		t.Fatalf("solicitação inexistente: %v", err)
 	}
 }
 
 func TestCriarIdempotente(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	n := func() NovaSolicitacao {
 		return NovaSolicitacao{ID: NovoUUID(), AdotanteID: adotante, AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}
 	}
@@ -233,18 +288,11 @@ func TestCriarIdempotente(t *testing.T) {
 	if _, _, err := r.CriarIdempotente(context.Background(), n(), "outra-chave-789"); !errors.Is(err, ErrSolicitacaoAtiva) {
 		t.Fatalf("outra chave para o mesmo animal ativo deveria dar 409: %v", err)
 	}
-	v, err := r.Obter(context.Background(), id1)
-	if err != nil || v.Estado != saga.Solicitada || v.AdotanteID != adotante {
-		t.Fatalf("Obter: %+v %v", v, err)
-	}
-	if _, err := r.Obter(context.Background(), NovoUUID()); !errors.Is(err, ErrNaoEncontrada) {
-		t.Fatalf("Obter de id inexistente: %v", err)
-	}
 }
 
 func TestCriarIdempotenteConcorrente(t *testing.T) {
 	pool := banco(t)
-	r := repo(pool, 10)
+	r := repo(pool)
 	const n = 10
 	ids := make([]string, n)
 	errs := make([]error, n)
@@ -263,10 +311,10 @@ func TestCriarIdempotenteConcorrente(t *testing.T) {
 			t.Fatalf("requisição %d: id %s (primeira %s), erro %v", i, ids[i], ids[0], errs[i])
 		}
 	}
-	var total, outbox int
+	var total, mensagens int
 	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM solicitacoes`).Scan(&total)
-	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&outbox)
-	if total != 1 || outbox != 1 {
-		t.Fatalf("%d solicitações e %d mensagens no outbox; esperado 1 e 1", total, outbox)
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&mensagens)
+	if total != 1 || mensagens != 1 {
+		t.Fatalf("%d solicitações e %d mensagens no outbox; esperado 1 e 1", total, mensagens)
 	}
 }

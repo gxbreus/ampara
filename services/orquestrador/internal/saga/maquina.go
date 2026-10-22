@@ -7,7 +7,8 @@ import (
 	"slices"
 )
 
-// ErrEstadoNaoPermite: a ação não é válida no estado atual (a API responde 409).
+// ErrEstadoNaoPermite: a ação não é válida no estado atual. Acontece com uma decisão que
+// perdeu a corrida para a expiração, ou uma retomada repetida; o consumidor só registra.
 var ErrEstadoNaoPermite = errors.New("o estado atual não permite a ação")
 
 // ErrRespostaInesperada: o evento não faz sentido no estado atual. É definitivo: a mesma
@@ -30,7 +31,7 @@ func Transicao(s Solicitacao, ev Evento, r Regras) (Saida, error) {
 		if s.Estado != "" {
 			return out, fmt.Errorf("solicitação %s já existe", s.ID)
 		}
-		// 1. POST /v1/solicitacoes -> SOLICITADA, emite ReservarAnimal (T1)
+		// 1. solicitacao.criada -> SOLICITADA, emite ReservarAnimal (T1)
 		out.Solicitacao.Estado = Solicitada
 		out.Transicao = 1
 		out.Mensagens = append(out.Mensagens, reservarAnimal(s))

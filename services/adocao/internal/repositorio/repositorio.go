@@ -1,6 +1,9 @@
-// Package repositorio persiste as transições da SAGA. Ele não decide nada: carrega o
-// retrato da solicitação, chama saga.Transicao e grava o resultado (estado, passos,
-// histórico e outbox) numa transação só, com a linha da solicitação travada.
+// Package repositorio guarda a solicitação de adoção como o usuário a vê (ADR-008).
+//
+// A SAGA é do Orquestrador. A Adoção grava a solicitação e as ações das pessoas e as
+// entrega ao Orquestrador pelo outbox (solicitacao.criada, solicitacao.decidida e
+// solicitacao.retomada). O estado, a linha do tempo e o prazo chegam de volta em
+// saga.transicao e ficam num espelho, que é o que a API mostra.
 package repositorio
 
 import (
@@ -23,13 +26,20 @@ var (
 	ErrSolicitacaoAtiva = errors.New("já existe uma solicitação ativa para este animal")
 	// ErrNaoEncontrada: a solicitação não existe (404).
 	ErrNaoEncontrada = errors.New("solicitação não encontrada")
+	// ErrEstadoNaoPermite: a ação não é válida no estado atual (409).
+	ErrEstadoNaoPermite = errors.New("o estado atual não permite a ação")
+)
+
+// Mensagens que a Adoção publica para o Orquestrador (docs/contratos/eventos.md).
+const (
+	TipoCriada   = "solicitacao.criada"
+	TipoDecidida = "solicitacao.decidida"
+	TipoRetomada = "solicitacao.retomada"
+	exEventos    = "ampara.eventos"
 )
 
 type Config struct {
-	TimeoutPasso time.Duration // ADOCAO_TIMEOUT_PASSO
-	PrazoDecisao time.Duration // ADOCAO_PRAZO_EXPIRACAO
-	MaxReenvios  int           // ADOCAO_MAX_REENVIOS_COMPENSACAO
-	Agora        func() time.Time
+	Agora func() time.Time
 }
 
 type Repositorio struct {
@@ -52,30 +62,26 @@ type NovaSolicitacao struct {
 	CorrelationID string
 }
 
-func (r *Repositorio) regras() saga.Regras {
-	return saga.Regras{Agora: r.cfg.Agora().UTC(), PrazoDecisao: r.cfg.PrazoDecisao, MaxReenvios: r.cfg.MaxReenvios}
+// Criar grava a solicitação em SOLICITADA e o solicitacao.criada na mesma transação. O
+// Orquestrador começa a SAGA ao receber a mensagem.
+func (r *Repositorio) Criar(ctx context.Context, n NovaSolicitacao) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		return r.inserir(ctx, tx, n)
+	})
 }
 
-// Criar grava a solicitação e o primeiro comando (transição 1) na mesma transação.
-func (r *Repositorio) Criar(ctx context.Context, n NovaSolicitacao) (saga.Solicitacao, error) {
-	vazia := saga.Solicitacao{ID: n.ID, AdotanteID: n.AdotanteID, AnimalID: n.AnimalID}
-	saida, err := saga.Transicao(vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, r.regras())
-	if err != nil {
-		return saga.Solicitacao{}, err
+func (r *Repositorio) inserir(ctx context.Context, tx pgx.Tx, n NovaSolicitacao) error {
+	_, err := tx.Exec(ctx, `INSERT INTO solicitacoes (id, adotante_id, animal_id, estado, correlation_id)
+		VALUES ($1, $2, $3, $4, $5)`, n.ID, n.AdotanteID, n.AnimalID, saga.Solicitada, n.CorrelationID)
+	if violaUnicidade(err, "solicitacoes_ativa_unica") {
+		return ErrSolicitacaoAtiva
 	}
-
-	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO solicitacoes (id, adotante_id, animal_id, estado, correlation_id)
-			VALUES ($1, $2, $3, $4, $5)`, n.ID, n.AdotanteID, n.AnimalID, saida.Solicitacao.Estado, n.CorrelationID)
-		if violaUnicidade(err, "solicitacoes_ativa_unica") {
-			return ErrSolicitacaoAtiva
-		}
-		if err != nil {
-			return fmt.Errorf("inserir solicitação: %w", err)
-		}
-		return r.persistir(ctx, tx, vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, saida, n.CorrelationID)
+	if err != nil {
+		return fmt.Errorf("inserir solicitação: %w", err)
+	}
+	return r.publicar(ctx, tx, TipoCriada, n.ID, n.CorrelationID, map[string]any{
+		"solicitacaoId": n.ID, "adotanteId": n.AdotanteID, "animalId": n.AnimalID,
 	})
-	return saida.Solicitacao, err
 }
 
 // CriarIdempotente cria a solicitação respeitando o Idempotency-Key do POST: a mesma
@@ -83,31 +89,18 @@ func (r *Repositorio) Criar(ctx context.Context, n NovaSolicitacao) (saga.Solici
 // outra SAGA. Sem chave, é um Criar comum.
 func (r *Repositorio) CriarIdempotente(ctx context.Context, n NovaSolicitacao, chave string) (id string, existente bool, err error) {
 	if chave == "" {
-		_, err = r.Criar(ctx, n)
-		return n.ID, false, err
+		return n.ID, false, r.Criar(ctx, n)
 	}
 	if id, ok, err := r.porChave(ctx, n.AdotanteID, chave); err != nil || ok {
 		return id, ok, err
 	}
-	vazia := saga.Solicitacao{ID: n.ID, AdotanteID: n.AdotanteID, AnimalID: n.AnimalID}
-	saida, err := saga.Transicao(vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, r.regras())
-	if err != nil {
-		return "", false, err
-	}
 	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO solicitacoes (id, adotante_id, animal_id, estado, correlation_id)
-			VALUES ($1, $2, $3, $4, $5)`, n.ID, n.AdotanteID, n.AnimalID, saida.Solicitacao.Estado, n.CorrelationID)
-		if violaUnicidade(err, "solicitacoes_ativa_unica") {
-			return ErrSolicitacaoAtiva
-		}
-		if err != nil {
-			return fmt.Errorf("inserir solicitação: %w", err)
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO idempotencia (adotante_id, chave, solicitacao_id) VALUES ($1, $2, $3)`,
-			n.AdotanteID, chave, n.ID); err != nil {
+		if err := r.inserir(ctx, tx, n); err != nil {
 			return err
 		}
-		return r.persistir(ctx, tx, vazia, saga.Evento{Tipo: saga.EvSolicitacaoCriada}, saida, n.CorrelationID)
+		_, err := tx.Exec(ctx, `INSERT INTO idempotencia (adotante_id, chave, solicitacao_id) VALUES ($1, $2, $3)`,
+			n.AdotanteID, chave, n.ID)
+		return err
 	})
 	// duas requisições com a mesma chave ao mesmo tempo: a segunda perde no PRIMARY KEY
 	// da idempotencia (ou no índice de ativa) e devolve a solicitação da primeira
@@ -140,8 +133,11 @@ type Visao struct {
 	ResponsavelID     string
 	ExpiraEm          *time.Time
 	RequerIntervencao bool
-	CriadoEm          time.Time
-	AtualizadoEm      time.Time
+	// Decisao registrada e já entregue ao Orquestrador; o estado muda quando o
+	// saga.transicao voltar. Vazia enquanto ninguém decidiu.
+	Decisao      saga.Decisao
+	CriadoEm     time.Time
+	AtualizadoEm time.Time
 }
 
 // Obter lê a solicitação para a API.
@@ -153,103 +149,82 @@ func (r *Repositorio) Obter(ctx context.Context, id string) (Visao, error) {
 	return v, err
 }
 
-// Aplicar aplica um evento à solicitação: SELECT ... FOR UPDATE, Transicao e gravação.
-// O lock serializa aprovação, expiração, cancelamento e respostas da mesma solicitação.
-func (r *Repositorio) Aplicar(ctx context.Context, sagaID string, ev saga.Evento) (saga.Saida, error) {
-	var saida saga.Saida
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		antes, correlationID, err := carregar(ctx, tx, sagaID)
-		if err != nil {
-			return err
-		}
-		saida, err = saga.Transicao(antes, ev, r.regras())
-		if err != nil {
-			return err
-		}
-		if saida.Ignorada {
-			return nil
-		}
-		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
-	})
-	return saida, err
-}
-
-// AplicarTimeout aplica o timeout de um passo, mas só se, com a solicitação travada, o
-// passo continuar pendente e vencido. Com duas réplicas do verificador, as duas podem
-// achar o mesmo passo vencido; a segunda espera o lock, encontra o prazo já adiado pelo
-// reenvio da primeira e não faz nada. Sem essa conferência, o comando sairia duas vezes.
-func (r *Repositorio) AplicarTimeout(ctx context.Context, sagaID string, passo saga.Passo) (saga.Saida, error) {
-	var saida saga.Saida
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		antes, correlationID, err := carregar(ctx, tx, sagaID)
-		if err != nil {
-			return err
-		}
-		var vencido bool
-		err = tx.QueryRow(ctx, `SELECT status = 'PENDENTE' AND prazo IS NOT NULL AND prazo < $3
-			FROM saga_passos WHERE saga_id = $1 AND passo = $2`, sagaID, passo, r.cfg.Agora().UTC()).Scan(&vencido)
-		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !vencido) {
-			saida.Ignorada = true
-			return nil
+// Decidir registra a aprovação, a recusa ou o cancelamento e publica solicitacao.decidida.
+// Com a linha travada, só passa se o espelho estiver em AGUARDANDO_APROVACAO e ainda não
+// houver decisão: o duplo clique, ou aprovar e cancelar ao mesmo tempo, recebe 409. Se o
+// prazo vencer no mesmo instante, quem resolve a corrida é o Orquestrador.
+func (r *Repositorio) Decidir(ctx context.Context, id string, d saga.Decisao, motivo, por string) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var estado string
+		var decisao, correlationID *string
+		err := tx.QueryRow(ctx, `SELECT estado, decisao, correlation_id FROM solicitacoes WHERE id = $1 FOR UPDATE`, id).
+			Scan(&estado, &decisao, &correlationID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNaoEncontrada
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("carregar solicitação: %w", err)
 		}
-		ev := saga.Evento{Tipo: saga.EvTimeout, Passo: passo}
-		saida, err = saga.Transicao(antes, ev, r.regras())
-		if err != nil || saida.Ignorada {
-			return err
+		if saga.Estado(estado) != saga.AguardandoAprovacao || decisao != nil {
+			return ErrEstadoNaoPermite
 		}
-		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
-	})
-	return saida, err
-}
-
-// MessageID devolve o messageId gravado para o passo (para os logs de operação).
-func (r *Repositorio) MessageID(ctx context.Context, sagaID string, passo saga.Passo) string {
-	var id string
-	_ = r.pool.QueryRow(ctx, `SELECT message_id FROM saga_passos WHERE saga_id = $1 AND passo = $2`, sagaID, passo).Scan(&id)
-	return id
-}
-
-// Vencido é um passo com prazo estourado.
-type Vencido struct {
-	SagaID string
-	Passo  saga.Passo
-}
-
-// PassosVencidos lista passos pendentes com prazo estourado, os mais antigos primeiro.
-func (r *Repositorio) PassosVencidos(ctx context.Context, limite int) ([]Vencido, error) {
-	rows, err := r.pool.Query(ctx, `SELECT saga_id, passo FROM saga_passos
-		WHERE status = 'PENDENTE' AND prazo IS NOT NULL AND prazo < $1 ORDER BY prazo LIMIT $2`, r.cfg.Agora().UTC(), limite)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Vencido, error) {
-		var v Vencido
-		var passo string
-		err := row.Scan(&v.SagaID, &passo)
-		v.Passo = saga.Passo(passo)
-		return v, err
+		if _, err := tx.Exec(ctx, `UPDATE solicitacoes SET decisao = $2, decisao_motivo = $3, decidido_por = $4,
+				decidido_em = $5, atualizado_em = $5 WHERE id = $1`,
+			id, d, nulo(motivo), por, r.cfg.Agora().UTC()); err != nil {
+			return fmt.Errorf("gravar decisão: %w", err)
+		}
+		payload := map[string]any{"solicitacaoId": id, "decisao": string(d), "decididaPor": por, "motivo": nulo(motivo)}
+		return r.publicar(ctx, tx, TipoDecidida, id, valor(correlationID), payload)
 	})
 }
 
-// AExpirar lista solicitações em AGUARDANDO_APROVACAO com o prazo de decisão vencido.
-func (r *Repositorio) AExpirar(ctx context.Context, limite int) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id FROM solicitacoes
-		WHERE estado = 'AGUARDANDO_APROVACAO' AND expira_em < $1 ORDER BY expira_em LIMIT $2`, r.cfg.Agora().UTC(), limite)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
+// Retomar pede ao Orquestrador que retome os passos esgotados (#86), publicando
+// solicitacao.retomada. Só vale quando o espelho indica que a SAGA espera intervenção.
+func (r *Repositorio) Retomar(ctx context.Context, id, por string) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var intervencao bool
+		var correlationID *string
+		err := tx.QueryRow(ctx, `SELECT requer_intervencao, correlation_id FROM solicitacoes WHERE id = $1 FOR UPDATE`, id).
+			Scan(&intervencao, &correlationID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNaoEncontrada
+		}
+		if err != nil {
+			return fmt.Errorf("carregar solicitação: %w", err)
+		}
+		if !intervencao {
+			return ErrEstadoNaoPermite
+		}
+		return r.publicar(ctx, tx, TipoRetomada, id, valor(correlationID), map[string]any{"solicitacaoId": id, "pedidaPor": por})
+	})
 }
 
-// AplicarResposta processa uma resposta de participante: grava o messageId na inbox e
-// aplica a transição na MESMA transação. Se a inbox já tinha o messageId, a resposta é
-// repetida (reentrega do broker) e nada é aplicado: duplicada volta true.
-func (r *Repositorio) AplicarResposta(ctx context.Context, messageID, tipo, sagaID string, ev saga.Evento) (saida saga.Saida, duplicada bool, err error) {
+// Transicao é o payload de saga.transicao (docs/contratos/eventos.md).
+type Transicao struct {
+	SolicitacaoID     string     `json:"solicitacaoId"`
+	Versao            int        `json:"versao"`
+	De                *string    `json:"de"`
+	Estado            string     `json:"estado"`
+	Desfecho          *string    `json:"desfecho"`
+	Motivo            *string    `json:"motivo"`
+	CamposFaltando    []string   `json:"camposFaltando"`
+	AnimalNome        *string    `json:"animalNome"`
+	ResponsavelID     *string    `json:"responsavelId"`
+	ExpiraEm          *time.Time `json:"expiraEm"`
+	RequerIntervencao bool       `json:"requerIntervencao"`
+	Evento            string     `json:"evento"`
+	Passo             *string    `json:"passo"`
+	Transicao         int        `json:"transicao"`
+	Em                time.Time  `json:"em"`
+}
+
+// AplicarTransicao atualiza o espelho e a linha do tempo com um saga.transicao. Grava o
+// messageId na inbox na mesma transação: a reentrega volta duplicada sem efeito. Uma
+// versão mais antiga que a do espelho (fora de ordem) não muda o estado, mas entra na linha
+// do tempo, que é ordenada pela versão.
+func (r *Repositorio) AplicarTransicao(ctx context.Context, messageID string, t Transicao) (duplicada bool, err error) {
 	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `INSERT INTO inbox (message_id, tipo) VALUES ($1, $2) ON CONFLICT DO NOTHING`, messageID, tipo)
+		tag, err := tx.Exec(ctx, `INSERT INTO inbox (message_id, tipo) VALUES ($1, 'saga.transicao') ON CONFLICT DO NOTHING`, messageID)
 		if err != nil {
 			return fmt.Errorf("gravar inbox: %w", err)
 		}
@@ -257,196 +232,53 @@ func (r *Repositorio) AplicarResposta(ctx context.Context, messageID, tipo, saga
 			duplicada = true
 			return nil
 		}
-		antes, correlationID, err := carregar(ctx, tx, sagaID)
+		var existe bool
+		if err := tx.QueryRow(ctx, `SELECT true FROM solicitacoes WHERE id = $1 FOR UPDATE`, t.SolicitacaoID).Scan(&existe); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNaoEncontrada
+			}
+			return fmt.Errorf("carregar solicitação: %w", err)
+		}
+
+		var campos []byte
+		if len(t.CamposFaltando) > 0 {
+			campos, _ = json.Marshal(t.CamposFaltando)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE solicitacoes SET estado = $2, desfecho = $3, motivo = $4, campos_faltando = $5,
+				animal_nome = coalesce($6, animal_nome), responsavel_id = coalesce($7, responsavel_id), expira_em = $8,
+				requer_intervencao = $9, versao = $10, atualizado_em = $11
+			WHERE id = $1 AND versao < $10`,
+			t.SolicitacaoID, t.Estado, t.Desfecho, t.Motivo, campos, t.AnimalNome, t.ResponsavelID, t.ExpiraEm,
+			t.RequerIntervencao, t.Versao, t.Em); err != nil {
+			return fmt.Errorf("atualizar solicitação: %w", err)
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO historico (saga_id, versao, de, para, evento, passo, transicao, em)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (saga_id, versao) DO NOTHING`,
+			t.SolicitacaoID, t.Versao, t.De, t.Estado, t.Evento, t.Passo, t.Transicao, t.Em)
 		if err != nil {
-			return err
+			return fmt.Errorf("gravar histórico: %w", err)
 		}
-		saida, err = saga.Transicao(antes, ev, r.regras())
-		if err != nil {
-			return err
-		}
-		if saida.Ignorada {
-			return nil // a inbox fica gravada: a mesma mensagem não será reavaliada
-		}
-		return r.persistir(ctx, tx, antes, ev, saida, correlationID)
+		return nil
 	})
-	return saida, duplicada, err
+	return duplicada, err
 }
 
-func carregar(ctx context.Context, tx pgx.Tx, id string) (saga.Solicitacao, string, error) {
-	var (
-		s                                      saga.Solicitacao
-		estado                                 string
-		animalNome, responsavel, desfecho, mot *string
-		campos                                 []byte
-		correlationID                          *string
-	)
-	err := tx.QueryRow(ctx, `SELECT id, adotante_id, animal_id, animal_nome, responsavel_id, estado, desfecho,
-			motivo, campos_faltando, expira_em, requer_intervencao, correlation_id
-		FROM solicitacoes WHERE id = $1 FOR UPDATE`, id).
-		Scan(&s.ID, &s.AdotanteID, &s.AnimalID, &animalNome, &responsavel, &estado, &desfecho,
-			&mot, &campos, &s.ExpiraEm, &s.RequerIntervencao, &correlationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return s, "", ErrNaoEncontrada
+// publicar grava a mensagem no outbox, na transação de quem chamou.
+func (r *Repositorio) publicar(ctx context.Context, tx pgx.Tx, tipo, sagaID, correlationID string, payload map[string]any) error {
+	if correlationID == "" {
+		correlationID = sagaID
 	}
+	env := Envelope{
+		MessageID: NovoUUID(), Type: tipo, Version: 1, CorrelationID: correlationID,
+		SagaID: sagaID, OccurredAt: r.cfg.Agora().UTC().Format(time.RFC3339Nano), Payload: payload,
+	}
+	corpo, _ := json.Marshal(env)
+	_, err := tx.Exec(ctx, `INSERT INTO outbox (message_id, saga_id, tipo, exchange, routing_key, payload) VALUES ($1, $2, $3, $4, $5, $6)`,
+		env.MessageID, sagaID, tipo, exEventos, tipo, corpo)
 	if err != nil {
-		return s, "", fmt.Errorf("carregar solicitação: %w", err)
-	}
-	s.Estado = saga.Estado(estado)
-	s.AnimalNome, s.ResponsavelID, s.Motivo = valor(animalNome), valor(responsavel), valor(mot)
-	s.Desfecho = saga.Estado(valor(desfecho))
-	if len(campos) > 0 {
-		_ = json.Unmarshal(campos, &s.CamposFaltando)
-	}
-
-	rows, err := tx.Query(ctx, `SELECT passo, status, bloqueante, tentativas FROM saga_passos WHERE saga_id = $1`, id)
-	if err != nil {
-		return s, "", fmt.Errorf("carregar passos: %w", err)
-	}
-	defer rows.Close()
-	s.Passos = map[saga.Passo]saga.InfoPasso{}
-	for rows.Next() {
-		var passo, status string
-		var info saga.InfoPasso
-		if err := rows.Scan(&passo, &status, &info.Bloqueante, &info.Tentativas); err != nil {
-			return s, "", err
-		}
-		info.Status = saga.StatusPasso(status)
-		s.Passos[saga.Passo(passo)] = info
-	}
-	return s, valor(correlationID), rows.Err()
-}
-
-func (r *Repositorio) persistir(ctx context.Context, tx pgx.Tx, antes saga.Solicitacao, ev saga.Evento, saida saga.Saida, correlationID string) error {
-	agora := r.cfg.Agora().UTC()
-	s := saida.Solicitacao
-
-	var campos []byte
-	if len(s.CamposFaltando) > 0 {
-		campos, _ = json.Marshal(s.CamposFaltando)
-	}
-	if _, err := tx.Exec(ctx, `UPDATE solicitacoes SET estado = $2, desfecho = $3, motivo = $4, campos_faltando = $5,
-			animal_nome = $6, responsavel_id = $7, expira_em = $8, requer_intervencao = $9,
-			versao = versao + 1, atualizado_em = $10
-		WHERE id = $1`,
-		s.ID, s.Estado, nulo(string(s.Desfecho)), nulo(s.Motivo), campos,
-		nulo(s.AnimalNome), nulo(s.ResponsavelID), s.ExpiraEm, s.RequerIntervencao, agora); err != nil {
-		return fmt.Errorf("atualizar solicitação: %w", err)
-	}
-
-	for _, alt := range saida.Passos {
-		if err := r.alterarPasso(ctx, tx, s.ID, alt, agora); err != nil {
-			return err
-		}
-	}
-
-	for _, m := range saida.Mensagens {
-		env := envelope(m, s.ID, correlationID, agora)
-		corpo, _ := json.Marshal(env)
-		if err := inserirOutbox(ctx, tx, s.ID, env.MessageID, m.Tipo, m.Exchange, m.RoutingKey, corpo); err != nil {
-			return err
-		}
-		if m.Passo == "" {
-			continue
-		}
-		comando, _ := json.Marshal(comandoGravado{Tipo: m.Tipo, Exchange: m.Exchange, RoutingKey: m.RoutingKey, Envelope: corpo})
-		var prazo *time.Time
-		if acompanhado(m) {
-			p := agora.Add(r.cfg.TimeoutPasso)
-			prazo = &p
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO saga_passos (saga_id, passo, message_id, comando, status, bloqueante, tentativas, prazo, atualizado_em)
-				VALUES ($1, $2, $3, $4, 'PENDENTE', $5, 0, $6, $7)
-				ON CONFLICT (saga_id, passo) DO UPDATE SET message_id = $3, comando = $4, status = 'PENDENTE',
-					bloqueante = $5, tentativas = 0, prazo = $6, atualizado_em = $7`,
-			s.ID, m.Passo, env.MessageID, comando, m.Bloqueante, prazo, agora); err != nil {
-			return fmt.Errorf("abrir passo %s: %w", m.Passo, err)
-		}
-	}
-
-	_, err := tx.Exec(ctx, `INSERT INTO saga_historico (saga_id, de, para, evento, passo, transicao, em)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		s.ID, nulo(string(antes.Estado)), s.Estado, string(ev.Tipo), nulo(string(passoDoEvento(ev))), saida.Transicao, agora)
-	if err != nil {
-		return fmt.Errorf("gravar histórico: %w", err)
+		return fmt.Errorf("gravar outbox: %w", err)
 	}
 	return nil
-}
-
-func (r *Repositorio) alterarPasso(ctx context.Context, tx pgx.Tx, sagaID string, alt saga.AlteracaoPasso, agora time.Time) error {
-	var sql string
-	args := []any{sagaID, alt.Passo, agora}
-	switch alt.Acao {
-	case saga.Concluir:
-		sql = `UPDATE saga_passos SET status = 'CONCLUIDO', prazo = NULL, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-	case saga.Expirar:
-		sql = `UPDATE saga_passos SET status = 'EXPIRADO', prazo = NULL, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-	case saga.Esgotar:
-		sql = `UPDATE saga_passos SET status = 'ESGOTADO', prazo = NULL, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-	case saga.Reenviar, saga.Reemitir, saga.Retomar:
-		// mesmo comando e mesmo messageId: a inbox do participante devolve a resposta gravada
-		var tentativas int
-		var comando []byte
-		var messageID string
-		if err := tx.QueryRow(ctx, `SELECT tentativas, comando, message_id FROM saga_passos WHERE saga_id = $1 AND passo = $2`,
-			sagaID, alt.Passo).Scan(&tentativas, &comando, &messageID); err != nil {
-			return fmt.Errorf("ler passo %s: %w", alt.Passo, err)
-		}
-		var c comandoGravado
-		if err := json.Unmarshal(comando, &c); err != nil {
-			return err
-		}
-		if err := inserirOutbox(ctx, tx, sagaID, messageID, c.Tipo, c.Exchange, c.RoutingKey, c.Envelope); err != nil {
-			return err
-		}
-		if alt.Acao == saga.Reemitir {
-			return nil
-		}
-		if alt.Acao == saga.Retomar {
-			sql = `UPDATE saga_passos SET status = 'PENDENTE', tentativas = 0, prazo = $4, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-			args = append(args, agora.Add(r.cfg.TimeoutPasso))
-			break
-		}
-		sql = `UPDATE saga_passos SET tentativas = tentativas + 1, prazo = $4, atualizado_em = $3 WHERE saga_id = $1 AND passo = $2`
-		args = append(args, agora.Add(r.backoff(tentativas)))
-	default:
-		return fmt.Errorf("ação de passo desconhecida: %s", alt.Acao)
-	}
-	if _, err := tx.Exec(ctx, sql, args...); err != nil {
-		return fmt.Errorf("alterar passo %s: %w", alt.Passo, err)
-	}
-	return nil
-}
-
-// backoff exponencial a partir do timeout do passo, até 5 minutos entre tentativas.
-func (r *Repositorio) backoff(tentativas int) time.Duration {
-	d := r.cfg.TimeoutPasso
-	for i := 0; i < tentativas && d < 5*time.Minute; i++ {
-		d *= 2
-	}
-	return min(d, 5*time.Minute)
-}
-
-// acompanhado: o verificador de timeouts vigia os passos principais e as compensações
-// bloqueantes. As precautórias não são vigiadas nem reenviadas.
-func acompanhado(m saga.Mensagem) bool {
-	switch m.Passo {
-	case saga.T1, saga.T2, saga.T4, saga.T5:
-		return true
-	}
-	return m.Bloqueante
-}
-
-func passoDoEvento(ev saga.Evento) saga.Passo {
-	if ev.Tipo == saga.EvTimeout {
-		return ev.Passo
-	}
-	return map[saga.TipoEvento]saga.Passo{
-		saga.EvAnimalReservado: saga.T1, saga.EvReservaRecusada: saga.T1,
-		saga.EvPerfilValidado: saga.T2, saga.EvPerfilRecusado: saga.T2,
-		saga.EvAdocaoConfirmada: saga.T4, saga.EvConfirmacaoRecusada: saga.T4,
-		saga.EvAdocaoRegistrada: saga.T5, saga.EvReservaLiberada: saga.C1, saga.EvVagaLiberada: saga.C2,
-	}[ev.Tipo]
 }
 
 // Envelope padrão do catálogo (docs/contratos/eventos.md, seção 2).
@@ -458,32 +290,6 @@ type Envelope struct {
 	SagaID        string         `json:"sagaId"`
 	OccurredAt    string         `json:"occurredAt"`
 	Payload       map[string]any `json:"payload"`
-}
-
-type comandoGravado struct {
-	Tipo       string          `json:"tipo"`
-	Exchange   string          `json:"exchange"`
-	RoutingKey string          `json:"routingKey"`
-	Envelope   json.RawMessage `json:"envelope"`
-}
-
-func envelope(m saga.Mensagem, sagaID, correlationID string, agora time.Time) Envelope {
-	if correlationID == "" {
-		correlationID = sagaID
-	}
-	return Envelope{
-		MessageID: NovoUUID(), Type: m.Tipo, Version: 1, CorrelationID: correlationID,
-		SagaID: sagaID, OccurredAt: agora.Format(time.RFC3339Nano), Payload: m.Payload,
-	}
-}
-
-func inserirOutbox(ctx context.Context, tx pgx.Tx, sagaID, messageID, tipo, exchange, rk string, corpo []byte) error {
-	_, err := tx.Exec(ctx, `INSERT INTO outbox (message_id, saga_id, tipo, exchange, routing_key, payload) VALUES ($1, $2, $3, $4, $5, $6)`,
-		messageID, sagaID, tipo, exchange, rk, corpo)
-	if err != nil {
-		return fmt.Errorf("gravar outbox: %w", err)
-	}
-	return nil
 }
 
 func violaUnicidade(err error, constraint string) bool {

@@ -1,9 +1,11 @@
-// Teste de integração da SAGA: PostgreSQL e RabbitMQ reais, o orquestrador inteiro rodando
-// no processo (relay do outbox, consumidor de respostas e verificador de prazos) e
-// participantes simulados que respondem como o catálogo define.
+// Teste de integração da SAGA: PostgreSQL e RabbitMQ reais, o Orquestrador inteiro rodando
+// no processo (relay do outbox, os dois consumidores e o verificador de prazos), a Adoção
+// simulada publicando solicitacao.* e participantes simulados que respondem como o
+// catálogo define.
 //
-// Variáveis: ADOCAO_TEST_DATABASE_URL, ADOCAO_TEST_AMQP_URL (usuário adocao) e
-// ADOCAO_TEST_AMQP_ADMIN_URL (usuário admin, que simula os participantes e limpa as filas).
+// Variáveis: ORQUESTRADOR_TEST_DATABASE_URL, ORQUESTRADOR_TEST_AMQP_URL (usuário
+// orquestrador) e ORQUESTRADOR_TEST_AMQP_ADMIN_URL (usuário admin, que simula a Adoção e os
+// participantes e limpa as filas).
 package integracao
 
 import (
@@ -19,12 +21,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/gxbreus/ampara/services/adocao/internal/consumidor"
-	"github.com/gxbreus/ampara/services/adocao/internal/db"
-	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
-	"github.com/gxbreus/ampara/services/adocao/internal/prazos"
-	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
-	"github.com/gxbreus/ampara/services/adocao/internal/saga"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/consumidor"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/db"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/outbox"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/prazos"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/repositorio"
+	"github.com/gxbreus/ampara/services/orquestrador/internal/saga"
 )
 
 var silencioso = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -50,14 +52,16 @@ type ambiente struct {
 	repo  *repositorio.Repositorio
 	part  *participantes
 	admin *amqp.Connection
-	c     cenario
+	// canal da Adoção simulada, que publica solicitacao.*
+	adocao *amqp.Channel
+	c      cenario
 	// pausa do participante Animais: cancelar o contexto para de consumir
 	pararAnimais context.CancelFunc
 }
 
 func preparar(t *testing.T, c cenario) *ambiente {
 	t.Helper()
-	dbURL, amqpURL, adminURL := os.Getenv("ADOCAO_TEST_DATABASE_URL"), os.Getenv("ADOCAO_TEST_AMQP_URL"), os.Getenv("ADOCAO_TEST_AMQP_ADMIN_URL")
+	dbURL, amqpURL, adminURL := os.Getenv("ORQUESTRADOR_TEST_DATABASE_URL"), os.Getenv("ORQUESTRADOR_TEST_AMQP_URL"), os.Getenv("ORQUESTRADOR_TEST_AMQP_ADMIN_URL")
 	if dbURL == "" || amqpURL == "" || adminURL == "" {
 		t.Skip("variáveis de integração não definidas")
 	}
@@ -80,7 +84,8 @@ func preparar(t *testing.T, c cenario) *ambiente {
 	}
 	t.Cleanup(func() { admin.Close() })
 	limpeza, _ := admin.Channel()
-	for _, f := range []string{"animais.comandos", "identidade.comandos", "adocao.respostas", "notificacoes.eventos", "animais.projecao"} {
+	for _, f := range []string{"animais.comandos", "identidade.comandos", "orquestrador.respostas", "orquestrador.solicitacoes",
+		"adocao.saga", "notificacoes.eventos", "animais.projecao"} {
 		_, _ = limpeza.QueuePurge(f, false)
 	}
 
@@ -94,12 +99,17 @@ func preparar(t *testing.T, c cenario) *ambiente {
 		verif := prazos.Novo(repo, silencioso)
 		verif.Intervalo = 100 * time.Millisecond
 		go relay.Rodar(ctx)
-		go consumidor.Novo(repo, silencioso).Rodar(ctx, amqpURL)
+		go consumidor.Novo(repo, silencioso, consumidor.FilaSolicitacoes).Rodar(ctx, amqpURL)
+		go consumidor.Novo(repo, silencioso, consumidor.FilaRespostas).Rodar(ctx, amqpURL)
 		go verif.Rodar(ctx)
 	}
 
 	p := &participantes{reservas: map[string]string{}, vagas: map[string]string{}, compensadas: map[string]bool{}}
-	a := &ambiente{pool: pool, repo: repo, part: p, admin: admin, c: c}
+	adocao, err := admin.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &ambiente{pool: pool, repo: repo, part: p, admin: admin, adocao: adocao, c: c}
 	a.ligarAnimais(ctx, t)
 	if !c.identidadeFora {
 		go p.rodar(ctx, t, admin, "identidade.comandos", func(cmd comando) (string, map[string]any) { return p.identidade(cmd, c) })
@@ -139,7 +149,7 @@ func (p *participantes) rodar(ctx context.Context, t *testing.T, conn *amqp.Conn
 		tipo, payload := tratar(cmd)
 		corpo, _ := json.Marshal(map[string]any{"messageId": repositorio.NovoUUID(), "type": tipo, "version": 1,
 			"correlationId": cmd.CorrelationID, "sagaId": cmd.SagaID, "occurredAt": time.Now().UTC().Format(time.RFC3339), "payload": payload})
-		_ = canal.PublishWithContext(ctx, "ampara.respostas", "adocao", false, false, amqp.Publishing{ContentType: "application/json", Body: corpo})
+		_ = canal.PublishWithContext(ctx, "ampara.respostas", "orquestrador", false, false, amqp.Publishing{ContentType: "application/json", Body: corpo})
 		_ = d.Ack(false)
 	}
 }
@@ -192,12 +202,30 @@ const (
 	animal   = "65a2f1c4e8b9d3a7f0c1b2e9"
 )
 
-func (a *ambiente) criar(t *testing.T) string {
-	id := repositorio.NovoUUID()
-	if _, err := a.repo.Criar(context.Background(), repositorio.NovaSolicitacao{ID: id, AdotanteID: adotante, AnimalID: animal, CorrelationID: "c-" + t.Name()}); err != nil {
+// publicarDaAdocao simula a Adoção publicando uma solicitacao.* pelo outbox dela.
+func (a *ambiente) publicarDaAdocao(t *testing.T, tipo, id string, payload map[string]any) {
+	t.Helper()
+	payload["solicitacaoId"] = id
+	corpo, _ := json.Marshal(map[string]any{"messageId": repositorio.NovoUUID(), "type": tipo, "version": 1,
+		"correlationId": "c-" + t.Name(), "sagaId": id, "occurredAt": time.Now().UTC().Format(time.RFC3339), "payload": payload})
+	if err := a.adocao.PublishWithContext(context.Background(), "ampara.eventos", tipo, true, false,
+		amqp.Publishing{ContentType: "application/json", Body: corpo}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (a *ambiente) criar(t *testing.T) string {
+	id := repositorio.NovoUUID()
+	a.publicarDaAdocao(t, "solicitacao.criada", id, map[string]any{"adotanteId": adotante, "animalId": animal})
 	return id
+}
+
+func (a *ambiente) decidir(t *testing.T, id, decisao, motivo string) {
+	p := map[string]any{"decisao": decisao, "decididaPor": "c50a83ab-7db0-41b4-9436-4144c36f97d5"}
+	if motivo != "" {
+		p["motivo"] = motivo
+	}
+	a.publicarDaAdocao(t, "solicitacao.decidida", id, p)
 }
 
 func (a *ambiente) esperar(t *testing.T, id string, estado saga.Estado, limite time.Duration) {
@@ -205,19 +233,19 @@ func (a *ambiente) esperar(t *testing.T, id string, estado saga.Estado, limite t
 	fim := time.Now().Add(limite)
 	var atual string
 	for time.Now().Before(fim) {
-		_ = a.pool.QueryRow(context.Background(), `SELECT estado FROM solicitacoes WHERE id = $1`, id).Scan(&atual)
+		_ = a.pool.QueryRow(context.Background(), `SELECT estado FROM sagas WHERE id = $1`, id).Scan(&atual)
 		if atual == string(estado) {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("a solicitação ficou em %s, esperado %s", atual, estado)
+	t.Fatalf("a SAGA ficou em %s, esperado %s", atual, estado)
 }
 
 // eventos publicados (já confirmados pelo broker) para Notificações, em ordem
 func (a *ambiente) eventos(t *testing.T, id string) []string {
 	time.Sleep(300 * time.Millisecond) // dá tempo ao relay
-	rows, _ := a.pool.Query(context.Background(), `SELECT tipo FROM outbox WHERE saga_id = $1 AND exchange = 'ampara.eventos' AND publicado_em IS NOT NULL ORDER BY id`, id)
+	rows, _ := a.pool.Query(context.Background(), `SELECT tipo FROM outbox WHERE saga_id = $1 AND tipo LIKE 'adocao.%' AND publicado_em IS NOT NULL ORDER BY id`, id)
 	defer rows.Close()
 	var tipos []string
 	for rows.Next() {
@@ -240,6 +268,23 @@ func (a *ambiente) transicoes(t *testing.T, id string) []int {
 	return ns
 }
 
+// espelho: o que a Adoção recebeu em saga.transicao (versão e estado), em ordem
+func (a *ambiente) espelho(t *testing.T, id string) ([]int, []string) {
+	time.Sleep(300 * time.Millisecond) // dá tempo ao relay
+	rows, _ := a.pool.Query(context.Background(), `SELECT (payload->'payload'->>'versao')::int, payload->'payload'->>'estado'
+		FROM outbox WHERE saga_id = $1 AND tipo = 'saga.transicao' AND publicado_em IS NOT NULL ORDER BY id`, id)
+	defer rows.Close()
+	var versoes []int
+	var estados []string
+	for rows.Next() {
+		var v int
+		var e string
+		_ = rows.Scan(&v, &e)
+		versoes, estados = append(versoes, v), append(estados, e)
+	}
+	return versoes, estados
+}
+
 func iguais[T comparable](a, b []T) bool {
 	if len(a) != len(b) {
 		return false
@@ -260,15 +305,18 @@ func TestCaminhoFelizAteConcluida(t *testing.T) {
 	if d := time.Since(inicio); d > 3*time.Second {
 		t.Errorf("chegou a AGUARDANDO_APROVACAO em %s; o critério é < 3 s", d)
 	}
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvAprovacao}); err != nil {
-		t.Fatal(err)
-	}
+	a.decidir(t, id, "APROVADA", "")
 	a.esperar(t, id, saga.Concluida, 5*time.Second)
 	if got := a.transicoes(t, id); !iguais(got, []int{1, 2, 5, 8, 14, 15}) {
 		t.Errorf("transições %v", got)
 	}
 	if got := a.eventos(t, id); !iguais(got, []string{"adocao.aguardando_aprovacao", "adocao.aprovada", "adocao.concluida"}) {
 		t.Errorf("eventos %v", got)
+	}
+	versoes, estados := a.espelho(t, id)
+	if !iguais(versoes, []int{1, 2, 3, 4, 5, 6}) ||
+		!iguais(estados, []string{"SOLICITADA", "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO", "APROVADA", "APROVADA", "CONCLUIDA"}) {
+		t.Errorf("saga.transicao para a Adoção: versões %v, estados %v", versoes, estados)
 	}
 }
 
@@ -310,7 +358,7 @@ func TestIdentidadeForaDoAr(t *testing.T) {
 		t.Errorf("transições %v (timeout do T2, C1 bloqueante, FALHOU)", got)
 	}
 	var motivo string
-	_ = a.pool.QueryRow(context.Background(), `SELECT motivo FROM solicitacoes WHERE id = $1`, id).Scan(&motivo)
+	_ = a.pool.QueryRow(context.Background(), `SELECT motivo FROM sagas WHERE id = $1`, id).Scan(&motivo)
 	if motivo != "TIMEOUT_T2" {
 		t.Errorf("motivo %q", motivo)
 	}
@@ -320,9 +368,7 @@ func TestRecusaEsperaAsDuasCompensacoes(t *testing.T) {
 	a := preparar(t, cenario{})
 	id := a.criar(t)
 	a.esperar(t, id, saga.AguardandoAprovacao, 5*time.Second)
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRecusa, Motivo: "sem tela"}); err != nil {
-		t.Fatal(err)
-	}
+	a.decidir(t, id, "RECUSADA", "sem tela")
 	a.esperar(t, id, saga.Recusada, 5*time.Second)
 	if got := a.eventos(t, id); !iguais(got, []string{"adocao.aguardando_aprovacao", "adocao.recusada"}) {
 		t.Errorf("eventos %v", got)
@@ -341,14 +387,12 @@ func TestCompensacaoComParticipanteForaDoArReenviaAteResponder(t *testing.T) {
 
 	a.pararAnimais() // Animais sai do ar antes da recusa
 	time.Sleep(200 * time.Millisecond)
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRecusa}); err != nil {
-		t.Fatal(err)
-	}
+	a.decidir(t, id, "RECUSADA", "")
 	time.Sleep(3500 * time.Millisecond) // alguns timeouts de 1 s, com backoff
 
 	var estado string
 	var linhas, ids, tentativas int
-	_ = a.pool.QueryRow(context.Background(), `SELECT estado FROM solicitacoes WHERE id = $1`, id).Scan(&estado)
+	_ = a.pool.QueryRow(context.Background(), `SELECT estado FROM sagas WHERE id = $1`, id).Scan(&estado)
 	_ = a.pool.QueryRow(context.Background(), `SELECT count(*), count(DISTINCT message_id) FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva'`, id).Scan(&linhas, &ids)
 	_ = a.pool.QueryRow(context.Background(), `SELECT tentativas FROM saga_passos WHERE saga_id = $1 AND passo = 'C1'`, id).Scan(&tentativas)
 	if estado != "COMPENSANDO" || linhas < 2 || ids != 1 || tentativas < 1 {
@@ -363,9 +407,7 @@ func TestDuasReplicasPublicamCadaComandoUmaVez(t *testing.T) {
 	a := preparar(t, cenario{replicas: 2})
 	id := a.criar(t)
 	a.esperar(t, id, saga.AguardandoAprovacao, 5*time.Second)
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvAprovacao}); err != nil {
-		t.Fatal(err)
-	}
+	a.decidir(t, id, "APROVADA", "")
 	a.esperar(t, id, saga.Concluida, 5*time.Second)
 	time.Sleep(500 * time.Millisecond)
 	a.part.mu.Lock()
@@ -385,7 +427,7 @@ func TestDuasReplicasPublicamCadaComandoUmaVez(t *testing.T) {
 	}
 }
 
-// #86: Animais falha na LiberarReserva (mensagem envenenada); a Adoção para no teto,
+// #86: Animais falha na LiberarReserva (mensagem envenenada); o Orquestrador para no teto,
 // marca a intervenção, e um ADMIN retoma depois da correção.
 func TestTetoIntervencaoERetomada(t *testing.T) {
 	a := preparar(t, cenario{})
@@ -394,22 +436,23 @@ func TestTetoIntervencaoERetomada(t *testing.T) {
 
 	a.pararAnimais() // o handler de Animais "quebrado": não responde
 	time.Sleep(200 * time.Millisecond)
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRecusa}); err != nil {
-		t.Fatal(err)
-	}
+	a.decidir(t, id, "RECUSADA", "")
 	// teto de 5 reenvios, com backoff a partir de 1 s (até ~31 s); espera a intervenção
 	fim := time.Now().Add(60 * time.Second)
 	var intervencao bool
 	for time.Now().Before(fim) && !intervencao {
-		_ = a.pool.QueryRow(context.Background(), `SELECT requer_intervencao FROM solicitacoes WHERE id = $1`, id).Scan(&intervencao)
+		_ = a.pool.QueryRow(context.Background(), `SELECT requer_intervencao FROM sagas WHERE id = $1`, id).Scan(&intervencao)
 		time.Sleep(200 * time.Millisecond)
 	}
 	if !intervencao {
 		t.Fatal("a solicitação deveria ter parado no teto e pedido intervenção")
 	}
-	itens, _, err := a.repo.Listar(context.Background(), repositorio.Filtro{RequerIntervencao: ptr(true)})
-	if err != nil || len(itens) != 1 || itens[0].ID != id {
-		t.Fatalf("a fila de intervenção deveria listar a solicitação: %v %v", itens, err)
+	// a Adoção fica sabendo pelo saga.transicao, que é o que alimenta a fila de intervenção dela
+	var avisou bool
+	_ = a.pool.QueryRow(context.Background(), `SELECT bool_or((payload->'payload'->>'requerIntervencao')::boolean)
+		FROM outbox WHERE saga_id = $1 AND tipo = 'saga.transicao'`, id).Scan(&avisou)
+	if !avisou {
+		t.Fatal("algum saga.transicao deveria levar requerIntervencao = true à Adoção")
 	}
 	var status string
 	var tentativas int
@@ -432,9 +475,7 @@ func TestTetoIntervencaoERetomada(t *testing.T) {
 		t.Fatalf("limpar a fila (%d): %v", q, err)
 	}
 	a.ligarAnimais(context.Background(), t)
-	if _, err := a.repo.Aplicar(context.Background(), id, saga.Evento{Tipo: saga.EvRetomada}); err != nil {
-		t.Fatal(err)
-	}
+	a.publicarDaAdocao(t, "solicitacao.retomada", id, map[string]any{"pedidaPor": "ad000000-0000-4000-8000-000000000001"})
 	a.esperar(t, id, saga.Recusada, 10*time.Second)
 	var ids int
 	_ = a.pool.QueryRow(context.Background(), `SELECT count(DISTINCT message_id) FROM outbox WHERE saga_id = $1 AND tipo = 'LiberarReserva'`, id).Scan(&ids)
@@ -443,7 +484,6 @@ func TestTetoIntervencaoERetomada(t *testing.T) {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
 
 func mustCanal(t *testing.T, a *ambiente) *amqp.Channel {
 	c, err := a.admin.Channel()

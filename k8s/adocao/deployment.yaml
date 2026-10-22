@@ -1,6 +1,6 @@
-# Com 2 réplicas, o relay do outbox e o job de expiração rodam nas duas. A #58 resolve isso
-# com SELECT ... FOR UPDATE SKIP LOCKED (docs/dados.md, seção 5.3): cada réplica pega um
-# lote diferente e nenhuma linha é publicada ou expirada em dobro.
+# Com 2 réplicas, o relay do outbox roda nas duas: SELECT ... FOR UPDATE SKIP LOCKED
+# (docs/dados.md, seção 5.3) faz cada réplica pegar um lote diferente, e nenhuma linha é
+# publicada em dobro. A SAGA em si roda no Orquestrador (ADR-008).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

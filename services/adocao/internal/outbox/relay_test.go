@@ -131,7 +131,7 @@ func TestDuasReplicasNaoPublicamEmDobro(t *testing.T) {
 	}
 }
 
-// Com RabbitMQ real (ADOCAO_TEST_AMQP_URL, usuário com permissão de publicar em ampara.comandos).
+// Com RabbitMQ real (ADOCAO_TEST_AMQP_URL, usuário adocao, que só publica em ampara.eventos).
 func TestPublicadorAMQPReal(t *testing.T) {
 	url := os.Getenv("ADOCAO_TEST_AMQP_URL")
 	if url == "" {
@@ -139,8 +139,8 @@ func TestPublicadorAMQPReal(t *testing.T) {
 	}
 	p := NovoPublicadorAMQP(url)
 	defer p.Fechar()
-	m := Mensagem{MessageID: "11111111-2222-4333-8444-555555555555", Tipo: "ReservarAnimal", Exchange: "ampara.comandos",
-		RoutingKey: "animais", CorrelationID: "c-amqp", Corpo: []byte(`{"type":"ReservarAnimal"}`)}
+	m := Mensagem{MessageID: "11111111-2222-4333-8444-555555555555", Tipo: "solicitacao.criada", Exchange: "ampara.eventos",
+		RoutingKey: "solicitacao.criada", CorrelationID: "c-amqp", Corpo: []byte(`{"type":"solicitacao.criada"}`)}
 	if err := p.Publicar(context.Background(), m); err != nil {
 		t.Fatalf("publicar com confirm: %v", err)
 	}

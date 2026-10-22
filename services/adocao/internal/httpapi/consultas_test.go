@@ -80,17 +80,17 @@ func TestAcoesPorPapelEEstado(t *testing.T) {
 	casos := []struct {
 		nome, caminho, sub, role, corpo string
 		status                          int
-		estado, desfecho                string
+		decisao                         string
 	}{
-		{"responsável aprova", "aprovacao", responsavelID, "ONG", "", 202, "APROVADA", ""},
-		{"responsável recusa com motivo", "recusa", responsavelID, "ONG", `{"motivo":"sem tela"}`, 202, "COMPENSANDO", "RECUSADA"},
-		{"responsável recusa sem corpo", "recusa", responsavelID, "ONG", "", 202, "COMPENSANDO", "RECUSADA"},
-		{"adotante cancela", "cancelamento", adotanteID, "ADOTANTE", "", 202, "COMPENSANDO", "CANCELADA"},
-		{"adotante tenta aprovar", "aprovacao", adotanteID, "ADOTANTE", "", 403, "", ""},
-		{"responsável tenta cancelar", "cancelamento", responsavelID, "ONG", "", 403, "", ""},
-		{"ADMIN tenta aprovar", "aprovacao", outroID, "ADMIN", "", 403, "", ""},
-		{"recusa com campo desconhecido", "recusa", responsavelID, "ONG", `{"motivo":"x","nota":1}`, 422, "", ""},
-		{"recusa com motivo longo", "recusa", responsavelID, "ONG", `{"motivo":"` + strings.Repeat("a", 501) + `"}`, 422, "", ""},
+		{"responsável aprova", "aprovacao", responsavelID, "ONG", "", 202, "APROVADA"},
+		{"responsável recusa com motivo", "recusa", responsavelID, "ONG", `{"motivo":"sem tela"}`, 202, "RECUSADA"},
+		{"responsável recusa sem corpo", "recusa", responsavelID, "ONG", "", 202, "RECUSADA"},
+		{"adotante cancela", "cancelamento", adotanteID, "ADOTANTE", "", 202, "CANCELADA"},
+		{"adotante tenta aprovar", "aprovacao", adotanteID, "ADOTANTE", "", 403, ""},
+		{"responsável tenta cancelar", "cancelamento", responsavelID, "ONG", "", 403, ""},
+		{"ADMIN tenta aprovar", "aprovacao", outroID, "ADMIN", "", 403, ""},
+		{"recusa com campo desconhecido", "recusa", responsavelID, "ONG", `{"motivo":"x","nota":1}`, 422, ""},
+		{"recusa com motivo longo", "recusa", responsavelID, "ONG", `{"motivo":"` + strings.Repeat("a", 501) + `"}`, 422, ""},
 	}
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
@@ -102,15 +102,17 @@ func TestAcoesPorPapelEEstado(t *testing.T) {
 			}
 			if c.status != 202 {
 				if len(repo.eventos) != 0 {
-					t.Fatalf("nenhuma transição deveria ter sido aplicada: %v", repo.eventos)
+					t.Fatalf("nenhuma decisão deveria ter sido registrada: %v", repo.eventos)
 				}
 				return
 			}
-			if corpo["estado"] != c.estado || (c.desfecho != "" && corpo["desfecho"] != c.desfecho) {
-				t.Fatalf("estado %v, desfecho %v", corpo["estado"], corpo["desfecho"])
+			// o estado só muda quando o Orquestrador processar; até lá, a decisão aparece
+			// e as ações somem, para ninguém decidir duas vezes
+			if corpo["estado"] != "AGUARDANDO_APROVACAO" || corpo["decisao"] != c.decisao {
+				t.Fatalf("estado %v, decisão %v", corpo["estado"], corpo["decisao"])
 			}
-			if links := corpo["_links"].(map[string]any); links["aprovar"] != nil || links["cancelar"] != nil {
-				t.Fatalf("fora de AGUARDANDO_APROVACAO não há ações: %v", links)
+			if links := corpo["_links"].(map[string]any); links["aprovar"] != nil || links["recusar"] != nil || links["cancelar"] != nil {
+				t.Fatalf("depois da decisão não há ações: %v", links)
 			}
 		})
 	}
@@ -127,7 +129,11 @@ func TestDuploCliqueNaAprovacaoDa409(t *testing.T) {
 		t.Fatalf("segunda: %d %v", rec.Code, corpo)
 	}
 	if len(repo.eventos) != 1 {
-		t.Fatalf("só uma aprovação deveria ter sido aplicada: %v", repo.eventos)
+		t.Fatalf("só uma aprovação deveria ter sido registrada: %v", repo.eventos)
+	}
+	// cancelar depois de aprovado também é recusado: a decisão é uma só
+	if rec, _ := chamar(t, repo, "POST", "/v1/solicitacoes/s1/cancelamento", adotanteID, "ADOTANTE", ""); rec.Code != 409 {
+		t.Fatalf("cancelar depois da aprovação: %d", rec.Code)
 	}
 }
 
@@ -220,8 +226,13 @@ func TestRetomadaSoParaAdmin(t *testing.T) {
 	if rec, _ := chamar(t, repo, "POST", "/v1/solicitacoes/nao-existe/compensacao/retomada", outroID, "ADMIN", ""); rec.Code != 404 {
 		t.Errorf("inexistente: %d, esperado 404", rec.Code)
 	}
-	// o repositório falso não tem passos: a máquina não acha passo esgotado e responde 409
-	rec, corpo := chamar(t, repo, "POST", "/v1/solicitacoes/s1/compensacao/retomada", outroID, "ADMIN", "")
+	// ADMIN numa SAGA parada: 202, e o pedido vai ao Orquestrador
+	if rec, _ := chamar(t, repo, "POST", "/v1/solicitacoes/s1/compensacao/retomada", outroID, "ADMIN", ""); rec.Code != 202 || repo.retomadas != 1 {
+		t.Errorf("retomada: %d, %d pedidos", rec.Code, repo.retomadas)
+	}
+	// sem intervenção pendente, não há o que retomar
+	aguardando(repo, "s2")
+	rec, corpo := chamar(t, repo, "POST", "/v1/solicitacoes/s2/compensacao/retomada", outroID, "ADMIN", "")
 	if rec.Code != 409 || corpo["type"] != "https://ampara.dev/problemas/nada-a-retomar" {
 		t.Errorf("sem passo esgotado: %d %v", rec.Code, corpo)
 	}

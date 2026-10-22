@@ -59,7 +59,8 @@ type repoFalso struct {
 	chaves   map[string]string
 	errCriar error
 	visoes   map[string]repositorio.Visao
-	eventos  []saga.TipoEvento
+	eventos  []saga.Decisao
+	retomadas int
 	filtros  []repositorio.Filtro
 }
 
@@ -87,22 +88,31 @@ func (r *repoFalso) Obter(_ context.Context, id string) (repositorio.Visao, erro
 	return v, nil
 }
 
-// Aplicar usa a máquina de estados de verdade, só sem banco.
-func (r *repoFalso) Aplicar(_ context.Context, id string, ev saga.Evento) (saga.Saida, error) {
+// Decidir segue a regra do repositório real: só em AGUARDANDO_APROVACAO e uma vez.
+func (r *repoFalso) Decidir(_ context.Context, id string, d saga.Decisao, _, _ string) error {
 	v, ok := r.visoes[id]
 	if !ok {
-		return saga.Saida{}, repositorio.ErrNaoEncontrada // como o repositório real
+		return repositorio.ErrNaoEncontrada
 	}
-	s := saga.Solicitacao{ID: id, AdotanteID: v.AdotanteID, AnimalID: v.AnimalID, ResponsavelID: v.ResponsavelID, Estado: v.Estado,
-		RequerIntervencao: v.RequerIntervencao}
-	out, err := saga.Transicao(s, ev, saga.Regras{Agora: time.Now(), PrazoDecisao: time.Hour, MaxReenvios: 3})
-	if err != nil {
-		return out, err
+	if v.Estado != saga.AguardandoAprovacao || v.Decisao != "" {
+		return repositorio.ErrEstadoNaoPermite
 	}
-	r.eventos = append(r.eventos, ev.Tipo)
-	v.Estado, v.Desfecho, v.Motivo = out.Solicitacao.Estado, out.Solicitacao.Desfecho, out.Solicitacao.Motivo
+	r.eventos = append(r.eventos, d)
+	v.Decisao = d
 	r.visoes[id] = v
-	return out, nil
+	return nil
+}
+
+func (r *repoFalso) Retomar(_ context.Context, id, _ string) error {
+	v, ok := r.visoes[id]
+	if !ok {
+		return repositorio.ErrNaoEncontrada
+	}
+	if !v.RequerIntervencao {
+		return repositorio.ErrEstadoNaoPermite
+	}
+	r.retomadas++
+	return nil
 }
 
 func (r *repoFalso) Listar(_ context.Context, f repositorio.Filtro) ([]repositorio.Visao, string, error) {

@@ -3,10 +3,7 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
-	"strconv"
-	"time"
 )
 
 type Config struct {
@@ -14,11 +11,10 @@ type Config struct {
 	DatabaseURL  string
 	AMQPURL      string
 	JWTPublicKey string
-	TimeoutPasso time.Duration
-	PrazoDecisao time.Duration
-	MaxReenvios  int
 }
 
+// Carregar lê a configuração. Os prazos e o teto de reenvios da SAGA são do Orquestrador
+// (ORQUESTRADOR_*), não da Adoção.
 func Carregar() (Config, error) {
 	c := Config{
 		Porta:       valorOuPadrao("ADOCAO_PORTA", "8080"),
@@ -36,25 +32,7 @@ func Carregar() (Config, error) {
 	if c.JWTPublicKey == "" {
 		return c, errors.New("JWT_PUBLIC_KEY não definida")
 	}
-	var err error
-	if c.TimeoutPasso, err = duracao("ADOCAO_TIMEOUT_PASSO", "10s"); err != nil {
-		return c, err
-	}
-	if c.PrazoDecisao, err = duracao("ADOCAO_PRAZO_EXPIRACAO", "72h"); err != nil {
-		return c, err
-	}
-	if c.MaxReenvios, err = strconv.Atoi(valorOuPadrao("ADOCAO_MAX_REENVIOS_COMPENSACAO", "10")); err != nil {
-		return c, fmt.Errorf("ADOCAO_MAX_REENVIOS_COMPENSACAO: %w", err)
-	}
 	return c, nil
-}
-
-func duracao(chave, padrao string) (time.Duration, error) {
-	d, err := time.ParseDuration(valorOuPadrao(chave, padrao))
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", chave, err)
-	}
-	return d, nil
 }
 
 func valorOuPadrao(chave, padrao string) string {

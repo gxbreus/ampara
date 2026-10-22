@@ -1,4 +1,5 @@
-// Comando adocao: o serviço de Adoção, orquestrador da SAGA (#58).
+// Comando adocao: o serviço de Adoção. Guarda a solicitação como o usuário a vê; a SAGA é
+// coordenada pelo Orquestrador (ADR-008).
 //
 //	adocao              sobe o servidor HTTP
 //	adocao healthcheck  confere o /health; usado pelo healthcheck do contêiner,
@@ -21,7 +22,6 @@ import (
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/httpapi"
 	"github.com/gxbreus/ampara/services/adocao/internal/outbox"
-	"github.com/gxbreus/ampara/services/adocao/internal/prazos"
 	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
 )
 
@@ -30,12 +30,7 @@ func main() {
 		os.Exit(healthcheck())
 	}
 
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-		if a.Key == slog.LevelKey && a.Value.Any() == prazos.NivelCritico {
-			a.Value = slog.StringValue("CRITICAL")
-		}
-		return a
-	}})).With("servico", "adocao")
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("servico", "adocao")
 	if err := executar(log); err != nil {
 		log.Error("serviço encerrado com erro", "erro", err.Error())
 		os.Exit(1)
@@ -71,13 +66,10 @@ func executar(log *slog.Logger) error {
 	defer publicador.Fechar()
 	go outbox.NovoRelay(pool, publicador, log).Rodar(ctx)
 
-	repo := repositorio.Novo(pool, repositorio.Config{
-		TimeoutPasso: cfg.TimeoutPasso, PrazoDecisao: cfg.PrazoDecisao, MaxReenvios: cfg.MaxReenvios,
-	})
+	repo := repositorio.Novo(pool, repositorio.Config{})
+	// o espelho da SAGA: saga.transicao, publicado pelo Orquestrador
 	go consumidor.Novo(repo, log).Rodar(ctx, cfg.AMQPURL)
 	go consumidor.NovoAlertaDLQ(log).Rodar(ctx, cfg.AMQPURL)
-	// timeouts, expiração e retomada depois de um reinício
-	go prazos.Novo(repo, log).Rodar(ctx)
 
 	hostname, _ := os.Hostname()
 	srv := &http.Server{
