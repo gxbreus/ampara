@@ -156,6 +156,7 @@ services:
       RABBITMQ_IDENTIDADE_PASSWORD: ${RABBITMQ_IDENTIDADE_PASSWORD:?defina no .env}
       RABBITMQ_NOTIFICACOES_PASSWORD: ${RABBITMQ_NOTIFICACOES_PASSWORD:?defina no .env}
       RABBITMQ_ORQUESTRADOR_PASSWORD: ${RABBITMQ_ORQUESTRADOR_PASSWORD:?defina no .env}
+      RABBITMQ_BFF_WEB_PASSWORD: ${RABBITMQ_BFF_WEB_PASSWORD:?defina no .env}
     ports: ["127.0.0.1:15672:15672"]   # painel, só em desenvolvimento e só nesta máquina
     volumes: [rabbitmq-data:/var/lib/rabbitmq]
     networks: [services]
@@ -239,6 +240,8 @@ services:
     environment:
       ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
       ANIMAIS_LEITURA_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais_leitura?replicaSet=rs0&authSource=admin
+      # sem a chave, Animais aceitaria qualquer token sem conferir a assinatura
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
     networks: [services, data-animais]
     depends_on:
       mongo-animais: { condition: service_healthy }
@@ -259,11 +262,14 @@ services:
       IDENTIDADE_URL: http://identidade:3001
       ANIMAIS_URL: http://animais:8001
       ADOCAO_URL: http://adocao:8080
+      # eventos em tempo real para o painel (GET /web/v1/eventos)
+      BFF_WEB_AMQP_URL: amqp://bff-web:${RABBITMQ_BFF_WEB_PASSWORD}@rabbitmq:5672/
     networks: [edge, services]
     depends_on:
       identidade: { condition: service_healthy }
       adocao: { condition: service_healthy }
       animais: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/web/v1/health >/dev/null || exit 1"]
       interval: 10s

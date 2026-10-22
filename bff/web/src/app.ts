@@ -2,6 +2,8 @@ import Fastify, { LogController, type FastifyError, type FastifyInstance } from 
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { rotasDeAdmin } from "./admin.js";
+import { rotaDoPainel, rotasDeAnimais } from "./animais.js";
+import { Hub, rotaDeEventos } from "./eventos.js";
 import { exigirRoles, type Verificador } from "./auth.js";
 import type { Cliente } from "./cliente.js";
 import type { Config } from "./config.js";
@@ -13,10 +15,12 @@ interface Dependencias {
   config: Config;
   verificar: Verificador;
   chamar: Cliente;
+  // eventos em tempo real; sem hub, /web/v1/eventos responde 503
+  hub?: Hub;
   logger?: boolean;
 }
 
-export function criarApp({ config, verificar, chamar, logger = true }: Dependencias): FastifyInstance {
+export function criarApp({ config, verificar, chamar, hub, logger = true }: Dependencias): FastifyInstance {
   const app = Fastify({
     logger: logger ? { level: process.env.LOG_LEVEL ?? "info" } : false,
     // o X-Correlation-Id vira o id da requisição e aparece em todo log como correlationId
@@ -70,6 +74,14 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
         return reply.code(resp.status).type(resp.headers.get("content-type") ?? "application/json").send(corpo);
       });
 
+      if (hub) {
+        rotaDeEventos(r, { verificar, hub });
+      } else {
+        r.get("/eventos", (_req, reply) =>
+          problema(reply, 503, "servico-indisponivel", "Serviço indisponível", "Eventos em tempo real desligados (sem BFF_WEB_AMQP_URL)."));
+      }
+      rotaDoPainel(r, { config, verificar, chamar });
+      rotasDeAnimais(r, { config, verificar, chamar });
       rotasDeSolicitacoes(r, { config, verificar, chamar });
       rotasDeAdmin(r, { config, verificar, chamar });
       done();

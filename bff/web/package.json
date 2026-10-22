@@ -16,6 +16,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "amqplib": "^2.2.0",
     "fastify": "^5.12.5",
     "jose": "^5.10.0",
     "undici": "^6.29.0"
