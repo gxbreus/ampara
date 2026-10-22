@@ -29,6 +29,10 @@ spec:
           envFrom:
             - configMapRef: { name: bff-web-config }
             - configMapRef: { name: bff-web-jwt }
+          env:
+            # eventos em tempo real para o painel; cada réplica tem a própria fila no RabbitMQ
+            - name: BFF_WEB_AMQP_URL
+              valueFrom: { secretKeyRef: { name: bff-web-secret, key: BFF_WEB_AMQP_URL } }
           # Readiness em /web/v1/health, e não em /web/v1/ready. O /ready do BFF checa os
           # serviços chamados; usado como readiness, um serviço fora do ar tiraria o BFF
           # inteiro do balanceamento e derrubaria o painel todo, quando o contrato (#29)

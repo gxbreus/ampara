@@ -11,6 +11,7 @@ set -eu
 : "${RABBITMQ_IDENTIDADE_PASSWORD:?defina RABBITMQ_IDENTIDADE_PASSWORD}"
 : "${RABBITMQ_NOTIFICACOES_PASSWORD:?defina RABBITMQ_NOTIFICACOES_PASSWORD}"
 : "${RABBITMQ_ORQUESTRADOR_PASSWORD:?defina RABBITMQ_ORQUESTRADOR_PASSWORD}"
+: "${RABBITMQ_BFF_WEB_PASSWORD:?defina RABBITMQ_BFF_WEB_PASSWORD}"
 
 PRONTO=/tmp/ampara-usuarios-prontos
 rm -f "$PRONTO"
@@ -59,6 +60,10 @@ permitir adocao       "$RABBITMQ_ADOCAO_PASSWORD"       "" '^$' '^ampara\.evento
 permitir animais      "$RABBITMQ_ANIMAIS_PASSWORD"      "" '^$' '^ampara\.(respostas|eventos)$' '^animais\.(comandos|projecao)(\.dlq)?$'
 permitir identidade   "$RABBITMQ_IDENTIDADE_PASSWORD"   "" '^$' '^ampara\.(respostas|eventos)$' '^identidade\.comandos(\.dlq)?$'
 permitir notificacoes "$RABBITMQ_NOTIFICACOES_PASSWORD" "" '^$' '^$'                            '^notificacoes\.eventos(\.dlq)?$'
+# O BFF Web repassa eventos ao painel aberto (SSE). Cada réplica cria a própria fila
+# exclusiva (amq.gen-*, apagada quando ela cai) e a liga a ampara.eventos: com uma fila fixa,
+# cada evento iria para uma réplica só e o painel ligado à outra não o veria.
+permitir bff-web      "$RABBITMQ_BFF_WEB_PASSWORD"      "" '^amq\.gen-.*' '^amq\.gen-.*'           '^(ampara\.eventos|amq\.gen-.*)$'
 rabbitmqctl delete_user guest >/dev/null 2>&1 || true
 
 touch "$PRONTO"

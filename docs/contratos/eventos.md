@@ -69,10 +69,11 @@ Todas são **quorum queues** duráveis, com `x-delivery-limit: 5`, `x-dead-lette
 | `adocao.saga` | `ampara.eventos` / `saga.transicao` | Adoção | `adocao.saga.dlq` |
 | `animais.projecao` | `ampara.eventos` / `animal.*` e `conta.verificada` | Animais (projetor) | `animais.projecao.dlq` |
 | `notificacoes.eventos` | `ampara.eventos` / `adocao.*` e `conta.verificada` | Notificações | `notificacoes.eventos.dlq` |
+| `amq.gen-*` (uma por réplica do BFF Web) | `ampara.eventos` / `adocao.*` e `animal.*` | BFF Web, que repassa ao painel aberto por SSE | não tem |
 
 Os prefixos separam os públicos: `solicitacao.*` é o que a Adoção entrega ao Orquestrador, `saga.*` é o espelho que volta para a Adoção, e `adocao.*` são os fatos de negócio que Notificações (e, em breve, os BFFs) consomem. Com isso, `adocao.*` não arrasta para a Notificações mensagens que não são para ela.
 
-A topologia é criada uma vez, pelo `definitions.json` do broker (#89). Nenhum serviço declara exchange ou fila no código.
+A topologia é criada uma vez, pelo `definitions.json` do broker (#89). Nenhum serviço declara exchange ou fila no código, com uma exceção: o **BFF Web** cria, ao subir, uma fila exclusiva com nome gerado pelo broker (`amq.gen-*`), apagada quando a réplica cai. Ele só repassa eventos ao painel aberto e não guarda nada, então cada réplica precisa receber todos os eventos para entregar às conexões que estão com ela; uma fila fixa entregaria cada evento a uma réplica só. Por ser descartável, essa fila não tem DLQ: um evento inválido é ignorado com log, e o painel recarrega os dados ao reconectar.
 
 ## 2. Envelope
 
@@ -2464,8 +2465,9 @@ Cada serviço tem o próprio usuário no RabbitMQ, com permissão só para o que
 | `animais` | `ampara.respostas`, `ampara.eventos` | `animais.comandos`, `animais.projecao` e as DLQs delas |
 | `identidade` | `ampara.respostas`, `ampara.eventos` | `identidade.comandos`, `identidade.comandos.dlq` |
 | `notificacoes` | — | `notificacoes.eventos`, `notificacoes.eventos.dlq` |
+| `bff-web` | — (só liga a própria fila a `ampara.eventos`) | `ampara.eventos` e as filas `amq.gen-*` que ele mesmo cria |
 
-Nenhum serviço tem permissão `configure`: a topologia vem só do `definitions.json`.
+Nenhum serviço tem permissão `configure`, exceto o `bff-web` sobre `amq.gen-*`: a topologia vem do `definitions.json`, e a fila descartável do BFF Web é a única criada em tempo de execução.
 
 ## 8. Decisões registradas
 

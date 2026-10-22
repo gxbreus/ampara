@@ -9,5 +9,9 @@ configMapGenerator:
   # chave pública do JWT: não é segredo, mas é gerada por ambiente (scripts/k8s-prep.sh)
   - name: bff-web-jwt
     files: [JWT_PUBLIC_KEY=jwt.pub]
+secretGenerator:
+  # a URL do RabbitMQ com a senha do usuário bff-web (scripts/k8s-prep.sh gera o secret.env)
+  - name: bff-web-secret
+    envs: [secret.env]
 generatorOptions:
   disableNameSuffixHash: true

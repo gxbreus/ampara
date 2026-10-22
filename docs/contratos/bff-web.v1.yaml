@@ -37,6 +37,8 @@ info:
       opcional. Nenhum cliente consumia essas rotas ainda.
     - As solicitações trazem `decisao`, a decisão já registrada na Adoção e
       ainda não processada pelo Orquestrador (ADR-008).
+    - `GET /web/v1/eventos` repassa ao painel aberto, por Server-Sent Events,
+      os eventos `adocao.*` e `animal.*` do responsável (revisão da Parte 2).
     ## Falha parcial
 
     Cada rota tem um serviço **essencial** e, às vezes, serviços
@@ -628,6 +630,48 @@ paths:
           $ref: '#/components/responses/EstadoNaoPermiteAcao'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/ServicoIndisponivel'
+  /web/v1/eventos:
+    get:
+      tags: [Painel]
+      summary: Eventos do responsável em tempo real (Server-Sent Events)
+      description: |
+        Stream `text/event-stream` com os eventos `adocao.*` e `animal.*` cujo
+        dono é o responsável do token: o painel atualiza a solicitação ou o
+        animal sem recarregar. O BFF consome os eventos do RabbitMQ numa fila
+        própria de cada réplica e não guarda nada: um evento que chega sem o
+        painel conectado é descartado, e o painel recarrega os dados ao
+        reconectar.
+
+        Cada evento traz `id` (o `messageId`), `event` (o tipo do catálogo,
+        `docs/contratos/eventos.md`) e `data` com `tipo`, `ocorridoEm` e
+        `dados` (o payload do catálogo). Uma linha de comentário `: ping` sai
+        a cada 20 s para a conexão não cair no gateway. O navegador lê com
+        `fetch` e `ReadableStream`, porque o `EventSource` nativo não envia o
+        header `Authorization`.
+      operationId: eventosDoPainel
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Stream aberto.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                retry: 3000
+                : conectado
+
+                id: 9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e
+                event: adocao.aguardando_aprovacao
+                data: {"tipo":"adocao.aguardando_aprovacao","ocorridoEm":"2026-11-17T15:00:02Z","dados":{"solicitacaoId":"7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17","animalId":"65a2f1c4e8b9d3a7f0c1b2e9","animalNome":"Thor","adotanteId":"5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55","responsavelId":"c50a83ab-7db0-41b4-9436-4144c36f97d5","expiraEm":"2026-11-20T15:00:00Z"}}
+
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
         '503':
           $ref: '#/components/responses/ServicoIndisponivel'
   /web/v1/eu:

@@ -15,7 +15,7 @@ O schema de resposta do Fastify define exatamente os campos que o cliente recebe
 ## Rodar
 
 ```bash
-docker compose up -d --build bff-web   # sobe também a Adoção, o banco dela e o RabbitMQ
+docker compose up -d --build bff-web   # sobe também Identidade, Animais, Adoção e o RabbitMQ
 npm ci && npm test                      # testes, dentro de bff/web
 npm run dev                             # local, com JWT_PUBLIC_KEY e as URLs dos serviços no ambiente
 ```
@@ -30,6 +30,7 @@ npm run dev                             # local, com JWT_PUBLIC_KEY e as URLs do
 | `POST /web/v1/animais` | `PROTETOR`, `ONG` ou `ADMIN` | cadastra em Animais, convertendo a localização para GeoJSON; 201 com o `Location` do BFF |
 | `GET /web/v1/animais/{id}` | `PROTETOR`, `ONG` ou `ADMIN` | o animal completo (Animais), as solicitações dele (Adoção) e os adotantes (Identidade), uma chamada por serviço |
 | `PUT /web/v1/animais/{id}` e `PATCH /web/v1/animais/{id}/status` | `PROTETOR`, `ONG` ou `ADMIN` | repassam para Animais; `RESERVADO` e `ADOTADO` só mudam pela SAGA |
+| `GET /web/v1/eventos` | `PROTETOR`, `ONG` ou `ADMIN` | Server-Sent Events com os `adocao.*` e `animal.*` do responsável, em tempo real |
 | `GET /web/v1/solicitacoes` | `PROTETOR`, `ONG` ou `ADMIN` | solicitações recebidas (Adoção), com o adotante (Identidade) e o animal (Animais) numa chamada por serviço |
 | `GET /web/v1/solicitacoes/{id}` | `PROTETOR`, `ONG` ou `ADMIN` | a solicitação com a linha do tempo, o adotante e o animal |
 | `POST /web/v1/solicitacoes/{id}/aprovacao` e `/recusa` | `PROTETOR`, `ONG` ou `ADMIN` | repassa a decisão para a Adoção e responde 202 |
@@ -42,6 +43,7 @@ npm run dev                             # local, com JWT_PUBLIC_KEY e as URLs do
 - **Links:** os `_links` da Adoção saem traduzidos de `/v1/...` para `/web/v1/...`, só com `self`, `animal`, `aprovar` e `recusar` (no detalhe do animal, sem o `animal`, que apontaria para a própria página).
 - **Animais:** a capa é a primeira foto; a coordenada sai de GeoJSON (`[lng, lat]`) para `{lat, lng}`; no histórico de status, um UUID em `alteradoPor` é uma pessoa (`RESPONSAVEL`) e qualquer outro valor é a `SAGA`.
 - **Testes:** os serviços são falsos, com respostas tiradas dos contratos. Toda resposta de sucesso do BFF é validada contra `docs/contratos/bff-web.v1.yaml`, e as respostas falsas de Animais, contra `animais.v1.yaml`. O detalhe do Thor tem de ser igual ao exemplo do contrato.
+- **Eventos em tempo real:** com `BFF_WEB_AMQP_URL`, cada réplica cria a própria fila exclusiva no RabbitMQ (`amq.gen-*`), ligada a `adocao.*` e `animal.*`, e entrega cada evento só às conexões do responsável dono dele. Nada é guardado: o painel recarrega os dados ao reconectar. Uma linha `: ping` sai a cada 20 s para o gateway não fechar a conexão. Sem a variável, `/web/v1/eventos` responde 503 e o resto funciona.
 - **Logs:** JSON (pino), com `correlationId` em toda linha. Toda resposta traz `X-Served-By` e `X-Correlation-Id`.
 
 ## Issues
