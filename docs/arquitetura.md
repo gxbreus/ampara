@@ -28,71 +28,11 @@ O sistema é organizado em camadas, de cima para baixo:
 | Coordenação | Orquestrador | conduz a SAGA de adoção | não recebe chamadas dos clientes |
 | Dados | um banco por microsserviço com estado | persistência | não é compartilhado |
 
-```mermaid
-flowchart TB
-    Web[App Web<br/>protetores e ONGs]
-    Mob[App Mobile<br/>adotantes]
-    GW[API Gateway · Kong :8000<br/>entrada única: roteamento, JWT e rate limit]
-
-    Web --> GW
-    Mob --> GW
-
-    subgraph Mensageria[Mensageria · assíncrono]
-        MQ{{RabbitMQ<br/>comandos, respostas, eventos e DLX}}
-    end
-
-    GW ~~~ MQ
-    MQ ~~~ BFFs
-
-    subgraph Servicos[Microsserviços]
-        direction TB
-        subgraph BFFs[Borda: um BFF por cliente]
-            BW[BFF Web :3010]
-            BM[BFF Mobile :3020]
-        end
-        subgraph Dominio[Domínio]
-            ID[Identidade :3001<br/>NestJS]
-            AN[Animais :8001<br/>FastAPI · CQRS]
-            AD[Adoção :8080<br/>Go · solicitações]
-            NO[Notificações :8002<br/>FastAPI]
-            AS[Assistente :8003<br/>LangChain]
-        end
-        OR[Orquestrador<br/>Go · SAGA]
-    end
-
-    subgraph Dados[data-*: um banco por microsserviço com estado]
-        PG1[(postgres-identidade<br/>+ outbox)]
-        MG[(mongo-animais<br/>animais + outbox<br/>animais_leitura)]
-        PG2[(postgres-adocao<br/>+ outbox)]
-        RD[(redis-notificacoes)]
-        QD[(qdrant-assistente<br/>+ redis-assistente)]
-        PG3[(postgres-orquestrador<br/>estado da SAGA + outbox)]
-    end
-
-    GW -- /web/v1 --> BW
-    GW -- /mobile/v1 --> BM
-    GW -- /auth/v1 --> ID
-    BFFs -- HTTP /v1 --> Dominio
-    AS -. GET /v1/animais/busca .-> AN
-
-    MQ <-.-> BW
-    MQ <-.-> BM
-    MQ <-.-> ID
-    MQ <-.-> AN
-    MQ <-.-> AD
-    MQ <-.-> NO
-    MQ <-.-> AS
-    MQ <-.-> OR
-
-    ID --- PG1
-    AN --- MG
-    AD --- PG2
-    NO --- RD
-    AS --- QD
-    OR --- PG3
-```
+![Arquitetura da Ampara: os apps entram pelo API Gateway (Kong), que encaminha por HTTP aos BFFs e, no login, à Identidade. Logo abaixo do gateway, o RabbitMQ é a camada de mensageria ligada aos oito microsserviços: BFF Web, BFF Mobile, Identidade, Animais, Adoção, Notificações, Assistente e Orquestrador. Cada microsserviço com estado tem o próprio banco.](assets/arquitetura.svg)
 
 > **Por que não há seta entre o gateway e o RabbitMQ?** No diagrama, uma seta indica que um componente envia dados para outro, e o gateway não troca mensagens com o RabbitMQ. Ele recebe a requisição HTTP do cliente e precisa devolver a resposta nessa mesma conexão, então só encaminha para os BFFs (e para a Identidade, no login). Quem publica no RabbitMQ é o serviço dono do dado, na mesma transação do outbox, e o gateway não tem banco nem outbox. Além disso, o Kong OSS em modo DB-less não publica em filas AMQP. O RabbitMQ fica logo abaixo do gateway porque é a camada comum a todos os microsserviços, não porque o gateway fale com ele.
+
+Portas internas: Kong `:8000` (a única publicada), BFF Web `:3010`, BFF Mobile `:3020`, Identidade `:3001`, Animais `:8001`, Adoção `:8080`, Notificações `:8002` e Assistente `:8003`. O Assistente também chama Animais por HTTP (`GET /v1/animais/busca`), na tool de recomendação.
 
 No [`compose.yaml`](../compose.yaml), as camadas viram redes. O gateway fica em `edge`. Os BFFs ficam em `edge` e em `services`, porque recebem do gateway e chamam os serviços; a Identidade também está em `edge` por causa do `/auth/v1`. Os serviços e o broker ficam em `services`, e cada banco fica numa rede interna `data-<serviço>` que só o próprio serviço alcança. Os serviços de domínio não têm rota externa: tudo entra pelo Kong ([ADR-005](decisoes/ADR-005-gateway-e-bff.md) e [`gateway.md`](gateway.md)). O Orquestrador e o `postgres-orquestrador` ainda não existem no compose (ver [pendências](#pendências-da-extração-do-orquestrador)).
 
