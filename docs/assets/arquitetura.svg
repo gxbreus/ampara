@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Arquitetura da Ampara</title>
+  <defs>
+    <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+    <marker id="seta-mq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="640" fill="#ffffff"/>
+
+  <!-- Clientes -->
+  <g font-size="14" text-anchor="middle" fill="#111827">
+    <rect x="380" y="20" width="180" height="54" rx="8" fill="#f3f4f6" stroke="#9ca3af"/>
+    <text x="470" y="43" font-weight="600">App Web</text>
+    <text x="470" y="62" font-size="12" fill="#4b5563">protetores e ONGs</text>
+    <rect x="640" y="20" width="180" height="54" rx="8" fill="#f3f4f6" stroke="#9ca3af"/>
+    <text x="730" y="43" font-weight="600">App Mobile</text>
+    <text x="730" y="62" font-size="12" fill="#4b5563">adotantes</text>
+  </g>
+  <path d="M470,74 L520,108" stroke="#374151" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
+  <path d="M730,74 L680,108" stroke="#374151" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
+
+  <!-- Gateway -->
+  <rect x="440" y="110" width="320" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6"/>
+  <g text-anchor="middle" fill="#111827">
+    <text x="600" y="134" font-size="15" font-weight="700">API Gateway · Kong</text>
+    <text x="600" y="154" font-size="12" fill="#1e3a8a">entrada única: JWT, rate limit e roteamento</text>
+  </g>
+
+  <!-- Mensageria -->
+  <rect x="40" y="208" width="1120" height="44" rx="10" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+  <text x="790" y="235" font-size="14" text-anchor="middle" fill="#7c2d12"><tspan font-weight="700">RabbitMQ</tspan> · mensageria assíncrona: comandos, respostas e eventos</text>
+
+  <!-- Container dos microsserviços -->
+  <rect x="20" y="276" width="1160" height="174" rx="12" fill="#fafafa" stroke="#d1d5db" stroke-dasharray="6 4"/>
+  <text x="34" y="296" font-size="13" font-weight="700" fill="#374151">Microsserviços</text>
+
+  <!-- Borda -->
+  <rect x="40" y="300" width="250" height="134" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="52" y="318" font-size="12" font-weight="600" fill="#1e40af">Borda · um BFF por cliente</text>
+  <!-- Domínio -->
+  <rect x="330" y="300" width="664" height="134" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="342" y="318" font-size="12" font-weight="600" fill="#166534">Domínio</text>
+  <!-- Coordenação -->
+  <rect x="1020" y="300" width="140" height="134" rx="10" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="1032" y="318" font-size="12" font-weight="600" fill="#5b21b6">Coordenação</text>
+
+  <!-- Ligações com o RabbitMQ (barramento) -->
+  <g stroke="#c2410c" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-start="url(#seta-mq)" marker-end="url(#seta-mq)">
+    <path d="M110,254 L110,341"/>
+    <path d="M225,254 L225,341"/>
+    <path d="M422,254 L422,341"/>
+    <path d="M532,254 L532,341"/>
+    <path d="M662,254 L662,341"/>
+    <path d="M792,254 L792,341"/>
+    <path d="M922,254 L922,341"/>
+    <path d="M1090,254 L1090,341"/>
+  </g>
+
+  <!-- Serviços -->
+  <g font-size="14" text-anchor="middle" fill="#111827">
+    <rect x="55" y="343" width="110" height="64" rx="8" fill="#ffffff" stroke="#60a5fa"/>
+    <text x="110" y="370" font-weight="600">BFF Web</text>
+    <text x="110" y="390" font-size="11" fill="#4b5563">Node.js</text>
+
+    <rect x="175" y="343" width="100" height="64" rx="8" fill="#ffffff" stroke="#60a5fa"/>
+    <text x="225" y="370" font-weight="600">BFF Mobile</text>
+    <text x="225" y="390" font-size="11" fill="#4b5563">Node.js</text>
+
+    <rect x="343" y="343" width="118" height="64" rx="8" fill="#ffffff" stroke="#4ade80"/>
+    <text x="402" y="370" font-weight="600">Identidade</text>
+    <text x="402" y="390" font-size="11" fill="#4b5563">NestJS</text>
+
+    <rect x="473" y="343" width="118" height="64" rx="8" fill="#ffffff" stroke="#4ade80"/>
+    <text x="532" y="370" font-weight="600">Animais</text>
+    <text x="532" y="390" font-size="11" fill="#4b5563">FastAPI · CQRS</text>
+
+    <rect x="603" y="343" width="118" height="64" rx="8" fill="#ffffff" stroke="#4ade80"/>
+    <text x="662" y="370" font-weight="600">Adoção</text>
+    <text x="662" y="390" font-size="11" fill="#4b5563">Go · solicitações</text>
+
+    <rect x="733" y="343" width="118" height="64" rx="8" fill="#ffffff" stroke="#4ade80"/>
+    <text x="792" y="370" font-weight="600">Notificações</text>
+    <text x="792" y="390" font-size="11" fill="#4b5563">FastAPI</text>
+
+    <rect x="863" y="343" width="118" height="64" rx="8" fill="#ffffff" stroke="#4ade80"/>
+    <text x="922" y="370" font-weight="600">Assistente</text>
+    <text x="922" y="390" font-size="11" fill="#4b5563">LangChain</text>
+
+    <rect x="1030" y="343" width="120" height="64" rx="8" fill="#ffffff" stroke="#a78bfa"/>
+    <text x="1090" y="370" font-weight="600">Orquestrador</text>
+    <text x="1090" y="390" font-size="11" fill="#4b5563">Go · SAGA</text>
+  </g>
+
+  <!-- HTTP do gateway: halo branco onde cruza a barra -->
+  <path d="M470,166 L470,184 L165,184 L165,298" stroke="#ffffff" stroke-width="9" fill="none"/>
+  <path d="M470,166 L470,184 L165,184 L165,298" stroke="#374151" stroke-width="1.8" fill="none" marker-end="url(#seta)"/>
+  <text x="300" y="178" font-size="12" text-anchor="middle" fill="#374151">/web/v1 · /mobile/v1</text>
+  <path d="M560,166 L560,192 L402,192 L402,343" stroke="#ffffff" stroke-width="9" fill="none"/>
+  <path d="M560,166 L560,192 L402,192 L402,343" stroke="#374151" stroke-width="1.8" fill="none" marker-end="url(#seta)"/>
+  <text x="482" y="206" font-size="12" text-anchor="middle" fill="#374151">/auth/v1</text>
+
+  <!-- BFFs chamam o domínio -->
+  <path d="M290,420 L328,420" stroke="#374151" stroke-width="1.8" fill="none" marker-end="url(#seta)"/>
+  <text x="310" y="444" font-size="11" text-anchor="middle" fill="#374151">HTTP</text>
+
+  <!-- Bancos -->
+  <g stroke="#6b7280" stroke-width="1.4">
+    <path d="M402,407 L402,494"/>
+    <path d="M532,407 L532,494"/>
+    <path d="M662,407 L662,494"/>
+    <path d="M792,407 L792,494"/>
+    <path d="M922,407 L922,494"/>
+    <path d="M1090,407 L1090,494"/>
+  </g>
+  <g font-size="11" text-anchor="middle" fill="#111827">
+    <g transform="translate(402,0)">
+      <path d="M-52,500 v40 a52,9 0 0 0 104,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="52" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="528">PostgreSQL</text>
+    </g>
+    <g transform="translate(532,0)">
+      <path d="M-56,500 v40 a56,9 0 0 0 112,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="56" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="524">MongoDB</text>
+      <text y="538" font-size="10" fill="#4b5563">escrita + leitura</text>
+    </g>
+    <g transform="translate(662,0)">
+      <path d="M-52,500 v40 a52,9 0 0 0 104,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="52" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="524">PostgreSQL</text>
+      <text y="538" font-size="10" fill="#4b5563">+ outbox</text>
+    </g>
+    <g transform="translate(792,0)">
+      <path d="M-52,500 v40 a52,9 0 0 0 104,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="52" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="528">Redis</text>
+    </g>
+    <g transform="translate(922,0)">
+      <path d="M-52,500 v40 a52,9 0 0 0 104,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="52" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="524">Qdrant</text>
+      <text y="538" font-size="10" fill="#4b5563">+ cache Redis</text>
+    </g>
+    <g transform="translate(1090,0)">
+      <path d="M-56,500 v40 a56,9 0 0 0 112,0 v-40" fill="#f3f4f6" stroke="#6b7280"/>
+      <ellipse cx="0" cy="500" rx="56" ry="9" fill="#e5e7eb" stroke="#6b7280"/>
+      <text y="524">PostgreSQL</text>
+      <text y="538" font-size="10" fill="#4b5563">estado da SAGA</text>
+    </g>
+  </g>
+  <text x="140" y="526" font-size="12" text-anchor="middle" fill="#4b5563">um banco por microsserviço</text>
+  <text x="140" y="542" font-size="12" text-anchor="middle" fill="#4b5563">com estado · BFFs sem banco</text>
+
+  <!-- Legenda -->
+  <g font-size="12" fill="#374151">
+    <path d="M360,600 L410,600" stroke="#374151" stroke-width="1.8" marker-end="url(#seta)"/>
+    <text x="420" y="604">HTTP (síncrono)</text>
+    <path d="M560,600 L610,600" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="5 4" marker-start="url(#seta-mq)" marker-end="url(#seta-mq)"/>
+    <text x="620" y="604">mensagens pelo RabbitMQ (assíncrono)</text>
+  </g>
+</svg>
