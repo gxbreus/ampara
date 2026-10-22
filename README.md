@@ -101,7 +101,7 @@ A SAGA aparece no único fluxo que altera dados de vários serviços ao mesmo te
 
 Quem coordena é o **Orquestrador**, um microsserviço só para isso. A Adoção fica com o que o usuário vê (a solicitação e a decisão), e o Orquestrador fica com o controle do processo (qual passo está em andamento, o que fazer se um participante não responder e o que desfazer). O fluxo completo está na [próxima seção](#saga-de-adoção).
 
-> **Mudança em andamento.** A SAGA já roda em [`services/orquestrador`](services/orquestrador) (#140), e a decisão está na [ADR-008](docs/decisoes/ADR-008-orquestrador.md). O [`docs/saga.md`](docs/saga.md) e o [catálogo de mensagens](docs/contratos/eventos.md) ainda descrevem a Adoção como orquestradora até a #139.
+A separação entre Adoção e Orquestrador está na [ADR-008](docs/decisoes/ADR-008-orquestrador.md), e as mensagens trocadas entre eles (`solicitacao.*` e `saga.transicao`) estão no [catálogo](docs/contratos/eventos.md).
 
 ### CQRS em Animais: no banco, não só no código
 
