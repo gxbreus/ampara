@@ -239,6 +239,8 @@ services:
     environment:
       ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
       ANIMAIS_LEITURA_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais_leitura?replicaSet=rs0&authSource=admin
+      # sem a chave, Animais aceitaria qualquer token sem conferir a assinatura
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
     networks: [services, data-animais]
     depends_on:
       mongo-animais: { condition: service_healthy }

@@ -2,6 +2,7 @@ import Fastify, { LogController, type FastifyError, type FastifyInstance } from 
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { rotasDeAdmin } from "./admin.js";
+import { rotaDoPainel, rotasDeAnimais } from "./animais.js";
 import { exigirRoles, type Verificador } from "./auth.js";
 import type { Cliente } from "./cliente.js";
 import type { Config } from "./config.js";
@@ -70,6 +71,8 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
         return reply.code(resp.status).type(resp.headers.get("content-type") ?? "application/json").send(corpo);
       });
 
+      rotaDoPainel(r, { config, verificar, chamar });
+      rotasDeAnimais(r, { config, verificar, chamar });
       rotasDeSolicitacoes(r, { config, verificar, chamar });
       rotasDeAdmin(r, { config, verificar, chamar });
       done();
