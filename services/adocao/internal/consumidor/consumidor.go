@@ -1,4 +1,6 @@
-// Package consumidor processa as respostas dos participantes da SAGA (fila adocao.respostas).
+// Package consumidor mantém o espelho da SAGA (fila adocao.saga). O Orquestrador publica
+// saga.transicao a cada mudança de estado (ADR-008), e a Adoção atualiza a solicitação e a
+// linha do tempo que o usuário vê.
 //
 // Para cada mensagem: grava o messageId na inbox e aplica a transição numa transação só,
 // e só depois do commit faz o ack. Se o processo cair antes do ack, o RabbitMQ entrega de
@@ -19,7 +21,10 @@ import (
 	"github.com/gxbreus/ampara/services/adocao/internal/saga"
 )
 
-const Fila = "adocao.respostas"
+const (
+	Fila          = "adocao.saga"
+	TipoTransicao = "saga.transicao"
+)
 
 // Destino diz o que fazer com a mensagem depois de processada.
 type Destino int
@@ -34,7 +39,7 @@ func (d Destino) String() string { return [...]string{"ack", "dlq", "devolver"}[
 
 // Aplicador é a parte do repositório que o consumidor usa.
 type Aplicador interface {
-	AplicarResposta(ctx context.Context, messageID, tipo, sagaID string, ev saga.Evento) (saga.Saida, bool, error)
+	AplicarTransicao(ctx context.Context, messageID string, t repositorio.Transicao) (bool, error)
 }
 
 type envelope struct {
@@ -46,53 +51,35 @@ type envelope struct {
 	Payload       json.RawMessage `json:"payload"`
 }
 
-type payloadResposta struct {
-	Motivo         string   `json:"motivo"`
-	CamposFaltando []string `json:"camposFaltando"`
-	ResponsavelID  string   `json:"responsavelId"`
-	AnimalNome     string   `json:"animalNome"`
-}
-
-// respostas que a Adoção conhece (docs/contratos/eventos.md)
-var respostas = map[string]saga.TipoEvento{
-	"AnimalReservado":     saga.EvAnimalReservado,
-	"ReservaRecusada":     saga.EvReservaRecusada,
-	"ReservaLiberada":     saga.EvReservaLiberada,
-	"AdocaoConfirmada":    saga.EvAdocaoConfirmada,
-	"ConfirmacaoRecusada": saga.EvConfirmacaoRecusada,
-	"PerfilValidado":      saga.EvPerfilValidado,
-	"PerfilRecusado":      saga.EvPerfilRecusado,
-	"VagaLiberada":        saga.EvVagaLiberada,
-	"AdocaoRegistrada":    saga.EvAdocaoRegistrada,
-}
-
 var errInvalida = errors.New("mensagem inválida")
 
-// Decodificar transforma o corpo da mensagem no evento da máquina.
-func Decodificar(corpo []byte) (envelope, saga.Evento, error) {
+// Decodificar transforma o corpo da mensagem na transição que o repositório aplica.
+func Decodificar(corpo []byte) (envelope, repositorio.Transicao, error) {
 	var env envelope
+	var t repositorio.Transicao
 	if err := json.Unmarshal(corpo, &env); err != nil {
-		return env, saga.Evento{}, fmt.Errorf("%w: JSON: %v", errInvalida, err)
+		return env, t, fmt.Errorf("%w: JSON: %v", errInvalida, err)
 	}
 	if env.MessageID == "" || env.SagaID == "" {
-		return env, saga.Evento{}, fmt.Errorf("%w: sem messageId ou sagaId", errInvalida)
+		return env, t, fmt.Errorf("%w: sem messageId ou sagaId", errInvalida)
 	}
 	// leitor tolerante (ADR-006): só processa a versão que conhece; o resto vai para a DLQ
 	if env.Version != 1 {
-		return env, saga.Evento{}, fmt.Errorf("%w: versão %d desconhecida", errInvalida, env.Version)
+		return env, t, fmt.Errorf("%w: versão %d desconhecida", errInvalida, env.Version)
 	}
-	tipo, ok := respostas[env.Type]
-	if !ok {
-		return env, saga.Evento{}, fmt.Errorf("%w: tipo %q desconhecido", errInvalida, env.Type)
+	if env.Type != TipoTransicao {
+		return env, t, fmt.Errorf("%w: tipo %q desconhecido", errInvalida, env.Type)
 	}
-	var p payloadResposta
-	if len(env.Payload) > 0 {
-		if err := json.Unmarshal(env.Payload, &p); err != nil {
-			return env, saga.Evento{}, fmt.Errorf("%w: payload: %v", errInvalida, err)
-		}
+	if err := json.Unmarshal(env.Payload, &t); err != nil {
+		return env, t, fmt.Errorf("%w: payload: %v", errInvalida, err)
 	}
-	return env, saga.Evento{Tipo: tipo, Motivo: p.Motivo, CamposFaltando: p.CamposFaltando,
-		ResponsavelID: p.ResponsavelID, AnimalNome: p.AnimalNome}, nil
+	if t.SolicitacaoID == "" {
+		t.SolicitacaoID = env.SagaID
+	}
+	if t.SolicitacaoID != env.SagaID || t.Versao < 1 || !saga.Estado(t.Estado).Valido() {
+		return env, t, fmt.Errorf("%w: solicitacaoId, versão ou estado inválido", errInvalida)
+	}
+	return env, t, nil
 }
 
 type Consumidor struct {
@@ -104,47 +91,34 @@ func Novo(repo Aplicador, log *slog.Logger) *Consumidor { return &Consumidor{rep
 
 // Processar decide o destino de uma mensagem. Não depende do RabbitMQ, para ser testável.
 func (c *Consumidor) Processar(ctx context.Context, corpo []byte) Destino {
-	env, ev, err := Decodificar(corpo)
+	env, t, err := Decodificar(corpo)
 	log := c.log.With("messageId", env.MessageID, "sagaId", env.SagaID, "correlationId", env.CorrelationID, "tipo", env.Type)
 	if err != nil {
-		log.Error("resposta inválida, enviada para a DLQ", "erro", err.Error())
+		log.Error("mensagem inválida, enviada para a DLQ", "erro", err.Error())
 		return ParaDLQ
 	}
 
-	saida, duplicada, err := c.repo.AplicarResposta(ctx, env.MessageID, env.Type, env.SagaID, ev)
+	duplicada, err := c.repo.AplicarTransicao(ctx, env.MessageID, t)
 	switch {
 	case errors.Is(err, repositorio.ErrNaoEncontrada):
-		log.Error("resposta para uma solicitação que não existe, enviada para a DLQ")
-		return ParaDLQ
-	case err != nil && !temporario(err):
-		log.Error("resposta fora do esperado para o estado, enviada para a DLQ", "erro", err.Error())
+		log.Error("transição de uma solicitação que não existe, enviada para a DLQ")
 		return ParaDLQ
 	case err != nil:
-		log.Warn("erro ao processar a resposta, devolvida para a fila", "erro", err.Error())
+		log.Warn("erro ao aplicar a transição, devolvida para a fila", "erro", err.Error())
 		return Devolver
 	case duplicada:
-		log.Info("resposta repetida, ignorada pela inbox")
-		return Ack
-	case saida.Ignorada:
-		log.Info("resposta sem efeito no estado atual", "estado", saida.Solicitacao.Estado)
+		log.Info("transição repetida, ignorada pela inbox")
 		return Ack
 	}
-	log.Info("transição aplicada", "transicao", saida.Transicao, "estado", saida.Solicitacao.Estado,
-		"passos", len(saida.Passos), "mensagens", len(saida.Mensagens))
+	log.Info("espelho atualizado", "versao", t.Versao, "estado", t.Estado, "transicao", t.Transicao)
 	return Ack
-}
-
-// temporario: erro de infraestrutura (banco, contexto), que vale tentar de novo. Erro da
-// máquina de estados é definitivo: a mesma mensagem falharia sempre.
-func temporario(err error) bool {
-	return !errors.Is(err, saga.ErrRespostaInesperada) && !errors.Is(err, saga.ErrEstadoNaoPermite)
 }
 
 // Rodar consome a fila até o contexto acabar, reconectando depois de uma queda do broker.
 func (c *Consumidor) Rodar(ctx context.Context, url string) {
 	for ctx.Err() == nil {
 		if err := c.consumir(ctx, url); err != nil && ctx.Err() == nil {
-			c.log.Warn("consumidor de respostas desconectado; tentando de novo em 2 s", "erro", err.Error())
+			c.log.Warn("consumidor de transições desconectado; tentando de novo em 2 s", "erro", err.Error())
 			select {
 			case <-ctx.Done():
 			case <-time.After(2 * time.Second):
@@ -170,7 +144,7 @@ func (c *Consumidor) consumir(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	c.log.Info("consumindo respostas", "fila", Fila)
+	c.log.Info("consumindo transições", "fila", Fila)
 	fechou := conn.NotifyClose(make(chan *amqp.Error, 1))
 	for {
 		select {

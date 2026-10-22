@@ -48,10 +48,11 @@ func (h *handlerSolicitacoes) carregarAutorizado(w http.ResponseWriter, r *http.
 	return u, v, true
 }
 
-// acao trata aprovação, recusa e cancelamento. Todas respondem 202: disparam passos
-// assíncronos da SAGA. O lock e a regra de estado ficam no repositório e na máquina, então
-// o duplo clique na aprovação encontra APROVADA e recebe 409, sem um segundo ConfirmarAdocao.
-func (h *handlerSolicitacoes) acao(tipo saga.TipoEvento, exigido Papel) http.HandlerFunc {
+// acao trata aprovação, recusa e cancelamento. Todas respondem 202: a decisão fica
+// registrada e vai ao Orquestrador em solicitacao.decidida (ADR-008). A solicitação
+// continua em AGUARDANDO_APROVACAO até o saga.transicao voltar; o duplo clique encontra a
+// decisão gravada e recebe 409, sem uma segunda mensagem.
+func (h *handlerSolicitacoes) acao(d saga.Decisao, exigido Papel) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, v, ok := h.carregarAutorizado(w, r)
 		if !ok {
@@ -62,26 +63,24 @@ func (h *handlerSolicitacoes) acao(tipo saga.TipoEvento, exigido Papel) http.Han
 			semPermissao(w, "Só "+quem+" pode fazer esta ação.")
 			return
 		}
-		ev := saga.Evento{Tipo: tipo}
-		if tipo == saga.EvRecusa {
-			motivo, ok := lerMotivo(w, r)
-			if !ok {
+		motivo := ""
+		if d == saga.Recusar {
+			if motivo, ok = lerMotivo(w, r); !ok {
 				return
 			}
-			ev.Motivo = motivo
 		}
 
-		_, err := h.repo.Aplicar(r.Context(), v.ID, ev)
-		if errors.Is(err, saga.ErrEstadoNaoPermite) {
+		err := h.repo.Decidir(r.Context(), v.ID, d, motivo, u.Sub)
+		if errors.Is(err, repositorio.ErrEstadoNaoPermite) {
 			escreverProblema(w, http.StatusConflict, "estado-nao-permite-acao", "Estado não permite a ação",
-				"A solicitação está em "+string(v.Estado)+"; esta ação só é possível em AGUARDANDO_APROVACAO.")
+				"A solicitação está em "+string(v.Estado)+" ou já tem uma decisão; esta ação só é possível uma vez, em AGUARDANDO_APROVACAO.")
 			return
 		}
 		if err != nil {
-			h.erroInterno(w, r, "aplicar ação", err)
+			h.erroInterno(w, r, "registrar decisão", err)
 			return
 		}
-		h.log.InfoContext(r.Context(), "ação registrada", "correlationId", CorrelationID(r.Context()), "sagaId", v.ID, "acao", string(tipo))
+		h.log.InfoContext(r.Context(), "decisão registrada", "correlationId", CorrelationID(r.Context()), "sagaId", v.ID, "decisao", string(d))
 		depois, err := h.repo.Obter(r.Context(), v.ID)
 		if err != nil {
 			h.erroInterno(w, r, "obter solicitação", err)
@@ -92,8 +91,8 @@ func (h *handlerSolicitacoes) acao(tipo saga.TipoEvento, exigido Papel) http.Han
 }
 
 // retomar: POST /v1/solicitacoes/{id}/compensacao/retomada, só ADMIN (#86). Depois de
-// corrigir a causa de uma mensagem envenenada, reenvia os passos esgotados com o mesmo
-// messageId. Sem passo esgotado, responde 409.
+// corrigir a causa de uma mensagem envenenada, pede ao Orquestrador que reenvie os passos
+// esgotados com o mesmo messageId. Sem intervenção pendente, responde 409.
 func (h *handlerSolicitacoes) retomar(w http.ResponseWriter, r *http.Request) {
 	u, ok := h.autenticar(w, r)
 	if !ok {
@@ -104,12 +103,12 @@ func (h *handlerSolicitacoes) retomar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	_, err := h.repo.Aplicar(r.Context(), id, saga.Evento{Tipo: saga.EvRetomada})
+	err := h.repo.Retomar(r.Context(), id, u.Sub)
 	switch {
 	case errors.Is(err, repositorio.ErrNaoEncontrada):
 		naoEncontrada(w)
 		return
-	case errors.Is(err, saga.ErrEstadoNaoPermite):
+	case errors.Is(err, repositorio.ErrEstadoNaoPermite):
 		escreverProblema(w, http.StatusConflict, "nada-a-retomar", "Nada a retomar", "A solicitação não tem passo esgotado esperando intervenção.")
 		return
 	case err != nil:
@@ -265,14 +264,7 @@ func (h *handlerSolicitacoes) historico(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func estadoValido(e saga.Estado) bool {
-	switch e {
-	case saga.Solicitada, saga.AnimalReservado, saga.AguardandoAprovacao, saga.Aprovada, saga.Compensando, saga.Concluida,
-		saga.RejeitadaIndisponivel, saga.PerfilInvalido, saga.Recusada, saga.Cancelada, saga.Expirada, saga.Falhou:
-		return true
-	}
-	return false
-}
+func estadoValido(e saga.Estado) bool { return e.Valido() }
 
 func (h *handlerSolicitacoes) erroInterno(w http.ResponseWriter, r *http.Request, onde string, err error) {
 	h.log.ErrorContext(r.Context(), onde, "correlationId", CorrelationID(r.Context()), "erro", err.Error())

@@ -15,7 +15,6 @@ import (
 
 	"github.com/gxbreus/ampara/services/adocao/internal/db"
 	"github.com/gxbreus/ampara/services/adocao/internal/repositorio"
-	"github.com/gxbreus/ampara/services/adocao/internal/saga"
 )
 
 var silencioso = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -25,24 +24,35 @@ func corpo(msgID, tipo, sagaID, payload string, versao int) []byte {
 		msgID, tipo, versao, sagaID, payload))
 }
 
-func TestDecodificar(t *testing.T) {
-	_, ev, err := Decodificar(corpo("m1", "AnimalReservado", "s1", `{"animalId":"a","responsavelId":"r1","animalNome":"Thor"}`, 1))
-	if err != nil || ev.Tipo != saga.EvAnimalReservado || ev.ResponsavelID != "r1" || ev.AnimalNome != "Thor" {
-		t.Fatalf("AnimalReservado: %+v %v", ev, err)
+func transicao(sagaID string, versao int, de, estado string) string {
+	deJSON := "null"
+	if de != "" {
+		deJSON = fmt.Sprintf("%q", de)
 	}
-	_, ev, err = Decodificar(corpo("m2", "PerfilRecusado", "s1", `{"adotanteId":"x","motivo":"PERFIL_INCOMPLETO","camposFaltando":["aceiteTermo"]}`, 1))
-	if err != nil || ev.Motivo != "PERFIL_INCOMPLETO" || len(ev.CamposFaltando) != 1 {
-		t.Fatalf("PerfilRecusado: %+v %v", ev, err)
+	return fmt.Sprintf(`{"solicitacaoId":%q,"versao":%d,"de":%s,"estado":%q,"desfecho":null,"motivo":null,"camposFaltando":null,
+		"animalNome":"Thor","responsavelId":"c50a83ab-7db0-41b4-9436-4144c36f97d5","expiraEm":"2026-11-20T15:00:00Z",
+		"requerIntervencao":false,"evento":"PerfilValidado","passo":"T2","transicao":5,"em":"2026-11-17T15:00:00.123Z"}`,
+		sagaID, versao, deJSON, estado)
+}
+
+func TestDecodificar(t *testing.T) {
+	_, tr, err := Decodificar(corpo("m1", TipoTransicao, "s1", transicao("s1", 3, "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO"), 1))
+	if err != nil || tr.Versao != 3 || tr.Estado != "AGUARDANDO_APROVACAO" || tr.De == nil || *tr.De != "ANIMAL_RESERVADO" ||
+		tr.ExpiraEm == nil || tr.AnimalNome == nil || tr.Transicao != 5 || tr.Em.IsZero() {
+		t.Fatalf("saga.transicao: %+v %v", tr, err)
 	}
 	// campo desconhecido no payload é ignorado (leitor tolerante)
-	if _, _, err := Decodificar(corpo("m3", "VagaLiberada", "s1", `{"adotanteId":"x","liberou":true,"campoNovo":1}`, 1)); err != nil {
+	if _, _, err := Decodificar(corpo("m2", TipoTransicao, "s1", `{"solicitacaoId":"s1","versao":1,"estado":"SOLICITADA","campoNovo":1}`, 1)); err != nil {
 		t.Fatalf("campo novo deveria ser ignorado: %v", err)
 	}
 	invalidas := map[string][]byte{
 		"JSON quebrado":       []byte(`{"messageId":`),
-		"versão desconhecida": corpo("m", "AnimalReservado", "s", `{}`, 2),
-		"tipo desconhecido":   corpo("m", "Inventado", "s", `{}`, 1),
-		"sem sagaId":          corpo("m", "AnimalReservado", "", `{}`, 1),
+		"versão desconhecida": corpo("m", TipoTransicao, "s", transicao("s", 1, "", "SOLICITADA"), 2),
+		"tipo desconhecido":   corpo("m", "AnimalReservado", "s", `{}`, 1),
+		"sem sagaId":          corpo("m", TipoTransicao, "", transicao("", 1, "", "SOLICITADA"), 1),
+		"saga trocada":        corpo("m", TipoTransicao, "s1", transicao("s2", 1, "", "SOLICITADA"), 1),
+		"sem versão":          corpo("m", TipoTransicao, "s", transicao("s", 0, "", "SOLICITADA"), 1),
+		"estado inventado":    corpo("m", TipoTransicao, "s", transicao("s", 1, "", "INVENTADO"), 1),
 	}
 	for nome, c := range invalidas {
 		if _, _, err := Decodificar(c); !errors.Is(err, errInvalida) {
@@ -52,29 +62,26 @@ func TestDecodificar(t *testing.T) {
 }
 
 type aplicadorFalso struct {
-	saida     saga.Saida
 	duplicada bool
 	err       error
 }
 
-func (a aplicadorFalso) AplicarResposta(context.Context, string, string, string, saga.Evento) (saga.Saida, bool, error) {
-	return a.saida, a.duplicada, a.err
+func (a aplicadorFalso) AplicarTransicao(context.Context, string, repositorio.Transicao) (bool, error) {
+	return a.duplicada, a.err
 }
 
 func TestDestinoDaMensagem(t *testing.T) {
-	valida := corpo("m1", "ReservaLiberada", "s1", `{"liberou":true}`, 1)
+	valida := corpo("m1", TipoTransicao, "s1", transicao("s1", 1, "", "SOLICITADA"), 1)
 	casos := []struct {
 		nome    string
 		corpo   []byte
 		repo    aplicadorFalso
 		destino Destino
 	}{
-		{"aplicada", valida, aplicadorFalso{saida: saga.Saida{Transicao: 12}}, Ack},
+		{"aplicada", valida, aplicadorFalso{}, Ack},
 		{"repetida", valida, aplicadorFalso{duplicada: true}, Ack},
-		{"sem efeito", valida, aplicadorFalso{saida: saga.Saida{Ignorada: true}}, Ack},
 		{"inválida", []byte("lixo"), aplicadorFalso{}, ParaDLQ},
 		{"solicitação inexistente", valida, aplicadorFalso{err: repositorio.ErrNaoEncontrada}, ParaDLQ},
-		{"fora do esperado", valida, aplicadorFalso{err: fmt.Errorf("x: %w", saga.ErrRespostaInesperada)}, ParaDLQ},
 		{"banco fora do ar", valida, aplicadorFalso{err: errors.New("conexão recusada")}, Devolver},
 	}
 	for _, c := range casos {
@@ -85,10 +92,10 @@ func TestDestinoDaMensagem(t *testing.T) {
 }
 
 // Integração: ADOCAO_TEST_DATABASE_URL, ADOCAO_TEST_AMQP_URL (usuário adocao) e
-// ADOCAO_TEST_AMQP_ANIMAIS_URL (usuário animais, que publica em ampara.respostas).
+// ADOCAO_TEST_AMQP_ORQUESTRADOR_URL (usuário orquestrador, que publica saga.transicao).
 func TestConsumidorComBrokerReal(t *testing.T) {
-	dbURL, amqpURL, animaisURL := os.Getenv("ADOCAO_TEST_DATABASE_URL"), os.Getenv("ADOCAO_TEST_AMQP_URL"), os.Getenv("ADOCAO_TEST_AMQP_ANIMAIS_URL")
-	if dbURL == "" || amqpURL == "" || animaisURL == "" {
+	dbURL, amqpURL, orqURL := os.Getenv("ADOCAO_TEST_DATABASE_URL"), os.Getenv("ADOCAO_TEST_AMQP_URL"), os.Getenv("ADOCAO_TEST_AMQP_ORQUESTRADOR_URL")
+	if dbURL == "" || amqpURL == "" || orqURL == "" {
 		t.Skip("variáveis de integração não definidas")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,27 +109,27 @@ func TestConsumidorComBrokerReal(t *testing.T) {
 	if err := db.Migrar(dbURL); err != nil {
 		t.Fatal(err)
 	}
-	repo := repositorio.Novo(pool, repositorio.Config{TimeoutPasso: 10 * time.Second, PrazoDecisao: time.Hour, MaxReenvios: 10})
+	repo := repositorio.Novo(pool, repositorio.Config{})
 	id := repositorio.NovoUUID()
-	if _, err := repo.Criar(ctx, repositorio.NovaSolicitacao{ID: id, AdotanteID: "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55", AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
+	if err := repo.Criar(ctx, repositorio.NovaSolicitacao{ID: id, AdotanteID: "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55", AnimalID: "65a2f1c4e8b9d3a7f0c1b2e9"}); err != nil {
 		t.Fatal(err)
 	}
 	go Novo(repo, silencioso).Rodar(ctx, amqpURL)
 
-	conn, err := amqp.Dial(animaisURL)
+	conn, err := amqp.Dial(orqURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
 	canal, _ := conn.Channel()
 	publicar := func(c []byte) {
-		if err := canal.PublishWithContext(ctx, "ampara.respostas", "adocao", true, false, amqp.Publishing{ContentType: "application/json", Body: c}); err != nil {
+		if err := canal.PublishWithContext(ctx, "ampara.eventos", TipoTransicao, true, false, amqp.Publishing{ContentType: "application/json", Body: c}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	estado := func() (e string, transicoes2 int) {
+	estado := func() (e string, linhas int) {
 		_ = pool.QueryRow(ctx, `SELECT estado FROM solicitacoes WHERE id = $1`, id).Scan(&e)
-		_ = pool.QueryRow(ctx, `SELECT count(*) FROM saga_historico WHERE saga_id = $1 AND transicao = 2`, id).Scan(&transicoes2)
+		_ = pool.QueryRow(ctx, `SELECT count(*) FROM historico WHERE saga_id = $1`, id).Scan(&linhas)
 		return
 	}
 	esperar := func(cond func() bool) bool {
@@ -135,29 +142,31 @@ func TestConsumidorComBrokerReal(t *testing.T) {
 		return false
 	}
 
-	resposta := corpo("9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e", "AnimalReservado", id, `{"animalId":"65a2f1c4e8b9d3a7f0c1b2e9","responsavelId":"c50a83ab-7db0-41b4-9436-4144c36f97d5","animalNome":"Thor"}`, 1)
-	publicar(resposta)
-	if !esperar(func() bool { e, _ := estado(); return e == "ANIMAL_RESERVADO" }) {
-		t.Fatal("a resposta não levou a solicitação a ANIMAL_RESERVADO")
+	m := corpo("9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e", TipoTransicao, id, transicao(id, 1, "", "SOLICITADA"), 1)
+	publicar(m)
+	publicar(corpo(repositorio.NovoUUID(), TipoTransicao, id, transicao(id, 2, "SOLICITADA", "ANIMAL_RESERVADO"), 1))
+	if !esperar(func() bool { e, n := estado(); return e == "ANIMAL_RESERVADO" && n == 2 }) {
+		e, n := estado()
+		t.Fatalf("o espelho não chegou a ANIMAL_RESERVADO com 2 linhas: %s, %d", e, n)
 	}
 
-	// a mesma mensagem de novo (reentrega): a inbox impede a segunda transição
-	publicar(resposta)
+	// a mesma mensagem de novo (reentrega): a inbox impede outra linha na linha do tempo
+	publicar(m)
 	time.Sleep(time.Second)
-	if e, n := estado(); e != "ANIMAL_RESERVADO" || n != 1 {
-		t.Fatalf("depois da repetida: estado %s, transições 2 = %d", e, n)
+	if e, n := estado(); e != "ANIMAL_RESERVADO" || n != 2 {
+		t.Fatalf("depois da repetida: estado %s, %d linhas", e, n)
 	}
 
 	// mensagem inválida vai direto para a DLQ
 	publicar([]byte(`{"isto":"não é um envelope"}`))
-	admin, _ := amqp.Dial(amqpURL)
-	defer admin.Close()
-	cAdmin, _ := admin.Channel()
+	adocao, _ := amqp.Dial(amqpURL)
+	defer adocao.Close()
+	c, _ := adocao.Channel()
 	if !esperar(func() bool {
-		q, err := cAdmin.QueueDeclarePassive("adocao.respostas.dlq", true, false, false, false, amqp.Table{"x-queue-type": "quorum"})
+		q, err := c.QueueDeclarePassive(FilaDLQ, true, false, false, false, amqp.Table{"x-queue-type": "quorum"})
 		return err == nil && q.Messages >= 1
 	}) {
-		t.Fatal("a mensagem inválida não chegou à adocao.respostas.dlq")
+		t.Fatal("a mensagem inválida não chegou à adocao.saga.dlq")
 	}
 }
 
@@ -177,8 +186,8 @@ func TestAlertaDLQRegistraUmaVezSemTirarDaFila(t *testing.T) {
 	// duas mensagens mortas de verdade: publicadas na fila de origem e rejeitadas sem requeue,
 	// para o próprio RabbitMQ preencher o x-death (cliente não consegue forjar esse cabeçalho)
 	for i, id := range []string{"aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000002"} {
-		if err := canal.PublishWithContext(context.Background(), "ampara.respostas", "adocao", false, false, amqp.Publishing{
-			MessageId: id, Type: "AnimalReservado", Body: corpo(id, "AnimalReservado", fmt.Sprintf("saga-%d", i), `{}`, 9),
+		if err := canal.PublishWithContext(context.Background(), "ampara.eventos", TipoTransicao, false, false, amqp.Publishing{
+			MessageId: id, Type: TipoTransicao, Body: corpo(id, TipoTransicao, fmt.Sprintf("saga-%d", i), `{}`, 9),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -214,7 +223,7 @@ func TestAlertaDLQRegistraUmaVezSemTirarDaFila(t *testing.T) {
 	if n1 != 2 || n2 != 0 {
 		t.Fatalf("primeiro ciclo registrou %d, segundo %d; esperado 2 e 0", n1, n2)
 	}
-	if strings.Count(logs.String(), `"level":"ERROR"`) != 2 || !strings.Contains(logs.String(), `"filaDeOrigem":"adocao.respostas"`) ||
+	if strings.Count(logs.String(), `"level":"ERROR"`) != 2 || !strings.Contains(logs.String(), `"filaDeOrigem":"adocao.saga"`) ||
 		!strings.Contains(logs.String(), `"sagaId":"saga-0"`) {
 		t.Fatalf("logs: %s", logs.String())
 	}
