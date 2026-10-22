@@ -57,7 +57,7 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 | RA-03 | Diagrama de componentes e de comunicação (`E-4.1`) | 🟡 | atualizar com BFFs, outbox, read model, Assistente e vector DB |
 | RA-04 | Contrato OpenAPI completo de cada serviço (`E-4.2`) | ❌ | `docs/contratos/*.yaml` |
 | RA-05 | Uso correto de recursos, verbos e status HTTP (`E-4.2`) | ❌ | 201 + `Location`, 202 para iniciar a SAGA, 409 para animal reservado, 422 de validação, 404, 401/403 |
-| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão na URI (`/api/v1`) para APIs e campo `version` nos eventos |
+| RA-06 | Estratégia de versionamento justificada (`E-4.2`) | ❌ | proposta: versão maior na URI, depois do cliente nas rotas externas (`/web/v1`, `/mobile/v1`, `/auth/v1`) e sozinha nas internas (`/v1`), com os dois eixos independentes; campo `version` nos eventos (ADR-006, #124) |
 | RA-07 | Ao menos 1 recurso com HATEOAS (`E-4.2`) | ❌ | proposta: `SolicitacaoAdocao` com links que dependem do estado (`aprovar`, `recusar`, `cancelar`, `animal`, `adotante`) |
 | RA-08 | Gateway com regras de roteamento (`E-4.3`) | 🟡 | definir a tecnologia e a tabela de rotas |
 | RA-09 | Responsabilidades do gateway (`E-4.3`) | 🟡 | validação de JWT, rate limiting, correlation ID e CORS |
@@ -189,7 +189,7 @@ Rotas propostas:
 
 | Rota externa | Destino | Autenticação |
 | --- | --- | --- |
-| `/api/v1/auth/*` | Identidade | pública (rate limit mais rígido) |
+| `/auth/v1/*` | Identidade | pública (rate limit mais rígido) |
 | `/web/v1/*` | BFF Web | JWT, roles `PROTETOR`, `ONG` e `ADMIN` |
 | `/mobile/v1/*` | BFF Mobile | JWT, role `ADOTANTE` (busca pública) |
 

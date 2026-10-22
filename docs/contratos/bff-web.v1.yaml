@@ -1050,7 +1050,11 @@ components:
                 - type: 'null'
         - type: 'null'
     AnimalMini:
-      description: Animal da solicitação, vindo de Animais; `null` se ele não respondeu.
+      description: >-
+        Animal da solicitação, vindo de Animais. Se Animais não respondeu, o
+        nome vem da cópia que a Adoção guarda (`animalNome`) e `fotoCapa` fica
+        `null`; o animal todo é `null` só antes da reserva, quando a Adoção
+        ainda não tem o nome.
       oneOf:
         - type: object
           additionalProperties: false

@@ -4,7 +4,7 @@ Entrada única dos clientes: roteamento, validação do JWT (RS256, chave públi
 
 | Rota externa | Destino |
 | --- | --- |
-| `/api/v1/auth` | Identidade (`/v1/auth`) — pública |
+| `/auth/v1` | Identidade (`/v1/auth`) — pública |
 | `/mobile/v1/animais` (GET) | BFF Mobile — pública |
 | `/mobile/v1` | BFF Mobile — JWT |
 | `/web/v1` | BFF Web — JWT |

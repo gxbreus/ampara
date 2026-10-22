@@ -1,0 +1,1028 @@
+openapi: 3.1.0
+info:
+  title: Ampara — Animais
+  version: 1.0.0
+  description: >-
+    Cadastro, gestão e busca geográfica de animais.
+    Apresenta separação estrita de CQRS (Command Query Responsibility Segregation):
+    as rotas de escrita (/v1/animais) operam sobre o modelo normalizado `animais`
+    no database `animais`, enquanto as rotas de busca (/v1/animais/busca) operam
+    sobre a projeção desnormalizada `animais_busca` no database `animais_leitura`,
+    atualizada por eventos com defasagem p95 <= 5 s.
+    As transições para RESERVADO e ADOTADO são exclusivas da SAGA de adoção
+    e não podem ser acionadas manualmente via HTTP (retornam 409 Conflict).
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://animais:8001
+    description: Rede interna do cluster / compose
+tags:
+  - name: Animais (Escrita)
+    description: >-
+      Operações de cadastro, alteração e consulta administrativa pelo responsável
+      (PROTETOR ou ONG). Manipulam o modelo de escrita `animais`.
+  - name: Busca de Animais (Leitura - CQRS)
+    description: >-
+      Consultas públicas e busca geográfica por proximidade para adotantes e assistente.
+      Manipulam a projeção de leitura `animais_busca`.
+paths:
+  /v1/animais/busca:
+    get:
+      tags: [Busca de Animais (Leitura - CQRS)]
+      summary: Busca geográfica de animais disponíveis
+      description: >-
+        Retorna animais com status DISPONIVEL ordenados crescentemente por distância (km)
+        a partir do ponto geográfico informado (lat/lng).
+        Os dados provêm da projeção `animais_busca` (database `animais_leitura`).
+        Por questões de privacidade e segurança (LGPD), as coordenadas geográficas
+        exatas nunca são expostas nesta rota, apenas bairro, cidade e a distância calculada.
+        A paginação é realizada exclusivamente por cursor opaco (`proximoCursor`).
+      operationId: buscarAnimaisDisponiveis
+      security: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude de referência para o cálculo de distância (-90 a 90).
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          example: -21.2468
+        - name: lng
+          in: query
+          required: true
+          description: Longitude de referência para o cálculo de distância (-180 a 180).
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          example: -44.9998
+        - name: raioKm
+          in: query
+          required: false
+          description: Raio máximo de busca em quilômetros.
+          schema:
+            type: number
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 15
+        - name: especie
+          in: query
+          required: false
+          description: Filtro opcional por espécie animal.
+          schema:
+            $ref: '#/components/schemas/EspecieAnimal'
+        - name: porte
+          in: query
+          required: false
+          description: Filtro opcional por porte animal.
+          schema:
+            $ref: '#/components/schemas/PorteAnimal'
+        - name: sexo
+          in: query
+          required: false
+          description: Filtro opcional por sexo animal.
+          schema:
+            $ref: '#/components/schemas/SexoAnimal'
+        - name: idadeMaxMeses
+          in: query
+          required: false
+          description: Idade máxima em meses para filtrar filhotes ou jovens.
+          schema:
+            type: integer
+            minimum: 0
+          example: 24
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor opaco para obter a próxima página de resultados.
+          schema:
+            type: string
+        - name: limite
+          in: query
+          required: false
+          description: Quantidade máxima de animais retornados por página.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Lista paginada de animais encontrados na projeção de busca.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaAnimalBusca'
+              example:
+                itens:
+                  - id: 6706e21b7a2d4b8e2194cf01
+                    nome: Pipoca
+                    especie: CAO
+                    porte: PEQUENO
+                    sexo: MACHO
+                    idadeMeses: 14
+                    fotoCapa: https://assets.ampara.dev/fotos/pipoca-capa.webp
+                    fotoThumb: https://assets.ampara.dev/fotos/pipoca-thumb.webp
+                    distanciaKm: 2.4
+                    bairro: Centro
+                    cidade: Lavras
+                    responsavel:
+                      id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: ONG Patas Amigas
+                      verificado: true
+                    status: DISPONIVEL
+                    version: 3
+                    atualizadoEm: '2026-10-09T18:00:00Z'
+                  - id: 6706e21b7a2d4b8e2194cf02
+                    nome: Mia
+                    especie: GATO
+                    porte: PEQUENO
+                    sexo: FEMEA
+                    idadeMeses: 8
+                    fotoCapa: https://assets.ampara.dev/fotos/mia-capa.webp
+                    fotoThumb: https://assets.ampara.dev/fotos/mia-thumb.webp
+                    distanciaKm: 4.8
+                    bairro: Jardim Glória
+                    cidade: Lavras
+                    responsavel:
+                      id: 7cb82ea1-4922-4fe6-cc5e-5fdbef3e2e66
+                      nome: Protetor Carlos
+                      verificado: false
+                    status: DISPONIVEL
+                    version: 1
+                    atualizadoEm: '2026-10-09T18:02:15Z'
+                proximoCursor: eyJkaXN0YW5jaWFLbSI6NC44LCJpZCI6IjY3MDZlMjFiN2EyZDRiOGUyMTk0Y2YwMiJ9
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /v1/animais/busca/{id}:
+    get:
+      tags: [Busca de Animais (Leitura - CQRS)]
+      summary: Detalhe público de um animal na projeção de leitura
+      description: >-
+        Retorna as informações públicas detalhadas de um animal a partir da projeção
+        `animais_busca`. Acessível para qualquer status (mesmo RESERVADO ou ADOTADO,
+        permitindo que adotantes com link direto vejam a ficha pública), mas anonimiza
+        a localização exata por LGPD (fornece apenas bairro e cidade).
+      operationId: obterAnimalBuscaPorId
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único do animal (ObjectId de 24 dígitos hexadecimais).
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{24}$'
+          example: 6706e21b7a2d4b8e2194cf01
+      responses:
+        '200':
+          description: Dados públicos do animal encontrados na projeção.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalBuscaDetalhe'
+              example:
+                id: 6706e21b7a2d4b8e2194cf01
+                nome: Pipoca
+                especie: CAO
+                porte: PEQUENO
+                sexo: MACHO
+                idadeMeses: 14
+                temperamento: [BRINCALHAO, DOCIL, SOCIÁVEL_COM_GATOS]
+                descricao: Cachorro resgatado no centro, castrado e vacinado. Muito carinhoso.
+                fotos:
+                  - https://assets.ampara.dev/fotos/pipoca-capa.webp
+                  - https://assets.ampara.dev/fotos/pipoca-brincando.webp
+                fotoCapa: https://assets.ampara.dev/fotos/pipoca-capa.webp
+                fotoThumb: https://assets.ampara.dev/fotos/pipoca-thumb.webp
+                bairro: Centro
+                cidade: Lavras
+                responsavel:
+                  id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                  nome: ONG Patas Amigas
+                  verificado: true
+                status: DISPONIVEL
+                version: 3
+                atualizadoEm: '2026-10-09T18:00:00Z'
+        '400':
+          $ref: '#/components/responses/IdentificadorInvalido'
+        '404':
+          $ref: '#/components/responses/AnimalNaoEncontrado'
+
+  /v1/animais:
+    get:
+      tags: [Animais (Escrita)]
+      summary: Lista animais do responsável ou consulta em lote por IDs
+      description: >-
+        Consulta no modelo de escrita `animais`. Suporta dois casos de uso:
+        1. Consulta em lote (batch) por IDs (`?ids=id1,id2,...`, até 100 itens),
+           utilizada internamente pelos BFFs para hidratar listas de solicitações.
+        2. Listagem paginada dos animais cadastrados por um responsável (`?responsavelId=...`),
+           com filtro opcional de status, usada no painel web da ONG.
+      operationId: listarAnimaisEscrita
+      security:
+        - BearerJWT: []
+      parameters:
+        - name: ids
+          in: query
+          required: false
+          description: Lista de ObjectIds separados por vírgula (máximo 100).
+          schema:
+            type: string
+          example: 6706e21b7a2d4b8e2194cf01,6706e21b7a2d4b8e2194cf02
+        - name: responsavelId
+          in: query
+          required: false
+          description: UUID da conta responsável (ONG ou protetor).
+          schema:
+            type: string
+            format: uuid
+          example: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+        - name: status
+          in: query
+          required: false
+          description: Filtra por qualquer status do modelo de escrita.
+          schema:
+            $ref: '#/components/schemas/StatusAnimal'
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor opaco para paginação da lista do responsável.
+          schema:
+            type: string
+        - name: limite
+          in: query
+          required: false
+          description: Quantidade máxima de registros.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Lista de animais retornada do modelo de escrita.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaAnimaisEscrita'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+
+    post:
+      tags: [Animais (Escrita)]
+      summary: Cadastra um novo animal
+      description: >-
+        Cria um novo animal no modelo de escrita (`animais`).
+        Exige autenticação de conta PROTETOR ou ONG verificada.
+        O animal nasce com status `DISPONIVEL` e `version: 1`.
+        Armazena a localização exata e publica o evento `animal.criado`
+        via outbox na mesma transação atômica do MongoDB.
+      operationId: cadastrarAnimal
+      security:
+        - BearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovoAnimalEntrada'
+            example:
+              nome: Pipoca
+              especie: CAO
+              porte: PEQUENO
+              sexo: MACHO
+              idadeMeses: 14
+              temperamento: [BRINCALHAO, DOCIL, SOCIÁVEL_COM_GATOS]
+              descricao: Resgatado em ótimo estado, vacinado e vermifugado.
+              fotos:
+                - https://assets.ampara.dev/fotos/pipoca-capa.webp
+                - https://assets.ampara.dev/fotos/pipoca-brincando.webp
+              localizacao:
+                type: Point
+                coordinates: [-44.999812, -21.246834]
+              endereco:
+                rua: Rua Santana
+                numero: '120'
+                complemento: Apto 3
+                bairro: Centro
+                cidade: Lavras
+                uf: MG
+                cep: '37200-000'
+      responses:
+        '201':
+          description: Animal cadastrado com sucesso.
+          headers:
+            Location:
+              description: URI do animal cadastrado no modelo de escrita.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/animais/6706e21b7a2d4b8e2194cf01
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalCompleto'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /v1/animais/{id}:
+    get:
+      tags: [Animais (Escrita)]
+      summary: Obtém os detalhes completos de um animal
+      description: >-
+        Retorna o documento completo do modelo de escrita `animais`, incluindo
+        coordenadas geográficas exatas, endereço residencial completo, histórico
+        de alterações de status e dados da SAGA.
+        Acesso restrito ao próprio responsável pelo cadastro ou conta com perfil ADMIN.
+      operationId: obterAnimalPorId
+      security:
+        - BearerJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ObjectId do animal.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{24}$'
+          example: 6706e21b7a2d4b8e2194cf01
+      responses:
+        '200':
+          description: Documento completo do animal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalCompleto'
+        '400':
+          $ref: '#/components/responses/IdentificadorInvalido'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/AnimalNaoEncontrado'
+
+    put:
+      tags: [Animais (Escrita)]
+      summary: Atualiza os dados cadastrais de um animal
+      description: >-
+        Atualiza campos descritivos, fotos e localização de um animal existente.
+        Não altera o status do animal (para isso utilize `PATCH /v1/animais/{id}/status`).
+        Exige que o chamador seja o responsável cadastrado ou ADMIN.
+        Incrementa o campo `version` e enfileira `animal.atualizado` via outbox.
+      operationId: atualizarAnimal
+      security:
+        - BearerJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ObjectId do animal.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{24}$'
+          example: 6706e21b7a2d4b8e2194cf01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarAnimalEntrada'
+      responses:
+        '200':
+          description: Animal atualizado com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalCompleto'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/AnimalNaoEncontrado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /v1/animais/{id}/status:
+    patch:
+      tags: [Animais (Escrita)]
+      summary: Altera o status operacional do animal
+      description: >-
+        Permite ao responsável colocar o animal em `DISPONIVEL`, `EM_TRATAMENTO`
+        ou `INDISPONIVEL`.
+        
+        **Regra Crítica de Negócio da SAGA:**
+        Tentativas de transição manual para `RESERVADO` ou `ADOTADO` são estritamente
+        proibidas via HTTP e respondem com **409 Conflict**.
+        Esses status só podem ser atribuídos por meio de comandos da SAGA
+        (`ReservarAnimal` e `ConfirmarAdocao`) via mensagens assíncronas do RabbitMQ.
+      operationId: atualizarStatusAnimal
+      security:
+        - BearerJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ObjectId do animal.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{24}$'
+          example: 6706e21b7a2d4b8e2194cf01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarStatusEntrada'
+            example:
+              status: EM_TRATAMENTO
+              motivo: Iniciando tratamento de vermifugação e vacinação.
+      responses:
+        '200':
+          description: Status atualizado com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalCompleto'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/AnimalNaoEncontrado'
+        '409':
+          $ref: '#/components/responses/StatusExclusivoSaga'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+components:
+  securitySchemes:
+    BearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token JWT assinado com RS256 pela Identidade, repassado pelos BFFs
+        com os claims `sub`, `role` e `exp`.
+
+  responses:
+    ParametrosInvalidos:
+      description: Parâmetros de consulta ou caminho incorretos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/parametros-invalidos
+            title: Parâmetros inválidos
+            status: 400
+            detail: As coordenadas 'lat' e 'lng' são obrigatórias e devem ser numéricas.
+
+    IdentificadorInvalido:
+      description: Formato de identificador inválido (não é um ObjectId hex de 24 caracteres).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/identificador-invalido
+            title: Identificador inválido
+            status: 400
+            detail: O ID informado deve ser um ObjectId hexadecimal de 24 caracteres.
+
+    NaoAutenticado:
+      description: Token Bearer ausente, inválido ou expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-autenticado
+            title: Não autenticado
+            status: 401
+            detail: Envie um token Bearer JWT válido no cabeçalho Authorization.
+
+    SemPermissao:
+      description: O usuário não possui autorização para operar sobre este animal.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/sem-permissao
+            title: Sem permissão
+            status: 403
+            detail: Apenas o responsável que cadastrou o animal ou administradores podem alterar seus dados.
+
+    AnimalNaoEncontrado:
+      description: Animal não encontrado pelo identificador fornecido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/animal-nao-encontrado
+            title: Animal não encontrado
+            status: 404
+            detail: Não existe animal cadastrado com o ID 6706e21b7a2d4b8e2194cf01.
+
+    StatusExclusivoSaga:
+      description: Conflito ao tentar transicionar manualmente para status reservado à SAGA.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/status-exclusivo-saga
+            title: Conflito de transição de status
+            status: 409
+            detail: Os status RESERVADO e ADOTADO só podem ser definidos pela SAGA de adoção via mensageria.
+
+    DadosInvalidos:
+      description: Erro de validação semântica dos dados da requisição (RFC 9457).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/dados-invalidos
+            title: Dados inválidos
+            status: 422
+            detail: O campo 'nome' não pode ser vazio e 'fotos' deve conter ao menos 1 URL.
+
+  schemas:
+    EspecieAnimal:
+      type: string
+      enum: [CAO, GATO, OUTRO]
+      description: Espécie do animal.
+
+    PorteAnimal:
+      type: string
+      enum: [PEQUENO, MEDIO, GRANDE]
+      description: Porte físico aproximado do animal.
+
+    SexoAnimal:
+      type: string
+      enum: [MACHO, FEMEA]
+      description: Sexo biológico do animal.
+
+    StatusAnimal:
+      type: string
+      enum:
+        - DISPONIVEL
+        - EM_TRATAMENTO
+        - INDISPONIVEL
+        - RESERVADO
+        - ADOTADO
+      description: >-
+        Status do animal no ciclo de vida.
+        DISPONIVEL, EM_TRATAMENTO e INDISPONIVEL são gerenciados pela ONG.
+        RESERVADO e ADOTADO são gerenciados exclusivamente pela SAGA.
+
+    StatusOperacionalPermitido:
+      type: string
+      enum:
+        - DISPONIVEL
+        - EM_TRATAMENTO
+        - INDISPONIVEL
+      description: >-
+        Subconjunto de status que podem ser definidos manualmente pelo responsável via HTTP.
+
+    GeoPointExato:
+      type: object
+      description: Coordenadas geográficas exatas em formato GeoJSON Point.
+      additionalProperties: false
+      required: [type, coordinates]
+      properties:
+        type:
+          type: string
+          enum: [Point]
+        coordinates:
+          type: array
+          description: Coordenadas [longitude, latitude] na ordem padrão GeoJSON.
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+          example: [-44.999812, -21.246834]
+
+    Endereco:
+      type: object
+      description: Endereço completo armazenado no modelo de escrita.
+      additionalProperties: false
+      required: [rua, numero, bairro, cidade, uf, cep]
+      properties:
+        rua:
+          type: string
+          minLength: 1
+        numero:
+          type: string
+          minLength: 1
+        complemento:
+          type: string
+        bairro:
+          type: string
+          minLength: 1
+        cidade:
+          type: string
+          minLength: 1
+        uf:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: Sigla da unidade federativa em duas letras maiúsculas.
+          example: MG
+        cep:
+          type: string
+          pattern: '^\d{5}-\d{3}$'
+          example: '37200-000'
+
+    HistoricoStatusItem:
+      type: object
+      description: Registro auditável de uma transição de status no modelo de escrita.
+      additionalProperties: false
+      required: [status, alteradoEm, alteradoPor]
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        motivo:
+          type: string
+        alteradoEm:
+          type: string
+          format: date-time
+        alteradoPor:
+          type: string
+          description: UUID da conta ou identificador do processo/SAGA que alterou o status.
+
+    NovoAnimalEntrada:
+      type: object
+      description: Payload para criação de animal pelo responsável.
+      additionalProperties: false
+      required:
+        - nome
+        - especie
+        - porte
+        - sexo
+        - idadeMeses
+        - localizacao
+        - endereco
+      properties:
+        nome:
+          type: string
+          minLength: 1
+          maxLength: 100
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+          minimum: 0
+        temperamento:
+          type: array
+          items:
+            type: string
+          default: []
+        descricao:
+          type: string
+          maxLength: 2000
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+          default: []
+        localizacao:
+          $ref: '#/components/schemas/GeoPointExato'
+        endereco:
+          $ref: '#/components/schemas/Endereco'
+
+    AtualizarAnimalEntrada:
+      type: object
+      description: Payload para atualização de dados descritivos do animal.
+      additionalProperties: false
+      properties:
+        nome:
+          type: string
+          minLength: 1
+          maxLength: 100
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+          minimum: 0
+        temperamento:
+          type: array
+          items:
+            type: string
+        descricao:
+          type: string
+          maxLength: 2000
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+        localizacao:
+          $ref: '#/components/schemas/GeoPointExato'
+        endereco:
+          $ref: '#/components/schemas/Endereco'
+
+    AtualizarStatusEntrada:
+      type: object
+      description: Payload para atualização do status operacional pelo responsável.
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusOperacionalPermitido'
+        motivo:
+          type: string
+          maxLength: 500
+
+    AnimalCompleto:
+      type: object
+      description: >-
+        Representação completa do animal no modelo de escrita `animais` (MongoDB).
+        Contém dados administrativos internos e histórico.
+      additionalProperties: false
+      required:
+        - id
+        - responsavelId
+        - nome
+        - especie
+        - porte
+        - sexo
+        - idadeMeses
+        - status
+        - localizacao
+        - endereco
+        - version
+        - criadoEm
+        - atualizadoEm
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+        responsavelId:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+        temperamento:
+          type: array
+          items:
+            type: string
+        descricao:
+          type: string
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        localizacao:
+          $ref: '#/components/schemas/GeoPointExato'
+        endereco:
+          $ref: '#/components/schemas/Endereco'
+        historicoStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricoStatusItem'
+        reservaSagaId:
+          type: string
+          format: uuid
+          description: ID da solicitação de adoção da SAGA que mantém a reserva ativa.
+        version:
+          type: integer
+          description: Versão do documento para controle de concorrência e idempotência do projetor.
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    ResponsavelResumo:
+      type: object
+      description: Dados desnormalizados da ONG ou protetor embutidos na projeção de leitura.
+      additionalProperties: false
+      required: [id, nome, verificado]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        verificado:
+          type: boolean
+          description: Indica se a conta possui o selo VERIFICADA emitido pela plataforma.
+
+    AnimalBuscaCard:
+      type: object
+      description: >-
+        Item resumido retornado na busca geográfica (projeção `animais_busca`).
+        Otimizado para listagem no mobile sem tráfego de dados supérfluos.
+      additionalProperties: false
+      required:
+        - id
+        - nome
+        - especie
+        - porte
+        - sexo
+        - idadeMeses
+        - distanciaKm
+        - bairro
+        - cidade
+        - responsavel
+        - status
+        - version
+        - atualizadoEm
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+        nome:
+          type: string
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+        fotoCapa:
+          type: string
+          format: uri
+        fotoThumb:
+          type: string
+          format: uri
+        distanciaKm:
+          type: number
+          description: Distância em km calculada em relação às coordenadas da busca.
+          example: 3.5
+        bairro:
+          type: string
+          description: "Bairro onde o animal se encontra (LGPD: sem rua/número)."
+        cidade:
+          type: string
+        responsavel:
+          $ref: '#/components/schemas/ResponsavelResumo'
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        version:
+          type: integer
+          description: Versão do snapshot projetado.
+        atualizadoEm:
+          type: string
+          format: date-time
+          description: Timestamp de atualização da projeção (evidência da defasagem CQRS).
+
+    AnimalBuscaDetalhe:
+      type: object
+      description: >-
+        Ficha pública completa do animal na projeção de leitura.
+        Anonimiza coordenadas exatas e endereço por LGPD, mantendo fotos e descrição.
+      additionalProperties: false
+      required:
+        - id
+        - nome
+        - especie
+        - porte
+        - sexo
+        - idadeMeses
+        - bairro
+        - cidade
+        - responsavel
+        - status
+        - version
+        - atualizadoEm
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{24}$'
+        nome:
+          type: string
+        especie:
+          $ref: '#/components/schemas/EspecieAnimal'
+        porte:
+          $ref: '#/components/schemas/PorteAnimal'
+        sexo:
+          $ref: '#/components/schemas/SexoAnimal'
+        idadeMeses:
+          type: integer
+        temperamento:
+          type: array
+          items:
+            type: string
+        descricao:
+          type: string
+        fotos:
+          type: array
+          items:
+            type: string
+            format: uri
+        fotoCapa:
+          type: string
+          format: uri
+        fotoThumb:
+          type: string
+          format: uri
+        bairro:
+          type: string
+        cidade:
+          type: string
+        responsavel:
+          $ref: '#/components/schemas/ResponsavelResumo'
+        status:
+          $ref: '#/components/schemas/StatusAnimal'
+        version:
+          type: integer
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    PaginaAnimalBusca:
+      type: object
+      description: Envelope paginado por cursor da busca geográfica.
+      additionalProperties: false
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnimalBuscaCard'
+        proximoCursor:
+          type: string
+          description: Cursor opaco para a próxima página. Ausente se for a última página.
+
+    PaginaAnimaisEscrita:
+      type: object
+      description: Envelope de listagem de animais no modelo de escrita.
+      additionalProperties: false
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnimalCompleto'
+        proximoCursor:
+          type: string
+          description: Cursor opaco para a próxima página.
+
+    Problema:
+      type: object
+      description: Detalhes de erro no formato RFC 9457 / RFC 7807 (Problem Details).
+      additionalProperties: false
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

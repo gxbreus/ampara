@@ -2,23 +2,192 @@
 
 Cada serviço da Ampara tem o próprio banco, e nenhum serviço lê o banco de outro. Este documento justifica cada banco, aponta onde a consistência é eventual e mostra como o outbox e a inbox resolvem a gravação dupla (*dual write*).
 
-<!-- Seções 1 a 4: escritas na #31 (Gabriel Cantanhede). -->
+<!-- Seções 1 a 4: escritas na #31 (Gabriel Cantanhede). Seção 5: escrita na #32 (Mateus Vitor). -->
 
 ## 1. Um banco por serviço
 
-*A escrever na #31.*
+Na Ampara, o padrão **Database per Service** é aplicado de forma estrita: cada microsserviço é proprietário absoluto de seu armazenamento de dados. Nenhum serviço possui permissão de leitura ou escrita direta no banco de outro serviço, e toda integração de dados entre fronteiras de domínio ocorre exclusivamente por APIs REST através dos BFFs ou de forma assíncrona por mensageria via RabbitMQ.
+
+A escolha de cada tecnologia de banco foi guiada pelas necessidades reais das estruturas de dados e regras de negócio de cada microsserviço:
+
+| Serviço | Container e Rede | Tecnologia | Dados armazenados | Por que esta tecnologia e não outra |
+| :--- | :--- | :--- | :--- | :--- |
+| **Identidade** | `postgres-identidade`<br>Rede: `data-identidade` | PostgreSQL 16 | `contas`, `perfis_adocao`, `vagas_solicitacao`, `adocoes_historico`, `sagas_compensadas`, `inbox`, `outbox` | **1. Integridade e unicidade relacionais estritas:** Validação de constraints em nível de banco (e-mail único via `UNIQUE`, exatamente 1 vaga de adoção ativa por adotante via constraint `UNIQUE (adotante_id)` na tabela `vagas_solicitacao`).<br>**2. Atomicidade ACID:** Suporte a transações relacionais atômicas para atualizar o perfil/vaga e registrar simultaneamente o evento no `outbox` e o `messageId` na `inbox`. |
+| **Animais** | `mongo-animais` (replica set `rs0`)<br>Rede: `data-animais` | MongoDB 7.0<br>*(dois databases lógicos na mesma instância)* | **Escrita (`animais`):** `animais`, `outbox`, `inbox`, `responsaveis`, `sagas_compensadas`<br>**Leitura (`animais_leitura`):** `animais_busca` | **1. Esquema flexível para atributos variáveis:** Fotos em array, lista de traços de temperamento dinâmicos e histórico de status embutido como subdocumentos.<br>**2. Índice geoespacial esférico nativo:** Suporte maduro ao índice `2dsphere` em `pontoAproximado` no read model, permitindo ordenação e consultas por raio de distância geodésica (`$geoNear`) em milissegundos sem dependência de bancos externos como Elasticsearch.<br>**3. Transações multidocumento em replica set:** O cluster local roda com replica set `rs0` para viabilizar transações ACID no MongoDB, permitindo atualizar o animal e inserir o evento na coleção `outbox` na mesma operação atômica. |
+| **Adoção** | `postgres-adocao`<br>Rede: `data-adocao` | PostgreSQL 16 | `solicitacoes`, `saga_passos`, `saga_historico`, `outbox`, `inbox`, `idempotencia` | **1. Transações ACID fortes para máquina de estados:** Como orquestrador da SAGA, Adoção precisa de consistência imediata rígida e histórico auditável append-only de passos (`saga_passos`), usando locks pessimistas (`SELECT ... FOR UPDATE`) para serializar transições concorrentes.<br>**2. Concorrência escalável no relay de outbox:** Suporte a `FOR UPDATE SKIP LOCKED`, permitindo que múltiplas réplicas do relay processem lotes de comandos pendentes sem colisão ou duplicação. |
+| **Notificações** | `redis-notificacoes`<br>Rede: `data-notificacoes` | Redis 7.2 com persistência AOF (`fsync everysec`) | `notif:caixa:{usuarioId}` (ZSET), `notif:item:{id}` (HASH), `notif:proc:{messageId}` (STRING com TTL) | **1. Baixíssima latência e ordenação nativa por timestamp:** A caixa de entrada in-app é modelada com Sorted Sets (`ZSET`), onde o score é o timestamp Unix da notificação. Isso permite entregar listagens paginadas e ordenadas cronologicamente (`ZREVRANGEBYSCORE`) em tempo $O(\log N + M)$ com consumo mínimo de memória.<br>**2. Expiração automática por TTL:** Notificações lidas antigas e chaves de idempotência da inbox (`notif:proc:{messageId}`) expiram sozinhas por TTL nativo da engine, eliminando jobs manuais de limpeza em batch.<br>**3. Durabilidade com AOF:** O modo Append-Only File com sincronização a cada segundo garante que notificações confirmadas sobrevivam ao reinício do container. |
+| **Assistente** | `qdrant-assistente`<br>`redis-assistente`<br>Rede: `data-assistente` | Qdrant (vetorial) +<br>Redis 7.2 (cache em memória) | **Qdrant:** coleção `base_conhecimento` (chunks e embeddings)<br>**Redis:** chaves `assist:cache:{sha256}` | **1. Busca vetorial eficiente com filtros por metadados:** O Qdrant implementa indexação HNSW (*Hierarchical Navigable Small World*) com busca por similaridade de cosseno, permitindo filtrar simultaneamente por trechos e capítulos dos guias de adoção responsável.<br>**2. Cache volátil de respostas (64 MB LRU):** O Redis atua como armazenamento efêmero sem persistência de volume para armazenar respostas de perguntas idênticas (indexadas por SHA-256 do prompt), reduzindo o custo financeiro e a latência de chamadas à API da LLM. |
+
+### 1.1 Isolamento de Redes e Acesso
+
+Nenhum banco fica exposto na rede `services` ou na rede externa `edge`. Cada microsserviço conecta-se a duas redes: a rede `services` (para comunicação interna entre BFFs, serviços e o broker RabbitMQ) e a sua rede privada `data-*` (compartilhada exclusivamente entre ele e a sua respectiva instância de banco).
+
+```mermaid
+flowchart TB
+    subgraph Redes [Isolamento de Redes Docker / Kubernetes]
+        direction TB
+
+        subgraph Edge [Rede edge]
+            Gateway[API Gateway Kong]
+            BFFWeb[BFF Web]
+            BFFMobile[BFF Mobile]
+        end
+
+        subgraph ServicesNet [Rede services]
+            Identidade[Serviço Identidade]
+            Animais[Serviço Animais]
+            Adocao[Serviço Adoção]
+            Notificacoes[Serviço Notificações]
+            Assistente[Serviço Assistente]
+            RabbitMQ[(RabbitMQ Broker)]
+        end
+
+        subgraph DataIdentidade [Rede data-identidade]
+            DBId[(postgres-identidade:5432)]
+        end
+
+        subgraph DataAnimais [Rede data-animais]
+            DBAn[(mongo-animais:27017)]
+        end
+
+        subgraph DataAdocao [Rede data-adocao]
+            DBAd[(postgres-adocao:5432)]
+        end
+
+        subgraph DataNotif [Rede data-notificacoes]
+            DBNo[(redis-notificacoes:6379)]
+        end
+
+        subgraph DataAssist [Rede data-assistente]
+            DBQd[(qdrant-assistente:6333)]
+            DBRd[(redis-assistente:6379)]
+        end
+    end
+
+    Gateway --> BFFWeb
+    Gateway --> BFFMobile
+
+    BFFWeb --> Identidade
+    BFFWeb --> Animais
+    BFFWeb --> Adocao
+    BFFMobile --> Animais
+    BFFMobile --> Adocao
+    BFFMobile --> Notificacoes
+    BFFMobile --> Assistente
+
+    Identidade --- RabbitMQ
+    Animais --- RabbitMQ
+    Adocao --- RabbitMQ
+    Notificacoes --- RabbitMQ
+
+    Identidade --> DBId
+    Animais --> DBAn
+    Adocao --> DBAd
+    Notificacoes --> DBNo
+    Assistente --> DBQd
+    Assistente --> DBRd
+```
+
+---
 
 ## 2. Pontos de consistência eventual
 
-*A escrever na #31.*
+Como cada serviço possui seu próprio banco de dados e a comunicação assíncrona desacopla temporalmente os participantes, existem cinco pontos onde vigora a **consistência eventual**:
 
-## 3. Riscos de dual write
+### 2.1 Busca de animais (Read Model do CQRS)
+- **Onde:** BFF Mobile $\rightarrow$ Animais `GET /v1/animais/busca` (projeção `animais_leitura.animais_busca`).
+- **Origem do dado:** Escrita em `animais.animais` $\rightarrow$ coleção `outbox` $\rightarrow$ relay publica evento `animal.criado` / `animal.atualizado` $\rightarrow$ fila `animais.projecao` $\rightarrow$ projetor atualiza `animais_busca`.
+- **Defasagem aceitável:** $p95 \le 5\text{ s}$.
+- **O que o usuário vê:** Um animal recém-cadastrado pela ONG ou com dados alterados no painel web pode demorar de 1 a 2 segundos para aparecer no mapa ou feed de busca do App Mobile. O timestamp `atualizadoEm` retornado no cartão evidencia a defasagem temporal.
 
-*A escrever na #31. A mitigação de cada risco está na seção 5.*
+### 2.2 Réplica local de responsáveis em Animais
+- **Onde:** Serviço de Animais, coleção local `animais.responsaveis` (consultada antes de permitir que uma ONG cadastre animais).
+- **Origem do dado:** Identidade marca conta como `VERIFICADA` no PostgreSQL $\rightarrow$ outbox $\rightarrow$ evento `conta.verificada` $\rightarrow$ projetor de Animais salva na réplica local `responsaveis`.
+- **Defasagem aceitável:** $p95 \le 3\text{ s}$.
+- **O que o usuário vê:** Um protetor ou ONG recém-verificado pelo administrador da plataforma pode receber erro de permissão por até 3 segundos se tentar cadastrar um animal imediatamente após a aprovação, até que a réplica local seja sincronizada.
+
+### 2.3 Dados desnormalizados da ONG na projeção de leitura
+- **Onde:** Projeção `animais_leitura.animais_busca` (campos `responsavel.nome` e `responsavel.verificado`).
+- **Origem do dado:** Evento `conta.verificada` da Identidade $\rightarrow$ projetor de Animais executa atualização em lote em todos os documentos de `animais_busca` pertencentes àquela conta.
+- **Defasagem aceitável:** $p95 \le 5\text{ s}$.
+- **O que o usuário vê:** O selo de verificação da ONG passa a ser exibido nos cartões de busca sem nenhuma chamada síncrona à Identidade.
+- **Risco de cópia desnormalizada (#90):** No MVP, assume-se como premissa de domínio que o nome do responsável é imutável. Alterações futuras de nome de usuário exigiriam a criação do evento `conta.atualizada` para atualizar os documentos projetados (item planejado para o pós-MVP, issue #90).
+
+### 2.4 Status do animal durante a SAGA de Adoção
+- **Onde:** App Mobile consultando `GET /mobile/v1/animais` ou `GET /mobile/v1/animais/{id}`.
+- **Origem do dado:** Adoção emite comando `ReservarAnimal` $\rightarrow$ Animais grava status `RESERVADO` em `animais.animais` $\rightarrow$ outbox $\rightarrow$ evento `animal.status_alterado` $\rightarrow$ projetor atualiza `animais_busca`.
+- **Defasagem aceitável:** $p95 \le 5\text{ s}$.
+- **O que o usuário vê:** Enquanto a SAGA transiciona em segundo plano, outro adotante que pesquisar na mesma região pode enxergar o animal por alguns segundos antes dele sumir da lista de disponíveis (pois a busca filtra `DISPONIVEL`). Se esse segundo usuário tentar solicitar o pet antes da projeção atualizar, o comando da SAGA falhará de forma determinística na escrita com `409 Conflict` (`ANIMAL_JA_RESERVADO`), preservando a consistência do negócio.
+
+### 2.5 Caixa de notificações do usuário
+- **Onde:** App Mobile consultando `GET /mobile/v1/notificacoes` (armazenadas em `redis-notificacoes`).
+- **Origem do dado:** Eventos de domínio emitidos pelo RabbitMQ (`adocao.iniciada`, `adocao.aguardando_aprovacao`, `adocao.concluida`, `adocao.recusada`) $\rightarrow$ consumidor assíncrono de Notificações grava o aviso no Redis.
+- **Defasagem aceitável:** $p95 \le 3\text{ s}$.
+- **O que o usuário vê:** O aviso no sininho de notificações do aplicativo chega de 1 a 2 segundos após a mudança de estado ser confirmada pelo serviço de Adoção ou pela ONG.
+
+---
+
+## 3. Riscos de dual write e cenários de falha
+
+O problema da **gravação dupla (*dual write*)** ocorre quando uma operação precisa alterar o banco de dados relacional/NoSQL e simultaneamente publicar uma mensagem no broker RabbitMQ. Como banco e broker não participam de uma transação distribuída de duas fases (2PC/XA), uma falha no processo entre as duas chamadas gera inconsistência grave:
+
+### 3.1 Adoção: Grava estado da SAGA e publica comando
+- **Cenário de falha sem proteção:**
+  - *Se gravar primeiro e cair antes de publicar:* O serviço altera a solicitação para `ANIMAL_RESERVADO` no PostgreSQL e cai. Ao reiniciar, o comando `ValidarPerfil` nunca foi enviado ao RabbitMQ: a SAGA congela para sempre e o animal fica bloqueado indefinidamente.
+  - *Se publicar primeiro e a gravação falhar:* O comando `ValidarPerfil` é enviado à Identidade, mas a transação da Adoção sofre *rollback* (ex.: timeout de conexão ou falha de disco). A Identidade valida o perfil de uma solicitação que nunca existiu no banco da Adoção.
+- **Mitigação:** Gravação do comando na tabela `outbox` dentro da **mesma transação relacional** do PostgreSQL (`BEGIN ... UPDATE solicitacoes ... INSERT INTO outbox ... COMMIT`), com publicação assíncrona por relay com *publisher confirms* e `FOR UPDATE SKIP LOCKED` (detalhado na [Seção 5](#5-outbox-e-inbox) e issue #32).
+
+### 3.2 Animais: Grava cadastro/edição e publica evento para o Read Model
+- **Cenário de falha sem proteção:**
+  - Uma ONG cadastra um animal em `animais.animais` e a aplicação cai antes de publicar `animal.criado` no broker. O animal existe na base de escrita, mas nunca chega à coleção `animais_leitura.animais_busca`: o animal torna-se um "fantasma" que nunca aparece na busca do celular.
+- **Mitigação:** Gravação do evento na coleção `outbox` na **mesma transação multidocumento** do MongoDB em replica set `rs0` (`session.start_transaction()`), com publicação pelo relay de Animais (detalhado na [Seção 5.4](#54-animais-outbox-no-mongodb) e issue #32).
+
+### 3.3 Identidade: Marca conta como verificada e publica evento
+- **Cenário de falha sem proteção:**
+  - O administrador aprova uma ONG e a conta passa para `VERIFICADA` no PostgreSQL. Se o processo cair antes de publicar `conta.verificada`, a réplica local `responsaveis` do serviço de Animais nunca tomará conhecimento da aprovação, impedindo a ONG de cadastrar animais.
+- **Mitigação:** Outbox transacional obrigatório também no serviço de Identidade (PostgreSQL) garantindo que `conta.verificada` sempre seja entregue ao exchange `ampara.eventos` (detalhado na [Seção 5.1](#51-onde-ha-outbox)).
+
+### 3.4 Respostas dos participantes da SAGA (Sem Outbox adicional)
+As respostas dos participantes da SAGA (`AnimalReservado`, `PerfilValidado`, etc.) **não utilizam outbox**. Em vez disso, o participante grava a resposta pronta na tabela/coleção `inbox` na mesma transação atômica do efeito e publica com *confirm* antes de dar o `ack` do comando. Se cair antes do `ack`, o RabbitMQ reentrega o comando, o participante detecta o `messageId` na `inbox` e republica a mesma resposta gravada sem reexecutar o efeito (detalhado na [Seção 5.5](#55-inbox-nos-consumidores)).
+
+### 3.5 Risco de quebra de isolamento no Broker (#89)
+- **Cenário de risco:** Se todos os microsserviços utilizassem uma única credencial de administrador compartilhada no RabbitMQ (`guest:guest`), o isolamento de "Database per Service" seria ilusório na camada de rede: um serviço comprometido ou com bug poderia publicar respostas forjadas da SAGA (ex.: forjar um `AnimalReservado` falso) diretamente nas filas da Adoção.
+- **Mitigação:** Cada microsserviço possui credenciais exclusivas e permissões mínimas no RabbitMQ configuradas via `infra/rabbitmq/definitions.json` (issue #89), garantindo que apenas Animais possa publicar na exchange de comandos e respostas de seu domínio.
+
+---
 
 ## 4. Como isso será evidenciado na Parte 4
 
-*A escrever na #31.*
+Na apresentação prática ao vivo e nos testes de homologação da Parte 4, o padrão **Database per Service** e a consistência eventual serão evidenciados de forma determinística:
+
+1. **Evidência de Containers e Volumes Separados:**
+   - Inspeção visual do `docker compose ps` e do Kubernetes demonstrando 5 containers de banco distintos:
+     - `postgres-identidade` com volume `pgdata_identidade`;
+     - `mongo-animais` com volume `mongodata_animais`;
+     - `postgres-adocao` com volume `pgdata_adocao`;
+     - `redis-notificacoes` com volume `redisdata_notificacoes`;
+     - `qdrant-assistente` com volume `qdrantdata_assistente`.
+2. **Teste de Isolamento de Redes (Network Segregation Test):**
+   - Execução de comandos determinísticos comprovando que um serviço não alcança o banco do outro:
+     ```bash
+     # Tentativa do serviço Animais alcançar o PostgreSQL da Adoção (deve falhar com timeout/recusa de rede)
+     docker compose exec animais python -c "
+     import socket
+     s = socket.socket()
+     s.settimeout(2)
+     try:
+         s.connect(('postgres-adocao', 5432))
+         print('FALHA: banco acessível indevidamente!')
+     except Exception as e:
+         print('SUCESSO: rede isolada!', e)
+     "
+     ```
+3. **Evidência ao vivo da Consistência Eventual (RF-03):**
+   - Criação de um animal no App Web e consulta imediata no App Mobile exibindo o timestamp `atualizadoEm` e a defasagem real de 1 a 2 segundos até o documento aparecer na busca geoespacial.
+4. **Evidência do Outbox em Funcionamento (RF-02):**
+   - Pausa temporária do relay de outbox no compose (`docker compose stop relay-adocao`), execução de uma transição da SAGA mostrando a linha pendente gravada no banco com `publicado_em IS NULL`, reinício do relay e observação do processamento e publicação confirmada no broker.
+
+---
 
 ## 5. Outbox e inbox
 

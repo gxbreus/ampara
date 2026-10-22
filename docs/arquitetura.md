@@ -46,7 +46,7 @@ flowchart TB
 
     Web --> GW
     Mob --> GW
-    GW -->|/api/v1/auth| ID
+    GW -->|/auth/v1| ID
     GW -->|/web/v1| BW
     GW -->|/mobile/v1| BM
     BW --> ID & AN & AD
@@ -170,7 +170,7 @@ A máquina de estados, as 18 transições, os 17 cenários de falha e os diagram
 ## 6. Diretrizes para a implementação
 
 1. Cada serviço tem as próprias credenciais e o próprio banco.
-2. Nenhum cliente acessa um serviço de domínio sem passar pelo gateway e por um BFF, exceto `/api/v1/auth/*`.
+2. Nenhum cliente acessa um serviço de domínio sem passar pelo gateway e por um BFF, exceto `/auth/v1`.
 3. A Adoção grava o estado da SAGA e o próximo comando na mesma transação, antes de avançar.
 4. Comando e evento só saem pelo outbox; todo consumidor deduplica pela inbox.
 5. Mensagens e logs da mesma solicitação carregam `sagaId` e `correlationId`.

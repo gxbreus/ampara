@@ -1,0 +1,653 @@
+openapi: 3.1.0
+info:
+  title: Ampara — Identidade
+  version: 1.0.0
+  description: >-
+    Contas, autenticação e perfil de adoção. Somente /v1/auth/* é exposto
+    externamente pelo gateway como /api/v1/auth/*; as demais rotas pertencem
+    à rede interna e são consumidas pelos BFFs e serviços.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://identidade:3001
+    description: Rede interna
+tags:
+  - name: Autenticação
+    description: Cadastro e criação de sessão.
+  - name: Conta atual
+    description: Dados da conta autenticada e seu perfil de adoção.
+  - name: Contas internas
+    description: Consultas internas consumidas por BFFs e serviços.
+  - name: Administração
+    description: Operações exclusivas de contas ADMIN.
+paths:
+  /v1/auth/contas:
+    post:
+      tags: [Autenticação]
+      summary: Cadastra uma conta
+      description: >-
+        Aceita ADOTANTE, PROTETOR ou ONG. PROTETOR e ONG nascem com
+        statusVerificacao PENDENTE_VERIFICACAO; ADMIN não pode ser cadastrado
+        por esta rota.
+      operationId: criarConta
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaConta'
+            example:
+              nome: Bruna Silva
+              email: bruna@example.com
+              senha: senha-de-exemplo-segura
+              cidade: Lavras
+              tipo: ADOTANTE
+      responses:
+        '201':
+          description: Conta criada.
+          headers:
+            Location:
+              description: URI interna da conta criada.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/contas/5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaCriada'
+              example:
+                id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                nome: Bruna Silva
+                email: bruna@example.com
+                role: ADOTANTE
+                cidade: Lavras
+                statusVerificacao: VERIFICADA
+        '409':
+          $ref: '#/components/responses/EmailJaCadastrado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/auth/sessoes:
+    post:
+      tags: [Autenticação]
+      summary: Cria uma sessão e devolve um JWT
+      operationId: criarSessao
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credenciais'
+            example:
+              email: bruna@example.com
+              senha: senha-de-exemplo-segura
+      responses:
+        '200':
+          description: Autenticação realizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenSessao'
+              example:
+                accessToken: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.exemplo.assinatura
+                tokenType: Bearer
+                expiraEm: '2026-10-06T17:00:00Z'
+                claims:
+                  iss: ampara-identidade
+                  sub: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                  role: ADOTANTE
+                  exp: 1791306000
+        '401':
+          $ref: '#/components/responses/CredenciaisInvalidas'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/contas/eu:
+    get:
+      tags: [Conta atual]
+      summary: Consulta a conta autenticada
+      operationId: obterMinhaConta
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Conta autenticada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MinhaConta'
+              example:
+                id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                nome: Bruna Silva
+                email: bruna@example.com
+                role: ADOTANTE
+                cidade: Lavras
+                statusVerificacao: VERIFICADA
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+  /v1/contas/eu/perfil-adocao:
+    get:
+      tags: [Conta atual]
+      summary: Consulta o perfil de adoção da conta autenticada
+      operationId: obterMeuPerfilAdocao
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Perfil de adoção.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilAdocao'
+              example:
+                tipoMoradia: CASA
+                temQuintal: true
+                outrosAnimais: false
+                horasForaDeCasa: 4
+                aceiteTermo: true
+                completo: true
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+    put:
+      tags: [Conta atual]
+      summary: Atualiza o perfil de adoção da conta autenticada
+      operationId: atualizarMeuPerfilAdocao
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerfilAdocaoEntrada'
+            example:
+              tipoMoradia: APARTAMENTO
+              temQuintal: false
+              outrosAnimais: true
+              horasForaDeCasa: 6
+              aceiteTermo: true
+      responses:
+        '200':
+          description: Perfil atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilAdocao'
+              example:
+                tipoMoradia: APARTAMENTO
+                temQuintal: false
+                outrosAnimais: true
+                horasForaDeCasa: 6
+                aceiteTermo: true
+                completo: true
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/contas:
+    get:
+      tags: [Contas internas]
+      summary: Consulta contas por identificadores ou pela fila de verificação
+      description: >-
+        Rota interna, com dois modos. Com ids (PROTETOR, ONG ou ADMIN), retorna
+        os resumos das contas encontradas, até 100; ids inexistentes são
+        omitidos, e mais de 100 ids responde 422. Com incluir=perfil, cada
+        resumo traz também o perfil de adoção, sem e-mail nem aceite do termo
+        (null quando a conta não tem perfil). Com statusVerificacao e role
+        (só ADMIN), retorna a fila de verificação.
+      operationId: listarContas
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdsContas'
+        - $ref: '#/components/parameters/IncluirPerfil'
+        - $ref: '#/components/parameters/StatusVerificacao'
+        - $ref: '#/components/parameters/Role'
+      responses:
+        '200':
+          description: Contas encontradas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: '#/components/schemas/ContaResumo'
+                    - $ref: '#/components/schemas/ContaComPerfil'
+              examples:
+                resumo:
+                  summary: Sem incluir
+                  value:
+                    - id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: Bruna Silva
+                      role: ADOTANTE
+                      cidade: Lavras
+                      statusVerificacao: VERIFICADA
+                comPerfil:
+                  summary: Com incluir=perfil
+                  value:
+                    - id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                      nome: Bruna Silva
+                      role: ADOTANTE
+                      cidade: Lavras
+                      statusVerificacao: VERIFICADA
+                      perfil:
+                        tipoMoradia: CASA
+                        temQuintal: true
+                        outrosAnimais: false
+                        horasForaDeCasa: 6
+                        completo: true
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+  /v1/contas/{id}:
+    get:
+      tags: [Contas internas]
+      summary: Consulta o resumo público de uma conta
+      operationId: obterContaPorId
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdConta'
+      responses:
+        '200':
+          description: Resumo da conta, sem e-mail nem senha.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResumo'
+              example:
+                id: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+                nome: Bruna Silva
+                role: ADOTANTE
+                cidade: Lavras
+                statusVerificacao: VERIFICADA
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '404':
+          $ref: '#/components/responses/ContaNaoEncontrada'
+  /v1/contas/{id}/verificacao:
+    put:
+      tags: [Administração]
+      summary: Verifica uma conta de protetor ou ONG
+      description: >-
+        Operação idempotente para ADMIN. Ao verificar, registra o evento
+        conta.verificada no outbox.
+      operationId: verificarConta
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdConta'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizacaoVerificacao'
+            example:
+              status: VERIFICADA
+      responses:
+        '200':
+          description: Conta já estava ou passou a estar verificada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResumo'
+              example:
+                id: c50a83ab-7db0-41b4-9436-4144c36f97d5
+                nome: ONG Patas de Lavras
+                role: ONG
+                cidade: Lavras
+                statusVerificacao: VERIFICADA
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          $ref: '#/components/responses/ContaNaoEncontrada'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 emitido pela Identidade, com validade de uma hora.
+  parameters:
+    IdConta:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
+    IdsContas:
+      name: ids
+      in: query
+      description: Lista separada por vírgulas, limitada a 100 identificadores.
+      schema:
+        type: string
+      example: 5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55,c50a83ab-7db0-41b4-9436-4144c36f97d5
+    IncluirPerfil:
+      name: incluir
+      in: query
+      description: >-
+        Com perfil, cada conta da resposta vem como ContaComPerfil. Só vale com
+        ids.
+      schema:
+        type: string
+        enum: [perfil]
+      example: perfil
+    StatusVerificacao:
+      name: statusVerificacao
+      in: query
+      schema:
+        $ref: '#/components/schemas/StatusVerificacao'
+      example: PENDENTE_VERIFICACAO
+    Role:
+      name: role
+      in: query
+      schema:
+        $ref: '#/components/schemas/Role'
+      example: ONG
+  responses:
+    DadosInvalidos:
+      description: Corpo ou parâmetros inválidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/validacao
+            title: Dados inválidos
+            status: 422
+            detail: tipo deve ser ADOTANTE, PROTETOR ou ONG.
+    EmailJaCadastrado:
+      description: Já existe uma conta com o e-mail informado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/email-ja-cadastrado
+            title: E-mail já cadastrado
+            status: 409
+            detail: Já existe uma conta para este e-mail.
+    CredenciaisInvalidas:
+      description: E-mail ou senha inválidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/credenciais-invalidas
+            title: Credenciais inválidas
+            status: 401
+            detail: E-mail ou senha inválidos.
+    NaoAutenticado:
+      description: JWT ausente, inválido ou expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/nao-autenticado
+            title: Não autenticado
+            status: 401
+            detail: Envie um token Bearer válido.
+    SemPermissao:
+      description: A conta autenticada não possui a permissão necessária.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/sem-permissao
+            title: Sem permissão
+            status: 403
+            detail: Esta operação exige a role ADMIN.
+    ContaNaoEncontrada:
+      description: Conta não encontrada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/conta-nao-encontrada
+            title: Conta não encontrada
+            status: 404
+            detail: Não existe conta com este identificador.
+  schemas:
+    NovaConta:
+      type: object
+      additionalProperties: false
+      required: [nome, email, senha, cidade, tipo]
+      properties:
+        nome:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        senha:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 8
+        cidade:
+          type: string
+          minLength: 1
+        tipo:
+          type: string
+          enum: [ADOTANTE, PROTETOR, ONG]
+    Credenciais:
+      type: object
+      additionalProperties: false
+      required: [email, senha]
+      properties:
+        email:
+          type: string
+          format: email
+        senha:
+          type: string
+          format: password
+          writeOnly: true
+    ContaCriada:
+      type: object
+      additionalProperties: false
+      required: [id, nome, email, role, cidade, statusVerificacao]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        cidade:
+          type: string
+        statusVerificacao:
+          $ref: '#/components/schemas/StatusVerificacao'
+    MinhaConta:
+      type: object
+      additionalProperties: false
+      required: [id, nome, email, role, cidade, statusVerificacao]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        cidade:
+          type: string
+        statusVerificacao:
+          $ref: '#/components/schemas/StatusVerificacao'
+    ContaResumo:
+      type: object
+      additionalProperties: false
+      required: [id, nome, role, cidade, statusVerificacao]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        cidade:
+          type: string
+        statusVerificacao:
+          $ref: '#/components/schemas/StatusVerificacao'
+    ContaComPerfil:
+      type: object
+      description: Resumo da conta com o perfil de adoção, sem dados de contato (LGPD).
+      additionalProperties: false
+      required: [id, nome, role, cidade, statusVerificacao, perfil]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        cidade:
+          type: string
+        statusVerificacao:
+          $ref: '#/components/schemas/StatusVerificacao'
+        perfil:
+          oneOf:
+            - $ref: '#/components/schemas/PerfilResumo'
+            - type: 'null'
+    PerfilResumo:
+      type: object
+      description: Perfil de adoção sem o aceite do termo, como o BFF Web o repassa.
+      additionalProperties: false
+      required: [tipoMoradia, completo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        completo:
+          type: boolean
+    Role:
+      type: string
+      enum: [ADOTANTE, PROTETOR, ONG, ADMIN]
+    StatusVerificacao:
+      type: string
+      enum: [PENDENTE_VERIFICACAO, VERIFICADA]
+    PerfilAdocaoEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipoMoradia, aceiteTermo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        aceiteTermo:
+          type: boolean
+    PerfilAdocao:
+      type: object
+      additionalProperties: false
+      required: [tipoMoradia, aceiteTermo, completo]
+      properties:
+        tipoMoradia:
+          type: string
+          enum: [CASA, APARTAMENTO, SITIO]
+        temQuintal:
+          type: boolean
+        outrosAnimais:
+          type: boolean
+        horasForaDeCasa:
+          type: integer
+          minimum: 0
+          maximum: 24
+        aceiteTermo:
+          type: boolean
+        completo:
+          type: boolean
+          readOnly: true
+    TokenSessao:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiraEm, claims]
+      properties:
+        accessToken:
+          type: string
+          description: JWT assinado em RS256.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiraEm:
+          type: string
+          format: date-time
+        claims:
+          type: object
+          additionalProperties: false
+          required: [iss, sub, role, exp]
+          properties:
+            iss:
+              type: string
+              enum: [ampara-identidade]
+            sub:
+              type: string
+              format: uuid
+            role:
+              $ref: '#/components/schemas/Role'
+            exp:
+              type: integer
+              description: Horário de expiração em segundos Unix; uma hora após emissão.
+    AtualizacaoVerificacao:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [VERIFICADA]
+    Problema:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
