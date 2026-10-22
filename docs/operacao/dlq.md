@@ -6,15 +6,15 @@ Uma mensagem que falha 6 vezes seguidas (a entrega original e 5 devoluções), o
 
 | Sinal | Onde |
 | --- | --- |
-| log `ERROR` "mensagem na DLQ", com `messageId`, `tipo`, `sagaId`, `motivo` e `filaDeOrigem` | logs do serviço dono da fila (na Adoção, `adocao.respostas.dlq`) |
-| log `CRITICAL` "passo esgotado: a solicitação requer intervenção", com `sagaId`, `passo` e `messageId` | logs da Adoção |
+| log `ERROR` "mensagem na DLQ", com `messageId`, `tipo`, `sagaId`, `motivo` e `filaDeOrigem` | logs do serviço dono da fila (no Orquestrador, `orquestrador.respostas.dlq` e `orquestrador.solicitacoes.dlq`; na Adoção, `adocao.saga.dlq`) |
+| log `CRITICAL` "passo esgotado: a solicitação requer intervenção", com `sagaId`, `passo` e `messageId` | logs do Orquestrador |
 | solicitação parada em `COMPENSANDO` (ou `APROVADA`) com `requerIntervencao: true` | `GET /v1/solicitacoes?requerIntervencao=true`, com token de ADMIN |
 
-Os dois costumam vir juntos: o participante não consegue processar um comando (por exemplo, `LiberarReserva`), o comando cai na DLQ e a Adoção, sem resposta, reenvia até o teto (`ADOCAO_MAX_REENVIOS_COMPENSACAO`) e para.
+Os dois costumam vir juntos: o participante não consegue processar um comando (por exemplo, `LiberarReserva`), o comando cai na DLQ e o Orquestrador, sem resposta, reenvia até o teto (`ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO`) e para. A Adoção fica sabendo pelo `saga.transicao` e passa a listar a solicitação com `requerIntervencao: true`.
 
 ```bash
-docker compose logs adocao | grep -E '"level":"(ERROR|CRITICAL)"'
-kubectl -n ampara logs -l app=adocao | grep -E '"level":"(ERROR|CRITICAL)"'
+docker compose logs orquestrador adocao | grep -E '"level":"(ERROR|CRITICAL)"'
+kubectl -n ampara logs -l 'app in (orquestrador,adocao)' | grep -E '"level":"(ERROR|CRITICAL)"'
 ```
 
 ## 2. Ver o que está na DLQ
@@ -48,14 +48,14 @@ O `reprocessar` devolve a mensagem para a fila de origem com o **mesmo** `messag
 
 ## 5. Retomar a SAGA
 
-Se a Adoção já tinha parado no teto, reprocessar a mensagem não basta: ela não reenvia mais nada por conta própria. Um ADMIN retoma a solicitação, e os passos esgotados são reenviados com o mesmo `messageId`:
+Se o Orquestrador já tinha parado no teto, reprocessar a mensagem não basta: ele não reenvia mais nada por conta própria. Um ADMIN retoma a solicitação pela Adoção, que publica `solicitacao.retomada`, e o Orquestrador reenvia os passos esgotados com o mesmo `messageId`:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN_ADMIN" \
   http://adocao:8080/v1/solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17/compensacao/retomada
 ```
 
-A resposta é 202, com `requerIntervencao: false`. Sem passo esgotado, a resposta é 409.
+A resposta é 202. O `requerIntervencao` volta a `false` assim que o Orquestrador processa a retomada e devolve o `saga.transicao`, em milissegundos. Sem intervenção pendente, a resposta é 409.
 
 ## 6. Conferir
 

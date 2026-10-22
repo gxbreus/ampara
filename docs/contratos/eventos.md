@@ -1,6 +1,6 @@
 # Catálogo de mensagens do RabbitMQ
 
-Este catálogo é o contrato das mensagens trocadas entre os serviços da Ampara: 6 comandos, 9 respostas e 11 eventos, todos na `version: 1`. Os passos e as transições que usam cada mensagem estão em [`docs/saga.md`](../saga.md).
+Este catálogo é o contrato das mensagens trocadas entre os serviços da Ampara: 6 comandos, 9 respostas e 15 eventos, todos na `version: 1`. A SAGA é coordenada pelo Orquestrador, e a Adoção conversa com ele só por eventos ([ADR-008](../decisoes/ADR-008-orquestrador.md)). Os passos e as transições que usam cada mensagem estão em [`docs/saga.md`](../saga.md).
 
 Toda mensagem nova ou alterada entra aqui antes de entrar no código. A regra de versão segue a ADR-006 (#28).
 
@@ -9,6 +9,7 @@ Toda mensagem nova ou alterada entra aqui antes de entrar no código. A regra de
 ```mermaid
 flowchart LR
     AD[Adoção]
+    OR[Orquestrador]
     AN[Animais]
     ID[Identidade]
     NO[Notificações]
@@ -20,18 +21,23 @@ flowchart LR
 
     QAC[(animais.comandos)]
     QIC[(identidade.comandos)]
-    QAR[(adocao.respostas)]
+    QOR[(orquestrador.respostas)]
+    QOS[(orquestrador.solicitacoes)]
+    QAS[(adocao.saga)]
     QAP[(animais.projecao)]
     QNE[(notificacoes.eventos)]
     DLQ[(animais.comandos.dlq)]
 
-    AD -- comandos --> XC
+    AD -- solicitacao.* --> XE
+    XE -- solicitacao.* --> QOS --> OR
+    OR -- comandos --> XC
     XC -- animais --> QAC --> AN
     XC -- identidade --> QIC --> ID
     AN -- respostas --> XR
     ID -- respostas --> XR
-    XR -- adocao --> QAR --> AD
-    AD -- adocao.* --> XE
+    XR -- orquestrador --> QOR --> OR
+    OR -- "adocao.* e saga.transicao" --> XE
+    XE -- saga.transicao --> QAS --> AD
     AN -- animal.* --> XE
     ID -- conta.verificada --> XE
     XE -- "animal.* e conta.verificada" --> QAP --> AN
@@ -45,9 +51,9 @@ Toda fila tem a própria DLQ; o diagrama mostra só a de `animais.comandos` para
 
 | Exchange | Tipo | Quem publica | Para quê |
 | --- | --- | --- | --- |
-| `ampara.comandos` | direct | Adoção | comandos da SAGA para um participante |
-| `ampara.respostas` | direct | Animais, Identidade | respostas dos participantes ao orquestrador |
-| `ampara.eventos` | topic | Adoção, Animais, Identidade (sempre pelo outbox) | fatos que já aconteceram |
+| `ampara.comandos` | direct | Orquestrador | comandos da SAGA para um participante |
+| `ampara.respostas` | direct | Animais, Identidade | respostas dos participantes ao Orquestrador |
+| `ampara.eventos` | topic | Adoção, Orquestrador, Animais, Identidade (sempre pelo outbox) | fatos que já aconteceram |
 | `ampara.dlx` | direct | o próprio RabbitMQ | mensagens mortas, roteadas para a DLQ da fila de origem |
 
 ### Filas
@@ -58,9 +64,13 @@ Todas são **quorum queues** duráveis, com `x-delivery-limit: 5`, `x-dead-lette
 | --- | --- | --- | --- |
 | `animais.comandos` | `ampara.comandos` / `animais` | Animais | `animais.comandos.dlq` |
 | `identidade.comandos` | `ampara.comandos` / `identidade` | Identidade | `identidade.comandos.dlq` |
-| `adocao.respostas` | `ampara.respostas` / `adocao` | Adoção | `adocao.respostas.dlq` |
+| `orquestrador.respostas` | `ampara.respostas` / `orquestrador` | Orquestrador | `orquestrador.respostas.dlq` |
+| `orquestrador.solicitacoes` | `ampara.eventos` / `solicitacao.*` | Orquestrador | `orquestrador.solicitacoes.dlq` |
+| `adocao.saga` | `ampara.eventos` / `saga.transicao` | Adoção | `adocao.saga.dlq` |
 | `animais.projecao` | `ampara.eventos` / `animal.*` e `conta.verificada` | Animais (projetor) | `animais.projecao.dlq` |
 | `notificacoes.eventos` | `ampara.eventos` / `adocao.*` e `conta.verificada` | Notificações | `notificacoes.eventos.dlq` |
+
+Os prefixos separam os públicos: `solicitacao.*` é o que a Adoção entrega ao Orquestrador, `saga.*` é o espelho que volta para a Adoção, e `adocao.*` são os fatos de negócio que Notificações (e, em breve, os BFFs) consomem. Com isso, `adocao.*` não arrasta para a Notificações mensagens que não são para ela.
 
 A topologia é criada uma vez, pelo `definitions.json` do broker (#89). Nenhum serviço declara exchange ou fila no código.
 
@@ -117,32 +127,36 @@ As propriedades AMQP repetem o envelope, para o broker e as ferramentas de inspe
 
 ## 3. Resumo
 
-Comando é imperativo (`ReservarAnimal`) e vai para um único consumidor. Resposta é o resultado de um comando e volta só para a Adoção. Evento é um fato no passado (`adocao.aprovada`) e pode ter vários consumidores.
+Comando é imperativo (`ReservarAnimal`) e vai para um único consumidor. Resposta é o resultado de um comando e volta só para o Orquestrador. Evento é um fato no passado (`adocao.aprovada`) e pode ter vários consumidores.
 
 | Mensagem | Tipo | Passo | Produtor → consumidor | Routing key |
 | --- | --- | --- | --- | --- |
-| [`ReservarAnimal`](#reservaranimal) | comando | T1 | Adoção → Animais | `animais` |
-| [`AnimalReservado`](#animalreservado) | resposta | T1 | Animais → Adoção | `adocao` |
-| [`ReservaRecusada`](#reservarecusada) | resposta | T1 | Animais → Adoção | `adocao` |
-| [`LiberarReserva`](#liberarreserva) | comando | C1 | Adoção → Animais | `animais` |
-| [`ReservaLiberada`](#reservaliberada) | resposta | C1 | Animais → Adoção | `adocao` |
-| [`ConfirmarAdocao`](#confirmaradocao) | comando | T4 | Adoção → Animais | `animais` |
-| [`AdocaoConfirmada`](#adocaoconfirmada) | resposta | T4 | Animais → Adoção | `adocao` |
-| [`ConfirmacaoRecusada`](#confirmacaorecusada) | resposta | T4 | Animais → Adoção | `adocao` |
-| [`ValidarPerfil`](#validarperfil) | comando | T2 | Adoção → Identidade | `identidade` |
-| [`PerfilValidado`](#perfilvalidado) | resposta | T2 | Identidade → Adoção | `adocao` |
-| [`PerfilRecusado`](#perfilrecusado) | resposta | T2 | Identidade → Adoção | `adocao` |
-| [`LiberarVaga`](#liberarvaga) | comando | C2 | Adoção → Identidade | `identidade` |
-| [`VagaLiberada`](#vagaliberada) | resposta | C2 | Identidade → Adoção | `adocao` |
-| [`RegistrarAdocao`](#registraradocao) | comando | T5 | Adoção → Identidade | `identidade` |
-| [`AdocaoRegistrada`](#adocaoregistrada) | resposta | T5 | Identidade → Adoção | `adocao` |
-| [`adocao.aguardando_aprovacao`](#adocaoaguardando_aprovacao) | evento | T3 | Adoção → Notificações | `adocao.aguardando_aprovacao` |
-| [`adocao.aprovada`](#adocaoaprovada) | evento | pivô | Adoção → Notificações | `adocao.aprovada` |
-| [`adocao.concluida`](#adocaoconcluida) | evento | T6 | Adoção → Notificações | `adocao.concluida` |
-| [`adocao.recusada`](#adocaorecusada) | evento | encerramento | Adoção → Notificações | `adocao.recusada` |
-| [`adocao.cancelada`](#adocaocancelada) | evento | encerramento | Adoção → Notificações | `adocao.cancelada` |
-| [`adocao.expirada`](#adocaoexpirada) | evento | encerramento | Adoção → Notificações | `adocao.expirada` |
-| [`adocao.falhou`](#adocaofalhou) | evento | encerramento | Adoção → Notificações | `adocao.falhou` |
+| [`ReservarAnimal`](#reservaranimal) | comando | T1 | Orquestrador → Animais | `animais` |
+| [`AnimalReservado`](#animalreservado) | resposta | T1 | Animais → Orquestrador | `orquestrador` |
+| [`ReservaRecusada`](#reservarecusada) | resposta | T1 | Animais → Orquestrador | `orquestrador` |
+| [`LiberarReserva`](#liberarreserva) | comando | C1 | Orquestrador → Animais | `animais` |
+| [`ReservaLiberada`](#reservaliberada) | resposta | C1 | Animais → Orquestrador | `orquestrador` |
+| [`ConfirmarAdocao`](#confirmaradocao) | comando | T4 | Orquestrador → Animais | `animais` |
+| [`AdocaoConfirmada`](#adocaoconfirmada) | resposta | T4 | Animais → Orquestrador | `orquestrador` |
+| [`ConfirmacaoRecusada`](#confirmacaorecusada) | resposta | T4 | Animais → Orquestrador | `orquestrador` |
+| [`ValidarPerfil`](#validarperfil) | comando | T2 | Orquestrador → Identidade | `identidade` |
+| [`PerfilValidado`](#perfilvalidado) | resposta | T2 | Identidade → Orquestrador | `orquestrador` |
+| [`PerfilRecusado`](#perfilrecusado) | resposta | T2 | Identidade → Orquestrador | `orquestrador` |
+| [`LiberarVaga`](#liberarvaga) | comando | C2 | Orquestrador → Identidade | `identidade` |
+| [`VagaLiberada`](#vagaliberada) | resposta | C2 | Identidade → Orquestrador | `orquestrador` |
+| [`RegistrarAdocao`](#registraradocao) | comando | T5 | Orquestrador → Identidade | `identidade` |
+| [`AdocaoRegistrada`](#adocaoregistrada) | resposta | T5 | Identidade → Orquestrador | `orquestrador` |
+| [`adocao.aguardando_aprovacao`](#adocaoaguardando_aprovacao) | evento | T3 | Orquestrador → Notificações | `adocao.aguardando_aprovacao` |
+| [`adocao.aprovada`](#adocaoaprovada) | evento | pivô | Orquestrador → Notificações | `adocao.aprovada` |
+| [`adocao.concluida`](#adocaoconcluida) | evento | T6 | Orquestrador → Notificações | `adocao.concluida` |
+| [`adocao.recusada`](#adocaorecusada) | evento | encerramento | Orquestrador → Notificações | `adocao.recusada` |
+| [`adocao.cancelada`](#adocaocancelada) | evento | encerramento | Orquestrador → Notificações | `adocao.cancelada` |
+| [`adocao.expirada`](#adocaoexpirada) | evento | encerramento | Orquestrador → Notificações | `adocao.expirada` |
+| [`adocao.falhou`](#adocaofalhou) | evento | encerramento | Orquestrador → Notificações | `adocao.falhou` |
+| [`solicitacao.criada`](#solicitacaocriada) | evento | início | Adoção → Orquestrador | `solicitacao.criada` |
+| [`solicitacao.decidida`](#solicitacaodecidida) | evento | pivô ou encerramento | Adoção → Orquestrador | `solicitacao.decidida` |
+| [`solicitacao.retomada`](#solicitacaoretomada) | evento | operação (#86) | Adoção → Orquestrador | `solicitacao.retomada` |
+| [`saga.transicao`](#sagatransicao) | evento | toda transição | Orquestrador → Adoção | `saga.transicao` |
 | [`animal.criado`](#animalcriado) | evento | — | Animais → Animais (projeção) | `animal.criado` |
 | [`animal.atualizado`](#animalatualizado) | evento | — | Animais → Animais (projeção) | `animal.atualizado` |
 | [`animal.status_alterado`](#animalstatus_alterado) | evento | — | Animais → Animais (projeção) | `animal.status_alterado` |
@@ -162,7 +176,7 @@ Reserva atômica: `DISPONIVEL` → `RESERVADO` com `reservaSagaId = sagaId`, num
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | T1 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Animais |
 | Exchange / routing key | `ampara.comandos` / `animais` |
 | Fila | `animais.comandos` |
@@ -199,16 +213,16 @@ Reserva atômica: `DISPONIVEL` → `RESERVADO` com `reservaSagaId = sagaId`, num
 
 #### `AnimalReservado`
 
-A Adoção guarda `animalNome` e `responsavelId` como snapshot na solicitação.
+O Orquestrador guarda `animalNome` e `responsavelId` como snapshot na SAGA e os repassa à Adoção no `saga.transicao`.
 
 | | |
 | --- | --- |
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T1 |
 | Produtor | Animais |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -259,9 +273,9 @@ A Adoção guarda `animalNome` e `responsavelId` como snapshot na solicitação.
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T1 |
 | Produtor | Animais |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -310,7 +324,7 @@ Só libera se `reservaSagaId == sagaId`, e grava a marca `sagas_compensadas`. Po
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | C1 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Animais |
 | Exchange / routing key | `ampara.comandos` / `animais` |
 | Fila | `animais.comandos` |
@@ -354,9 +368,9 @@ Sempre responde, mesmo sem reserva a liberar (`liberou: false`).
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | C1 |
 | Produtor | Animais |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -400,7 +414,7 @@ Depois do pivô: `RESERVADO` → `ADOTADO`, só se a reserva for desta SAGA. Ret
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | T4 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Animais |
 | Exchange / routing key | `ampara.comandos` / `animais` |
 | Fila | `animais.comandos` |
@@ -443,16 +457,16 @@ Depois do pivô: `RESERVADO` → `ADOTADO`, só se a reserva for desta SAGA. Ret
 
 #### `AdocaoConfirmada`
 
-Leva a Adoção ao passo T5.
+Leva o Orquestrador ao passo T5.
 
 | | |
 | --- | --- |
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T4 |
 | Produtor | Animais |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -485,16 +499,16 @@ Leva a Adoção ao passo T5.
 
 #### `ConfirmacaoRecusada`
 
-Invariante violada (transição 17 de `docs/saga.md`): a Adoção compensa e encerra em `FALHOU`.
+Invariante violada (transição 17 de `docs/saga.md`): o Orquestrador compensa e encerra em `FALHOU`.
 
 | | |
 | --- | --- |
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T4 |
 | Produtor | Animais |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -544,7 +558,7 @@ Confere o perfil de adoção e ocupa a vaga (1 solicitação ativa por adotante)
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | T2 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Identidade |
 | Exchange / routing key | `ampara.comandos` / `identidade` |
 | Fila | `identidade.comandos` |
@@ -580,16 +594,16 @@ Confere o perfil de adoção e ocupa a vaga (1 solicitação ativa por adotante)
 
 #### `PerfilValidado`
 
-A vaga foi ocupada. A Adoção grava `AGUARDANDO_APROVACAO` e publica `adocao.aguardando_aprovacao` (T3).
+A vaga foi ocupada. O Orquestrador grava `AGUARDANDO_APROVACAO` e publica `adocao.aguardando_aprovacao` (T3).
 
 | | |
 | --- | --- |
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T2 |
 | Produtor | Identidade |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -628,9 +642,9 @@ Não ocupa a vaga. `camposFaltando` vem preenchido quando o motivo é `PERFIL_IN
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T2 |
 | Produtor | Identidade |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -688,7 +702,7 @@ Remove a vaga deste `sagaId` e grava a marca `sagas_compensadas`. Pode ser bloqu
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | C2 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Identidade |
 | Exchange / routing key | `ampara.comandos` / `identidade` |
 | Fila | `identidade.comandos` |
@@ -731,9 +745,9 @@ Sempre responde, mesmo sem vaga a liberar (`liberou: false`).
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | C2 |
 | Produtor | Identidade |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -776,7 +790,7 @@ Grava a adoção no histórico do adotante e libera a vaga. Retentável.
 | --- | --- |
 | Tipo | comando, `version: 1` |
 | Passo da SAGA | T5 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Identidade |
 | Exchange / routing key | `ampara.comandos` / `identidade` |
 | Fila | `identidade.comandos` |
@@ -826,9 +840,9 @@ Leva a solicitação a `CONCLUIDA` e à publicação de `adocao.concluida` (T6).
 | Tipo | resposta, `version: 1` |
 | Passo da SAGA | T5 |
 | Produtor | Identidade |
-| Consumidor | Adoção |
-| Exchange / routing key | `ampara.respostas` / `adocao` |
-| Fila | `adocao.respostas` |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.respostas` / `orquestrador` |
+| Fila | `orquestrador.respostas` |
 
 <details><summary>Schema do payload e exemplo</summary>
 
@@ -865,7 +879,9 @@ Leva a solicitação a `CONCLUIDA` e à publicação de `adocao.concluida` (T6).
 
 </details>
 
-### Eventos da Adoção
+### Eventos da SAGA (`adocao.*`)
+
+Publicados pelo Orquestrador. O nome continua `adocao.*` porque é o fato de negócio que interessa a quem consome (Notificações e, em breve, os BFFs), e não quem o produz.
 
 #### `adocao.aguardando_aprovacao`
 
@@ -875,7 +891,7 @@ Publicado na mesma transação que grava `AGUARDANDO_APROVACAO`. Avisa o respons
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | T3 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.aguardando_aprovacao` |
 | Fila | `notificacoes.eventos` |
@@ -946,7 +962,7 @@ Sai junto com o `ConfirmarAdocao` (T4), na transição para `APROVADA`.
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | pivô |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.aprovada` |
 | Fila | `notificacoes.eventos` |
@@ -1011,7 +1027,7 @@ Sai na transição para `CONCLUIDA`, depois de `AdocaoRegistrada`.
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | T6 |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.concluida` |
 | Fila | `notificacoes.eventos` |
@@ -1076,7 +1092,7 @@ Só sai depois de `VagaLiberada` e `ReservaLiberada`: o animal já voltou para a
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | encerramento |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.recusada` |
 | Fila | `notificacoes.eventos` |
@@ -1150,7 +1166,7 @@ Cancelamento pelo adotante. Só sai depois das duas compensações bloqueantes.
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | encerramento |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.cancelada` |
 | Fila | `notificacoes.eventos` |
@@ -1209,13 +1225,13 @@ Cancelamento pelo adotante. Só sai depois das duas compensações bloqueantes.
 
 #### `adocao.expirada`
 
-Prazo `ADOCAO_PRAZO_EXPIRACAO` vencido sem decisão. Só sai depois das duas compensações bloqueantes.
+Prazo `ORQUESTRADOR_PRAZO_EXPIRACAO` vencido sem decisão. Só sai depois das duas compensações bloqueantes.
 
 | | |
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | encerramento |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.expirada` |
 | Fila | `notificacoes.eventos` |
@@ -1280,7 +1296,7 @@ Cobre os estados finais `REJEITADA_INDISPONIVEL`, `PERFIL_INVALIDO` e `FALHOU`. 
 | --- | --- |
 | Tipo | evento, `version: 1` |
 | Passo da SAGA | encerramento |
-| Produtor | Adoção |
+| Produtor | Orquestrador |
 | Consumidor | Notificações |
 | Exchange / routing key | `ampara.eventos` / `adocao.falhou` |
 | Fila | `notificacoes.eventos` |
@@ -1372,6 +1388,361 @@ Cobre os estados finais `REJEITADA_INDISPONIVEL`, `PERFIL_INVALIDO` e `FALHOU`. 
   "camposFaltando": [
     "aceiteTermo"
   ]
+}
+```
+
+</details>
+
+### Mensagens entre a Adoção e o Orquestrador
+
+A Adoção guarda a solicitação como o usuário a vê e entrega as ações ao Orquestrador por `solicitacao.*`. O Orquestrador devolve cada mudança de estado em `saga.transicao`, e a Adoção mantém com ele um espelho e a linha do tempo (ADR-008). O `sagaId` do envelope é sempre o id da solicitação.
+
+#### `solicitacao.criada`
+
+Sai na mesma transação que grava a solicitação em `SOLICITADA` (`POST /v1/solicitacoes`). O Orquestrador cria a SAGA e emite o `ReservarAnimal` (transição 1). Uma SAGA que já existe com o mesmo id não é recriada.
+
+| | |
+| --- | --- |
+| Tipo | evento, `version: 1` |
+| Passo da SAGA | início (transição 1) |
+| Produtor | Adoção |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.eventos` / `solicitacao.criada` |
+| Fila | `orquestrador.solicitacoes` |
+
+<details><summary>Schema do payload e exemplo</summary>
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.criada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "adotanteId",
+    "animalId"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    }
+  }
+}
+```
+
+```json
+{
+  "solicitacaoId": "7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17",
+  "adotanteId": "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55",
+  "animalId": "65a2f1c4e8b9d3a7f0c1b2d4"
+}
+```
+
+</details>
+
+#### `solicitacao.decidida`
+
+A decisão humana em `AGUARDANDO_APROVACAO`: a aprovação do responsável é o pivô (transição 8); a recusa (9) e o cancelamento do adotante (10) levam às compensações. A Adoção só publica uma decisão por solicitação. Se o prazo vencer no mesmo instante, o Orquestrador resolve a corrida com a SAGA travada e ignora a decisão que chegou tarde, com `ack` e um aviso no log.
+
+| | |
+| --- | --- |
+| Tipo | evento, `version: 1` |
+| Passo da SAGA | pivô (aprovação) ou encerramento (recusa e cancelamento) |
+| Produtor | Adoção |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.eventos` / `solicitacao.decidida` |
+| Fila | `orquestrador.solicitacoes` |
+
+<details><summary>Schema do payload e exemplo</summary>
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.decidida v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "decisao",
+    "decididaPor",
+    "motivo"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "decisao": {
+      "enum": [
+        "APROVADA",
+        "RECUSADA",
+        "CANCELADA"
+      ]
+    },
+    "decididaPor": {
+      "type": "string",
+      "format": "uuid",
+      "description": "sub de quem decidiu: o responsável, ou o adotante no cancelamento"
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500,
+      "description": "só na recusa, quando informado"
+    }
+  }
+}
+```
+
+```json
+{
+  "solicitacaoId": "7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17",
+  "decisao": "RECUSADA",
+  "decididaPor": "c50a83ab-7db0-41b4-9436-4144c36f97d5",
+  "motivo": "O quintal ainda não tem tela."
+}
+```
+
+</details>
+
+#### `solicitacao.retomada`
+
+Um ADMIN pede a retomada de uma SAGA parada no teto de reenvios, depois de corrigir a causa (#86). O Orquestrador reenvia os passos `ESGOTADO` com o mesmo `messageId` (transição 13 ou 16). Sem passo esgotado, a mensagem não tem efeito.
+
+| | |
+| --- | --- |
+| Tipo | evento, `version: 1` |
+| Passo da SAGA | operação manual |
+| Produtor | Adoção |
+| Consumidor | Orquestrador |
+| Exchange / routing key | `ampara.eventos` / `solicitacao.retomada` |
+| Fila | `orquestrador.solicitacoes` |
+
+<details><summary>Schema do payload e exemplo</summary>
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.retomada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "pedidaPor"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pedidaPor": {
+      "type": "string",
+      "format": "uuid",
+      "description": "sub do ADMIN"
+    }
+  }
+}
+```
+
+```json
+{
+  "solicitacaoId": "7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17",
+  "pedidaPor": "ad000000-0000-4000-8000-000000000001"
+}
+```
+
+</details>
+
+#### `saga.transicao`
+
+Uma por transição, na mesma transação que a grava, depois dos comandos e eventos dela. A Adoção aplica ao espelho só a versão maior que a gravada e registra todas na linha do tempo, ordenadas pela `versao`: assim a ordem de chegada não importa. `animalNome` e `responsavelId` nulos não apagam o que a Adoção já tem.
+
+| | |
+| --- | --- |
+| Tipo | evento, `version: 1` |
+| Passo da SAGA | toda transição, inclusive reenvios (13 e 16) |
+| Produtor | Orquestrador |
+| Consumidor | Adoção |
+| Exchange / routing key | `ampara.eventos` / `saga.transicao` |
+| Fila | `adocao.saga` |
+
+<details><summary>Schema do payload e exemplo</summary>
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "saga.transicao v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "versao",
+    "de",
+    "estado",
+    "desfecho",
+    "motivo",
+    "camposFaltando",
+    "animalNome",
+    "responsavelId",
+    "expiraEm",
+    "requerIntervencao",
+    "evento",
+    "passo",
+    "transicao",
+    "em"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "versao": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "sobe 1 a cada transição da SAGA"
+    },
+    "de": {
+      "enum": [
+        "SOLICITADA",
+        "ANIMAL_RESERVADO",
+        "AGUARDANDO_APROVACAO",
+        "APROVADA",
+        "COMPENSANDO",
+        "CONCLUIDA",
+        "REJEITADA_INDISPONIVEL",
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU",
+        null
+      ],
+      "description": "null na transição 1"
+    },
+    "estado": {
+      "enum": [
+        "SOLICITADA",
+        "ANIMAL_RESERVADO",
+        "AGUARDANDO_APROVACAO",
+        "APROVADA",
+        "COMPENSANDO",
+        "CONCLUIDA",
+        "REJEITADA_INDISPONIVEL",
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU"
+      ]
+    },
+    "desfecho": {
+      "enum": [
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU",
+        null
+      ],
+      "description": "o estado final que virá, em COMPENSANDO"
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "camposFaltando": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "animalNome": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "responsavelId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "expiraEm": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "requerIntervencao": {
+      "type": "boolean"
+    },
+    "evento": {
+      "type": "string",
+      "description": "o gatilho: SolicitacaoCriada, AnimalReservado, Aprovacao, Timeout, ..."
+    },
+    "passo": {
+      "enum": [
+        "T1",
+        "T2",
+        "T4",
+        "T5",
+        "C1",
+        "C2",
+        null
+      ]
+    },
+    "transicao": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18,
+      "description": "número em docs/saga.md; 0 quando só fecha um passo"
+    },
+    "em": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
+```
+
+```json
+{
+  "solicitacaoId": "7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17",
+  "versao": 3,
+  "de": "ANIMAL_RESERVADO",
+  "estado": "AGUARDANDO_APROVACAO",
+  "desfecho": null,
+  "motivo": null,
+  "camposFaltando": null,
+  "animalNome": "Pipoca",
+  "responsavelId": "c50a83ab-7db0-41b4-9436-4144c36f97d5",
+  "expiraEm": "2026-11-20T15:00:00Z",
+  "requerIntervencao": false,
+  "evento": "PerfilValidado",
+  "passo": "T2",
+  "transicao": 5,
+  "em": "2026-11-17T15:00:00.123Z"
 }
 ```
 
@@ -2059,13 +2430,13 @@ Animais atualiza a réplica `responsaveis` e o `responsavel` na projeção; Noti
 
 - **Comandos e eventos saem pelo outbox**, gravados na mesma transação da mudança de estado e publicados por um relay com *publisher confirms*. Nenhum serviço publica comando ou evento fora do outbox.
 - **Respostas não usam outbox.** O participante grava o efeito e a resposta na inbox na mesma transação, faz o commit, publica a resposta com *publisher confirm* e só então faz o `ack` do comando. Se cair antes do `ack`, o comando volta, a inbox encontra a resposta gravada e o participante publica a mesma resposta de novo.
-- **Reenvio mantém o `messageId`.** A Adoção reenvia um comando por timeout com o mesmo `messageId` e a mesma `version`, para a inbox do participante devolver a resposta já gravada. Reenvio não é versão nova.
+- **Reenvio mantém o `messageId`.** O Orquestrador reenvia um comando por timeout com o mesmo `messageId` e a mesma `version`, para a inbox do participante devolver a resposta já gravada. Reenvio não é versão nova.
 - **Encerramento depois das compensações.** `adocao.recusada`, `adocao.cancelada`, `adocao.expirada` e o `adocao.falhou` que vem de `COMPENSANDO` só saem quando as compensações bloqueantes responderam. O aviso "solicitação encerrada" já significa que o animal voltou para a busca.
 
 ### Consumidores
 
 - **Entrega pelo menos uma vez.** Toda mensagem pode chegar mais de uma vez. A inbox (`messageId` como chave) é gravada na mesma transação do efeito; uma mensagem repetida vira `ack` sem efeito. Nos participantes da SAGA, a chave semântica `sagaId` + passo protege também contra o mesmo passo vindo com outro `messageId`.
-- **Sem dependência de ordem.** Nenhum consumidor depende da ordem de chegada, porque o relay com mais de uma réplica pode publicar fora de ordem (#91). A projeção de Animais descarta o evento cuja `version` é menor que a gravada. Notificações ordena a caixa de entrada por `occurredAt`.
+- **Sem dependência de ordem.** Nenhum consumidor depende da ordem de chegada, porque o relay com mais de uma réplica pode publicar fora de ordem (#91). A projeção de Animais descarta o evento cuja `version` é menor que a gravada. A Adoção faz o mesmo com a `versao` do `saga.transicao`. Notificações ordena a caixa de entrada por `occurredAt`.
 - **Ação depois da compensação é recusada.** Animais e Identidade gravam a marca `sagas_compensadas` ao compensar. Uma ação que chega depois para o mesmo `sagaId` responde com motivo `SAGA_ENCERRADA`, sem efeito.
 - **Leitor tolerante de versão.** O consumidor processa as versões que conhece. Uma `version` desconhecida vai para a DLQ com log `ERROR`, em vez de ser processada pela metade. Uma versão nova é publicada lado a lado com a antiga enquanto houver consumidor antigo (ADR-006, #28).
 - **`ack` só depois do commit.** O consumidor só confirma a mensagem depois de gravar o efeito e, no caso dos participantes, publicar a resposta.
@@ -2080,7 +2451,7 @@ Depois da DLQ (#86):
 
 - **Alerta.** Cada serviço consome a própria DLQ só para registrar um log `ERROR` com `messageId`, `type`, `sagaId`, a fila de origem e o motivo do `x-death`. A mensagem **não** é reprocessada automaticamente, porque isso recriaria o loop.
 - **Reprocessamento manual.** Depois de corrigir a causa, `scripts/dlq.sh` move a mensagem de volta para a fila de origem com o **mesmo** `messageId`. A inbox do consumidor garante que nada é aplicado duas vezes.
-- **Teto no orquestrador.** A Adoção para de reenviar um comando ao atingir `ADOCAO_MAX_REENVIOS_COMPENSACAO` (padrão 10), marca a solicitação com `requer_intervencao` e espera a retomada manual de um ADMIN. Sem o teto, um comando envenenado cairia na DLQ, seria reenviado e cairia de novo, indefinidamente.
+- **Teto no Orquestrador.** O Orquestrador para de reenviar um comando ao atingir `ORQUESTRADOR_MAX_REENVIOS_COMPENSACAO` (padrão 10), marca a SAGA com `requer_intervencao` (a Adoção recebe isso no `saga.transicao`) e espera a retomada manual de um ADMIN, que chega como `solicitacao.retomada`. Sem o teto, um comando envenenado cairia na DLQ, seria reenviado e cairia de novo, indefinidamente.
 
 ## 7. Permissões por serviço
 
@@ -2088,7 +2459,8 @@ Cada serviço tem o próprio usuário no RabbitMQ, com permissão só para o que
 
 | Usuário | Publica em (`write`) | Consome de (`read`) |
 | --- | --- | --- |
-| `adocao` | `ampara.comandos`, `ampara.eventos` | `adocao.respostas`, `adocao.respostas.dlq` |
+| `orquestrador` | `ampara.comandos`, `ampara.eventos` | `orquestrador.respostas`, `orquestrador.solicitacoes` e as DLQs delas |
+| `adocao` | `ampara.eventos` | `adocao.saga`, `adocao.saga.dlq` |
 | `animais` | `ampara.respostas`, `ampara.eventos` | `animais.comandos`, `animais.projecao` e as DLQs delas |
 | `identidade` | `ampara.respostas`, `ampara.eventos` | `identidade.comandos`, `identidade.comandos.dlq` |
 | `notificacoes` | — | `notificacoes.eventos`, `notificacoes.eventos.dlq` |
@@ -2097,6 +2469,7 @@ Nenhum serviço tem permissão `configure`: a topologia vem só do `definitions.
 
 ## 8. Decisões registradas
 
-- **Sem `adocao.solicitada`.** Ninguém precisa reagir à criação da solicitação antes da reserva: o responsável só é avisado quando há algo a decidir (`adocao.aguardando_aprovacao`). Um evento sem consumidor seria só ruído.
+- **`solicitacao.*` em vez de `adocao.solicitada`.** A criação da solicitação passou a ter consumidor, o Orquestrador, que inicia a SAGA (ADR-008). O prefixo `solicitacao.*` mantém essa mensagem fora da fila da Notificações, que assina `adocao.*`: o responsável continua sendo avisado só quando há algo a decidir (`adocao.aguardando_aprovacao`).
+- **Espelho por `saga.transicao`, e não por consulta HTTP.** A Adoção mostra o estado da SAGA sem depender de o Orquestrador estar no ar: o espelho fica milissegundos atrás, e as telas continuam respondendo se ele cair.
 - **Um evento de falha para três estados finais.** `REJEITADA_INDISPONIVEL`, `PERFIL_INVALIDO` e `FALHOU` publicam `adocao.falhou`, com `estadoFinal` e `motivo` no payload. Notificações monta o texto a partir do `motivo`.
 - **Snapshot completo nos eventos de Animais.** Os eventos `animal.*` levam o animal inteiro (*event-carried state transfer*), para a projeção não consultar o modelo de escrita. A exceção é a coordenada: o evento só traz o `pontoAproximado`, então a localização exata nunca passa pelo broker.

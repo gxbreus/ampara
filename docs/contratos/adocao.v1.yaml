@@ -390,7 +390,7 @@ paths:
         Só ADMIN. Depois de corrigir a causa (por exemplo, uma mensagem
         envenenada), os passos esgotados voltam a pendentes, com as tentativas
         zeradas, e são reenviados com o mesmo messageId: a inbox do participante
-        impede efeito duplicado. Responde 202, e requerIntervencao volta a false.
+        impede efeito duplicado. Responde 202; requerIntervencao volta a false quando o Orquestrador processa a retomada (solicitacao.retomada) e devolve o saga.transicao.
       operationId: retomarCompensacao
       security:
         - bearerAuth: []
