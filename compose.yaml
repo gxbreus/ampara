@@ -220,6 +220,10 @@ services:
     image: ampara/identidade:dev
     environment:
       IDENTIDADE_DATABASE_URL: postgresql://${IDENTIDADE_DB_USER}:${IDENTIDADE_DB_PASSWORD}@postgres-identidade:5432/identidade
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+      JWT_ISSUER: ampara-identidade
+      JWT_EXPIRACAO: 1h
     # edge: o gateway encaminha /auth/v1 direto para a Identidade
     networks: [edge, services, data-identidade]
     depends_on:

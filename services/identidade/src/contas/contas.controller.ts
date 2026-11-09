@@ -1,6 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, NotFoundException, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, AuthenticatedRequest } from '../auth/jwt-auth.guard';
-import { Request } from 'express';
 import { ContasService } from './contas.service';
 import { AtualizarPerfilDto, AtualizarVerificacaoDto } from './dtos';
 import { Req } from '@nestjs/common';
