@@ -273,6 +273,24 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+  gateway:
+    build: ./gateway
+    image: ampara/gateway:dev
+    environment:
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+    ports: ["8000:8000"]
+    networks: [edge]
+    depends_on:
+      identidade: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "kong health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
 networks:
   edge: {}
   services: {}
