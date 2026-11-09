@@ -5,6 +5,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { HealthController } from './health.controller';
 import { AuthModule } from './auth/auth.module';
 import { ContasModule } from './contas/contas.module';
+import { OutboxModule } from './outbox/outbox.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ContasModule } from './contas/contas.module';
     }),
     AuthModule,
     ContasModule,
+    OutboxModule,
   ],
   controllers: [HealthController],
 })

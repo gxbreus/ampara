@@ -224,10 +224,12 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
       JWT_ISSUER: ampara-identidade
       JWT_EXPIRACAO: 1h
+      IDENTIDADE_AMQP_URL: amqp://identidade:${RABBITMQ_IDENTIDADE_PASSWORD}@rabbitmq:5672/
     # edge: o gateway encaminha /auth/v1 direto para a Identidade
     networks: [edge, services, data-identidade]
     depends_on:
       postgres-identidade: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null || exit 1"]
       interval: 10s
