@@ -62,7 +62,8 @@ consumers:
     jwt_secrets:
       - key: ampara-identidade
         algorithm: RS256
-        rsa_public_key: "${JWT_PUBLIC_KEY}"
+        rsa_public_key: |
+${JWT_PUBLIC_KEY_YAML}
 
 plugins:
   - name: correlation-id
