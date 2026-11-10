@@ -10,3 +10,4 @@ resources:
   - adocao
   - orquestrador
   - bff-web
+  - gateway
