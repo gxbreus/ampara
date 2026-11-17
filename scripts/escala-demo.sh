@@ -23,7 +23,7 @@ replicas_originais="$(kubectl get deployment/animais -n "$namespace" -o jsonpath
 temporario="$(mktemp -d)"
 limpar() {
   kubectl scale deployment/animais -n "$namespace" --replicas="$replicas_originais" >&2 || true
-  rm -f -- "$temporario/distribuicao" "$temporario/headers" "$temporario/contagem" "$temporario/hey"
+  rm -f -- "$temporario/distribuicao" "$temporario/headers" "$temporario/contagem" "$temporario/hey" "$temporario/status"
   rmdir -- "$temporario"
 }
 trap limpar EXIT
@@ -60,11 +60,14 @@ medir() {
   echo "Carga (20 s, concorrência 20):"
   hey -z 20s -c 20 "$url" > "$temporario/hey"
   cat "$temporario/hey"
-  if grep -Eq 'Error distribution:|\[[345][0-9][0-9]\]' "$temporario/hey"; then
+  # só a seção "Status code distribution" tem códigos HTTP: no histograma de latência,
+  # "[312]" é uma contagem de respostas e não pode ser lido como status
+  awk '/^Status code distribution:/ {s=1; next} s && /\[[0-9]+\]/ {print}' "$temporario/hey" > "$temporario/status"
+  if grep -q 'Error distribution:' "$temporario/hey" || grep -Eq '\[[345][0-9][0-9]\]' "$temporario/status"; then
     echo "Há erros ou respostas não-2xx na carga; não registre a medição como sucesso." >&2
     return 1
   fi
-  grep -Eq '\[2[0-9][0-9]\]' "$temporario/hey" || { echo "Nenhuma resposta 2xx na carga." >&2; return 1; }
+  grep -Eq '\[2[0-9][0-9]\]' "$temporario/status" || { echo "Nenhuma resposta 2xx na carga." >&2; return 1; }
 }
 
 medir 1
