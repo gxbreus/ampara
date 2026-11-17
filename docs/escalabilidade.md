@@ -23,6 +23,12 @@ ausente ou se o limite temporário não tiver sido aplicado.
 ## Registro da execução
 
 Preencha após a execução real. Não substitua os campos por valores estimados.
+O script confere HTTP 200 e o header de réplica em cada uma das 300 chamadas,
+exige as três réplicas na distribuição sem concentração acima de 50%, e reprova
+erros HTTP/rede no `hey`. Ao sair, restaura o número original de réplicas.
+Guarde a saída completa com `DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh | tee escala.txt`.
+O indicador de rate limit é uma confirmação do operador: o script não altera nem
+atesta a configuração do Kong. Restaure o limite normal depois da demonstração.
 
 | Data | Máquina (CPU / RAM) | Kubernetes | Kong | `hey` |
 | --- | --- | --- | --- | --- |
