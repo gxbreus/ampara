@@ -4,6 +4,7 @@ import { hostname } from "node:os";
 import { exigirRoles, type Verificador } from "./auth.js";
 import type { Cliente } from "./cliente.js";
 import type { Config } from "./config.js";
+import { ErroServico, rotas } from "./rotas.js";
 
 export interface Dependencias { config: Config; verificar: Verificador; chamar: Cliente; logger?: boolean }
 
@@ -36,14 +37,11 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
     const dependencias = await ready(req);
     return reply.code(Object.values(dependencias).every(v => v === "ok") ? 200 : 503).send({ dependencias });
   });
-  app.get("/mobile/v1/animais", async (req, reply) => {
-    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    const response = await chamar(`${config.servicos.animais}/v1/animais/busca${query}`, req);
-    reply.header("X-Animais-Served-By", response.headers.get("x-served-by") ?? "desconhecido");
-    return reply.code(response.status).type(response.headers.get("content-type") ?? "application/json").send(await response.text());
-  });
+  rotas(app, { config, verificar, chamar });
   app.setNotFoundHandler({ preHandler: privado }, (_req, reply) => reply.code(404).send({ codigo: "nao-encontrado", mensagem: "Rota não encontrada." }));
   app.setErrorHandler((error, req, reply) => {
+    if (error instanceof ErroServico) return reply.code(error.status).send({ codigo: error.codigo, mensagem: error.message });
+    if (error instanceof Error && "validation" in error) return reply.code(422).send({ codigo: "validacao", mensagem: "Confira os campos enviados." });
     req.log.error(error);
     const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
     return reply.code(timeout ? 504 : 502).send({ codigo: timeout ? "servico-lento" : "servico-indisponivel", mensagem: "Serviço temporariamente indisponível. Tente novamente." });

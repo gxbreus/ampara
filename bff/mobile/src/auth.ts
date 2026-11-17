@@ -27,6 +27,7 @@ export async function criarVerificador(chavePublica: string) {
     const { payload } = await jwtVerify(token, chave, {
       algorithms: ["RS256"],
       issuer: "ampara-identidade",
+      requiredClaims: ["sub", "role", "exp"],
     });
     return paraUsuario(payload);
   };

@@ -15,8 +15,8 @@ export function carregarConfig(): Config {
       identidade: process.env.IDENTIDADE_URL ?? "http://identidade:3001",
       animais: process.env.ANIMAIS_URL ?? "http://animais:8001",
       adocao: process.env.ADOCAO_URL ?? "http://adocao:8080",
-      notificacoes: process.env.NOTIFICACOES_URL ?? "http://notificacoes:8003",
-      assistente: process.env.ASSISTENTE_URL ?? "http://assistente:8004",
+      notificacoes: process.env.NOTIFICACOES_URL ?? "http://notificacoes:8002",
+      assistente: process.env.ASSISTENTE_URL ?? "http://assistente:8003",
     },
   };
 }

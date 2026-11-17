@@ -281,8 +281,8 @@ services:
       IDENTIDADE_URL: http://identidade:3001
       ANIMAIS_URL: http://animais:8001
       ADOCAO_URL: http://adocao:8080
-      NOTIFICACOES_URL: http://notificacoes:8003
-      ASSISTENTE_URL: http://assistente:8004
+      NOTIFICACOES_URL: http://notificacoes:8002
+      ASSISTENTE_URL: http://assistente:8003
     networks: [edge, services]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3020/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
