@@ -38,3 +38,8 @@ dos cinco upstreams; é a mesma decisão do BFF Web.
 Validação local: YAMLs analisados e referências de portas/imagens conferidas.
 Não há cluster/Docker nesta máquina: rollout, persistência, distribuição entre
 workers e escala continuam pendentes de execução real. Registre saídas e data no PR.
+
+Validação adicional em 17/11/2026: o k8s-prep.sh foi executado numa cópia isolada
+com credenciais geradas para teste. kubectl kustomize renderizou 32 objetos; foram
+conferidas as referências a ConfigMaps/Secrets e as duas réplicas dos Deployments.
+Esse teste não acessa cluster e não comprova rollout, persistência ou escala real.
