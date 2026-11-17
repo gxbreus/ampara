@@ -125,5 +125,8 @@ O script limpa somente `animais_leitura.animais_busca` e reprojeta a escrita.
 Em ambiente de demonstração, defina `DEMO_TOKEN_RESPONSAVEL` e rode
 `python scripts/medir_defasagem.py --entrada animal.json --url http://localhost:8001`.
 O JSON segue NovoAnimalEntrada; o script cadastra 50 animais e falha se p95 > 5 s.
-Não há medição de latência nem teste com Mongo/RabbitMQ reais registrado nesta
-máquina; os testes locais verificam projeção, versão, privacidade e paginação.
+Em 17/11/2026, os testes de integração passaram contra MongoDB 7.0.14 em replica
+set local isolado: raio/ordenação/cursor, privacidade, versões, responsável e
+reconstrução com conteúdo idêntico. Defina `ANIMAIS_TEST_MONGO_URL` para executá-los.
+A medição de latência com 50 cadastros/1.000 animais e a integração com RabbitMQ
+continuam pendentes; estes resultados não foram estimados.

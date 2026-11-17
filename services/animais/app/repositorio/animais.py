@@ -48,7 +48,14 @@ def montar_evento_outbox(
 
     atualizado_em = animal_doc.get("atualizadoEm", agora)
     if isinstance(atualizado_em, datetime):
-        atualizado_em_iso = atualizado_em.isoformat()
+        # BSON preserva milissegundos e retorna UTC sem tzinfo por padrão.
+        # O snapshot ao vivo e o reconstruído precisam ter o mesmo timestamp.
+        atualizado_em_utc = (
+            atualizado_em.replace(tzinfo=UTC)
+            if atualizado_em.tzinfo is None
+            else atualizado_em.astimezone(UTC)
+        )
+        atualizado_em_iso = atualizado_em_utc.isoformat(timespec="milliseconds")
     else:
         atualizado_em_iso = str(atualizado_em)
 
