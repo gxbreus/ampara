@@ -1,0 +1,152 @@
+[
+  {
+    "arquivo": "01-lei-9605.md",
+    "titulo": "Lei 9.605/1998 — proteção contra maus-tratos",
+    "autor": "Brasil; publicação oficial da Câmara dos Deputados",
+    "tipo": "legislacao",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1998/lei-9605-12-fevereiro-1998-365397-publicacaooriginal-1-pl.html",
+    "secao": "Artigo 32",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "02-lei-14064.md",
+    "titulo": "Lei 14.064/2020 — alteração para cães e gatos",
+    "autor": "Brasil; publicação oficial da Câmara dos Deputados",
+    "tipo": "legislacao",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2020/lei-14064-29-setembro-2020-790687-publicacaooriginal-161585-pl.html",
+    "secao": "Artigos 1 e 2",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "03-planejamento.md",
+    "titulo": "Planejamento antes de adotar",
+    "autor": "CRMV-SP; Rodrigo Mainardi, citado na publicação",
+    "tipo": "conselho_profissional",
+    "url": "https://crmvsp.gov.br/animal-nao-e-brinquedo-adocao-ou-compra-de-um-pet-requer-planejamento/",
+    "secao": "Planejamento e perguntas à família",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "04-resgate.md",
+    "titulo": "Primeiros cuidados após resgate",
+    "autor": "CRMV-SP; profissionais consultadas na publicação",
+    "tipo": "conselho_profissional",
+    "url": "https://crmvsp.gov.br/resgatei-um-animal-abandonado-e-agora/",
+    "secao": "Avaliação inicial e adaptação",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "05-adaptacao.md",
+    "titulo": "Adaptação ao novo lar",
+    "autor": "CRMV-SP; Isabella Vincoletto, citada na publicação",
+    "tipo": "conselho_profissional",
+    "url": "https://crmvsp.gov.br/saiba-como-adaptar-o-pet-a-um-novo-lar/",
+    "secao": "Apresentação gradual",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "06-vacinacao.md",
+    "titulo": "Vacinação e proteção de filhotes",
+    "autor": "CFMV; publicação no CRMV-SP",
+    "tipo": "conselho_profissional",
+    "url": "https://crmvsp.gov.br/posicionamento-do-sistema-cfmv-crmvs-sobre-controle-populacional-e-vacinacao-animal/",
+    "secao": "Procedimentos de vacinação",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "07-arca-guarda.md",
+    "titulo": "Dez mandamentos da guarda responsável",
+    "autor": "ARCA BRASIL",
+    "tipo": "organizacao_protecao",
+    "url": "https://arcabrasil.org.br/10-mandamentos-da-guarda-responsavel/",
+    "secao": "Guarda responsável",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "08-sgpan-guarda.md",
+    "titulo": "Compromissos do tutor",
+    "autor": "SGPAN — Sociedade Goiana de Proteção aos Animais",
+    "tipo": "organizacao_protecao",
+    "url": "https://www.sgpan.org.br/sobre-adocao",
+    "secao": "Guarda responsável",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "09-errata-mpdft.md",
+    "titulo": "Errata da cartilha de adoção responsável",
+    "autor": "Ministério Público do Distrito Federal e Territórios",
+    "tipo": "orgao_publico",
+    "url": "https://www.mpdft.mp.br/portal/index.php/promotorias-de-justica-menulateral/49-prodema/16599-cartilha-adocao-responsavel-de-caes-e-gatos-errata",
+    "secao": "Correções das páginas 13 a 16",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "10-adocao-sp.md",
+    "titulo": "Adoção e segurança do ambiente",
+    "autor": "Prefeitura de São Paulo — COSAP",
+    "tipo": "orgao_publico",
+    "url": "https://prefeitura.sp.gov.br/w/servico/adocao-de-caes-e-gatos",
+    "secao": "Adoção de cães e gatos",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "11-adote-gatinho.md",
+    "titulo": "Segurança e adaptação de gatos adotados",
+    "autor": "ONG Adote um Gatinho",
+    "tipo": "organizacao_protecao",
+    "url": "https://adoteumgatinho.org.br/politica-de-adocao-aug",
+    "secao": "Política de adoção",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "12-servicos-dvz.md",
+    "titulo": "Serviços de zoonoses e seus limites",
+    "autor": "Prefeitura de São Paulo — Divisão de Vigilância de Zoonoses",
+    "tipo": "orgao_publico",
+    "url": "https://prefeitura.sp.gov.br/web/saude/w/vigilancia_em_saude/controle_de_zoonoses/286552",
+    "secao": "Praça de Atendimento da DVZ",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "13-vacinacao-abrigos.md",
+    "titulo": "Vacinação no contexto de abrigos",
+    "autor": "Instituto de Medicina Veterinária do Coletivo — IMVC",
+    "tipo": "instituicao_tecnica",
+    "url": "https://www.institutomvc.org.br/esquema-de-vacinacao-em-abrigos/",
+    "secao": "Esquema de vacinação em abrigos",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "14-ampara-faq.md",
+    "titulo": "FAQ do fluxo de adoção na Ampara",
+    "autor": "Equipe Ampara; síntese dos requisitos HU-09 a HU-19",
+    "tipo": "documentacao_ampara",
+    "url": "https://github.com/gxbreus/ampara/blob/develop/docs/requisitos.md",
+    "secao": "Histórias de usuário e requisitos",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  },
+  {
+    "arquivo": "15-ampara-limites.md",
+    "titulo": "Privacidade e limites do Assistente Ampara",
+    "autor": "Equipe Ampara; síntese dos requisitos de LLM e privacidade",
+    "tipo": "documentacao_ampara",
+    "url": "https://github.com/gxbreus/ampara/blob/develop/docs/requisitos.md",
+    "secao": "LLM e requisitos não funcionais",
+    "acessadoEm": "2026-11-17",
+    "natureza": "sintese_editorial"
+  }
+]
