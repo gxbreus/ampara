@@ -12,8 +12,6 @@ Backend for Frontend do **App Mobile** (adotantes): respostas enxutas, distânci
 
 O schema de resposta do Fastify define exatamente os campos que o cliente recebe. A comparação com o outro BFF fica em `docs/contratos/bff-comparacao.md`.
 
-## Issues
-
 ## Executar e verificar
 
 Node 22+, `npm ci`, `npm run dev`. Defina `JWT_PUBLIC_KEY` (PEM RS256) e as
@@ -28,6 +26,19 @@ Verificação: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 Imagem: `docker build -t ampara/bff-mobile:dev bff/mobile` na raiz.
 O tamanho real da imagem e o teste via Kong dependem de Docker disponível;
 não há medição local registrada nesta entrega.
+
+## Rotas do adotante
+
+Busca e detalhe aceitam acesso anônimo. Um token fornecido é validado, inclusive
+emissor, assinatura e expiração. A busca serializa somente os oito campos do card
+e consulta solicitações ativas em lote. Falha na Adoção gera aviso sem derrubar a busca.
+
+Solicitações são filtradas pelo dono do JWT. As ações vêm dos links da Adoção,
+e os links externos são reescritos para `/mobile/v1`. Perfil e avisos repassam o
+Authorization original; o Assistente usa prazo de 20 s e fallback em indisponibilidade.
+Testes usam serviços simulados; integração completa depende dos serviços dos demais donos.
+
+## Issues
 
 - #30 — contrato
 - #45 — esqueleto e Dockerfile

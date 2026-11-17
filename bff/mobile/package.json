@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/server.ts",
@@ -12,9 +14,19 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src"
   },
-  "dependencies": { "fastify": "^5.12.5", "jose": "^5.10.0" },
+  "dependencies": {
+    "fastify": "^5.12.5",
+    "jose": "^5.10.0"
+  },
   "devDependencies": {
-    "@eslint/js": "^9.39.5", "@types/node": "^22.20.5", "eslint": "^9.39.5",
-    "tsx": "^4.23.15", "typescript": "^5.9.3", "typescript-eslint": "^8.71.1"
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.20.5",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "eslint": "^9.39.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1",
+    "yaml": "^2.9.1"
   }
 }

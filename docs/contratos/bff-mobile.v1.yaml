@@ -474,7 +474,7 @@ paths:
                     format: uuid
                   estado:
                     type: string
-                    enum: [CANCELADA, COMPENSANDO]
+                    description: Estado observado no aceite; a transicao assincrona pode ainda estar pendente.
         '400':
           $ref: '#/components/responses/ParametrosInvalidos'
         '401':
