@@ -8,7 +8,7 @@ verbal. O teste local do gerador de `.env` não substitui esse ensaio.
 
 - [ ] Pessoa de fora do grupo, sem checkout/volumes anteriores da Ampara.
 - [ ] Registrar commit, SO, CPU, RAM, versões de Git, Python/OpenSSL e Docker/Compose.
-- [ ] Seguir apenas o [README](../../README.md#como-rodar) e anotar todo passo ambíguo.
+- [ ] Seguir apenas o [README](../../README.md#como-executar) e anotar todo passo ambíguo.
 - [ ] Para Kubernetes: registrar kind, kubectl, Helm e recursos disponíveis nos workers.
 
 ## Docker Compose
@@ -62,3 +62,9 @@ verbal. O teste local do gerador de `.env` não substitui esse ensaio.
 | Gabriel Nakazato | Notificações, Assistente, Redis e Qdrant | pendente |
 
 Só encerre #73 quando houver execução real por terceiro e revisão dos quatro.
+
+Conferência estática de 2026-11-17: trecho de Notificações/Assistente atualizado
+com variáveis, portas, logs, health/ready e diferenças de persistência, considerando
+os PRs #168/#169 ainda abertos. Não é aprovação humana do PR nem teste de runtime.
+O critério de `.env.example` com valores de exemplo continua pendente: o gerador
+produz credenciais locais, mas o template mantém os campos de segredo vazios.

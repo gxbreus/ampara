@@ -235,7 +235,7 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
-## Como rodar
+## Como executar
 
 Pré-requisitos: Git, Docker 24+ com Compose v2, Python 3.12+ e OpenSSL
 (incluído no Git for Windows). Reserve 8 GB de RAM para Docker. Para apps,
@@ -246,10 +246,13 @@ Em uma máquina sem checkout nem `.env` anterior, são cinco comandos:
 ```bash
 git clone https://github.com/gxbreus/ampara.git
 cd ampara
-python scripts/preparar-demo.py
+python3 scripts/preparar-demo.py
 docker compose up -d --build --wait
 docker compose ps
 ```
+
+No PowerShell do Windows, substitua apenas o terceiro comando por
+`py -3 scripts/preparar-demo.py` (Python 3.12+ instalado com o launcher).
 
 O gerador cria `.env` a partir de `.env.example`, com credenciais aleatórias locais e um par
 JWT RS256; não imprime credenciais nem sobrescreve `.env` existente.
@@ -282,6 +285,8 @@ abaixo; elas só estarão disponíveis depois do seed integrado e executado:
 | Conta prevista | E-mail | Uso |
 | --- | --- | --- |
 | ONG Patas de Lavras | `patas@ampara.dev` | responsável pelo Thor |
+| Ana Ribeiro | `ana@ampara.dev` | protetora verificada, responsável pela Luna e pelo Frajola |
+| Abrigo Quatro Patas | `quatropatas@ampara.dev` | ONG pendente de verificação; não pode publicar |
 | Bruna Costa | `bruna@ampara.dev` | adotante com perfil completo |
 | Caio Lima | `caio@ampara.dev` | perfil incompleto para a falha provocada |
 | Diana Souza | `diana@ampara.dev` | concorrência com Bruna |
@@ -289,6 +294,38 @@ abaixo; elas só estarão disponíveis depois do seed integrado e executado:
 
 As senhas vêm de `SEED_SENHA_PADRAO` e, para o administrador, `ADMIN_SENHA`
 conforme a entrega da #71. Não há senha de conta predefinida neste checkout.
+
+### Notificações e Assistente
+
+Após integrar #168 e completar #41/#42, os serviços são acessados pelos BFFs;
+não publique suas portas ou as dos bancos. Para diagnóstico dentro dos containers:
+
+```bash
+docker compose logs --tail=100 notificacoes assistente
+docker compose exec -T notificacoes python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8002/ready').status)"
+docker compose exec -T assistente python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8003/ready').status)"
+```
+
+| Serviço | Porta interna | Configuração de conexão | Prontidão |
+| --- | --- | --- | --- |
+| Notificações | 8002 | `NOTIFICACOES_REDIS_URL`, `NOTIFICACOES_AMQP_URL`, com credenciais geradas no `.env` | Redis e RabbitMQ conectados |
+| Assistente | 8003 | `QDRANT_URL`, `ASSISTENTE_REDIS_URL`, `ANIMAIS_URL`; `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_FALLBACK_MODEL`, `EMBEDDINGS_PROVIDER`, `EMBEDDINGS_MODEL` | Qdrant e Redis; nunca o provedor LLM |
+
+`/health` confirma só que o processo responde. `/ready` retorna 503 se as
+dependências verificadas falharem; no Assistente, chave vazia/inválida não deve
+remover a prontidão. As rotas de domínio com fallback chegam nas #67–#69.
+`ANIMAIS_URL` é definido pelo Compose do PR #168; confira também as variáveis
+de embeddings nesse bloco antes da ingestão #66. Não imprima `.env`, Secrets
+ou URLs com senha ao coletar diagnóstico.
+
+Redis de Notificações exige senha e usa AOF/volume; o Redis do Assistente usa
+LRU e é descartável. O Qdrant mantém `/qdrant/storage` em volume. O dashboard,
+quando o Service existir, abre em `http://localhost:6333/dashboard` após
+`kubectl port-forward -n ampara svc/qdrant-assistente 6333:6333`.
+
+Conferência estática desses nomes realizada em 2026-11-17 contra a develop e
+os PRs #168/#169. Os comandos de diagnóstico acima aguardam integração e
+engine Docker Linux ativo; isso não substitui validação em máquina limpa.
 
 ### Kubernetes local
 
