@@ -10,7 +10,7 @@ Este documento é preparação: **os dois ensaios completos ainda não têm regi
    Os nomes dos cenários abaixo vêm da #71; se os arquivos ainda não existirem,
    a demonstração está bloqueada. Não substitua participantes reais por
    `participantes_falsos.py` na evidência de funcionamento distribuído.
-2. Rode `python scripts/demo/preflight.py`. Ele verifica arquivos e rotas básicas;
+2. Rode `python3 scripts/demo/preflight.py` (PowerShell: `py -3 scripts/demo/preflight.py`). Ele verifica arquivos e rotas básicas;
    não certifica dados do seed, funcionamento do LLM ou autorização completa.
 3. Em ambiente dedicado de demo, rode `bash scripts/demo/reset.sh`. Ele é
    destrutivo para os dados de demonstração conforme a #71; não use banco real.
@@ -98,6 +98,61 @@ Na apresentação, repita uma pergunta aquecida e faça outra inédita, por exem
 latências reais e a indicação de cache conforme a implementação #69; não
 conclua “veio do cache” apenas porque pareceu rápido. Compare recomendação com
 os IDs/status atuais da busca. A análise com/sem RAG e custo depende da #70.
+
+### Conferência do trecho do Gabriel — 2026-11-17
+
+O roteiro ainda depende das implementações #66–#70. O contrato mobile usa
+`descricaoRotina` e `animais[].motivoRecomendacao`, enquanto a #24 define
+`rotina` e `sugestoes[].motivo`. A #62 deve adaptar esses campos e a origem das
+fontes. O corpo mobile acima ainda não fornece localização: não considerar a
+recomendação demonstrável antes de #62/#65 levarem lat/lng/raioKm do contexto
+de busca ao servidor. Nunca extrair coordenadas da rotina nem pedir ao LLM que
+as escolha. Atualizar o comando externo conforme o contrato integrado no ensaio.
+
+Fala: "Na pergunta, a chain recupera até quatro trechos versionados antes de
+gerar. As fontes precisam corresponder a esses trechos. Na recomendação, a
+tool consulta a busca real; só pode sugerir IDs disponíveis que ela retornou.
+O servidor aplica a localização sem enviá-la ao provedor. A busca e a SAGA
+continuam funcionando quando a geração falha."
+
+O contrato do BFF não expõe cache/latência: uma resposta rápida pelo app não
+prova cache. Para a demonstração operacional, depois da #69, consulte a API
+interna a partir do próprio container, sem publicar nova porta. Token em
+variável local, sem `set -x` ou impressão do ambiente:
+
+```bash
+docker compose exec -T -e TOKEN_DEMO="$TOKEN_ADOTANTE" assistente python - <<'PY'
+import json
+import os
+from urllib.request import Request, urlopen
+
+headers = {'Authorization': 'Bearer ' + os.environ['TOKEN_DEMO'],
+           'Content-Type': 'application/json'}
+for _ in range(2):
+    corpo = json.dumps({'pergunta': 'Como preparar a casa para receber um cão adotado?'}).encode()
+    req = Request('http://localhost:8003/v1/perguntas', data=corpo, headers=headers)
+    with urlopen(req, timeout=18) as resposta:
+        dado = json.load(resposta)
+    print({campo: dado[campo] for campo in ('cache', 'latenciaMs', 'degradado')})
+req = Request('http://localhost:8003/v1/estado', headers=headers)
+with urlopen(req, timeout=3) as resposta:
+    print(json.load(resposta))
+PY
+```
+
+Se o cache já estiver quente, ambas podem ser hits: use a pergunta inédita para
+mostrar miss. Não apague o Redis de Notificações para alterar cache de geração.
+O `/v1/estado` é interno e por réplica; ao comparar contadores no cluster,
+consulte o mesmo pod. Não anuncie estado global a partir de uma única resposta.
+
+Para a falha controlada, use provedor falso e configuração de demonstração
+entregues pela #69; não suponha que trocar uma chave abre imediatamente o
+circuito, nem que reiniciar o processo preserva seus contadores. O runbook
+deve conter o comando que passou no ensaio. Mostre falhas, abertura, fallback,
+prova em meio-aberto e recuperação; se não houver evidência, mantenha a lacuna
+registrada. Latência/custo são os dados medidos da #70, sem preencher números
+estimados como resultados. Nenhum ensaio ou chamada acima foi executado neste
+registro: faltam seed/reset da #71 e integração dos serviços.
 
 ## Perguntas de arguição (todos estudam)
 
