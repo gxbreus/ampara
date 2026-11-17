@@ -12,6 +12,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 from app.dominio.animal import OrigemTransicao, StatusAnimal, pode_transicionar
 from app.problema import (
     erro_animal_nao_encontrado,
+    erro_conflito_concorrencia,
     erro_identificador_invalido,
     erro_lote_excedido,
     erro_sem_permissao,
@@ -256,11 +257,13 @@ async def atualizar_animal(
 
     async with cliente.start_session() as s:
         async with await s.start_transaction():
-            await banco.animais.update_one(
-                {"_id": obj_id},
+            resultado = await banco.animais.update_one(
+                {"_id": obj_id, "version": doc_atual.get("version", 1)},
                 {"$set": campos_atualizar},
                 session=s,
             )
+            if resultado.modified_count != 1:
+                raise erro_conflito_concorrencia()
             await banco.outbox.insert_one(evento_outbox, session=s)
 
     return serializar_animal(doc_modificado)
@@ -322,14 +325,20 @@ async def atualizar_status_animal(
 
     async with cliente.start_session() as s:
         async with await s.start_transaction():
-            await banco.animais.update_one(
-                {"_id": obj_id},
+            resultado = await banco.animais.update_one(
+                {
+                    "_id": obj_id,
+                    "version": doc_atual.get("version", 1),
+                    "status": status_atual.value,
+                },
                 {
                     "$set": campos_atualizar,
                     "$push": {"historicoStatus": novo_historico_item},
                 },
                 session=s,
             )
+            if resultado.modified_count != 1:
+                raise erro_conflito_concorrencia()
             await banco.outbox.insert_one(evento_outbox, session=s)
 
     return serializar_animal(doc_modificado)
