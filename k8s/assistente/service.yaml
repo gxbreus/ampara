@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: assistente
+  labels: { app: assistente }
+spec:
+  selector: { app: assistente }
+  ports:
+    - { name: http, port: 8003, targetPort: 8003 }

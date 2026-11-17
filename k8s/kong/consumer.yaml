@@ -1,0 +1,6 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: ampara-identidade
+username: ampara-identidade
+credentials: [jwt-identidade]

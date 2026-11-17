@@ -1,0 +1,12 @@
+# Configuração que não é segredo, com os mesmos nomes do .env.example. Para trocar o modelo,
+# edite aqui e reinicie: kubectl rollout restart deploy/assistente -n ampara
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: assistente-config
+data:
+  QDRANT_URL: http://qdrant-assistente:6333
+  ANIMAIS_URL: http://animais:8001
+  LLM_PROVIDER: groq
+  LLM_MODEL: ""
+  LLM_FALLBACK_MODEL: ""
