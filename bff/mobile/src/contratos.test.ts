@@ -93,6 +93,10 @@ test("respostas reais do BFF seguem os schemas OpenAPI de busca e solicitações
     },
   });
   t.after(() => app.close());
+  const semToken = await app.inject("/mobile/v1/solicitacoes");
+  assert.equal(semToken.statusCode, 401);
+  assert.match(String(semToken.headers["content-type"]), /^application\/json/);
+  validar("Problema", semToken.json());
   for (const [url, schema] of [
     ["/mobile/v1/animais", "PaginaBuscaMobile"],
     [`/mobile/v1/animais/${ID}`, "AnimalDetalheMobile"],

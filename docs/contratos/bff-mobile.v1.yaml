@@ -300,7 +300,7 @@ paths:
         '409':
           description: Conflito. O animal já possui reserva ou o adotante já tem pedido ativo.
           content:
-            application/problem+json:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Problema'
         '422':
@@ -486,7 +486,7 @@ paths:
         '409':
           description: A solicitação já está em estado final ou não pode ser cancelada.
           content:
-            application/problem+json:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Problema'
         '503':
@@ -723,71 +723,63 @@ components:
     ParametrosInvalidos:
       description: Parâmetros obrigatórios ausentes ou em formato inválido.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
           example:
-            type: https://ampara.dev/problemas/parametros-invalidos
-            title: Parâmetros inválidos
-            status: 400
-            detail: As coordenadas 'lat' e 'lng' são obrigatórias.
+            codigo: parametros-invalidos
+            mensagem: As coordenadas 'lat' e 'lng' são obrigatórias.
 
     IdentificadorInvalido:
       description: Identificador fora do padrão esperado.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
 
     NaoAutenticado:
       description: Token Bearer ausente ou inválido.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
           example:
-            type: https://ampara.dev/problemas/nao-autenticado
-            title: Não autenticado
-            status: 401
-            detail: Esta operação exige que o adotante esteja logado.
+            codigo: nao-autenticado
+            mensagem: Esta operação exige que o adotante esteja logado.
 
     SemPermissao:
       description: O usuário não possui permissão para este recurso.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
 
     RecursoNaoEncontrado:
       description: Recurso não localizado.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
           example:
-            type: https://ampara.dev/problemas/recurso-nao-encontrado
-            title: Não encontrado
-            status: 404
-            detail: O recurso solicitado não foi localizado.
+            codigo: recurso-nao-encontrado
+            mensagem: O recurso solicitado não foi localizado.
 
     DadosInvalidos:
       description: Erro de validação semântica nos campos da requisição.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
 
     ServicoIndisponivel:
       description: O serviço de domínio essencial está temporariamente indisponível.
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Problema'
           example:
-            type: https://ampara.dev/problemas/servico-indisponivel
-            title: Serviço indisponível
-            status: 503
-            detail: Não foi possível completar a operação no momento. Tente novamente mais tarde.
+            codigo: servico-indisponivel
+            mensagem: Não foi possível completar a operação no momento. Tente novamente mais tarde.
 
   schemas:
     EspecieAnimal:
