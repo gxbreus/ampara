@@ -10,4 +10,6 @@ resources:
   - adocao
   - orquestrador
   - bff-web
+  - animais
+  - bff-mobile
   - gateway

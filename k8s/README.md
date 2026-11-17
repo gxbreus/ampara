@@ -26,7 +26,7 @@ helm upgrade --install kong kong/ingress --namespace kong --create-namespace \
 
 # 5. imagens: o kind não enxerga as imagens do Docker local, é preciso carregá-las
 docker compose build
-for img in rabbitmq adocao orquestrador bff-web identidade; do kind load docker-image ampara/$img:dev --name ampara; done
+for img in rabbitmq mongo adocao orquestrador bff-web identidade animais bff-mobile; do kind load docker-image ampara/$img:dev --name ampara; done
 
 # 6. tudo
 kubectl apply -k k8s/
