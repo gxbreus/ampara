@@ -273,6 +273,25 @@ services:
     deploy: { resources: { limits: { memory: 128m } } }
     restart: unless-stopped
 
+  bff-mobile:
+    build: ./bff/mobile
+    image: ampara/bff-mobile:dev
+    environment:
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+      IDENTIDADE_URL: http://identidade:3001
+      ANIMAIS_URL: http://animais:8001
+      ADOCAO_URL: http://adocao:8080
+      NOTIFICACOES_URL: http://notificacoes:8003
+      ASSISTENTE_URL: http://assistente:8004
+    networks: [edge, services]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3020/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
 networks:
   edge: {}
   services: {}
