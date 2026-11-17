@@ -115,10 +115,77 @@ kubectl rollout status deployment/animais -n ampara --timeout=180s
 kubectl get pods -n ampara -l app=animais -o wide
 ```
 
-Para Redis/Qdrant, mostre os volumes e a leitura do mesmo dado antes/depois de
-recriar o pod, usando o procedimento do dono. Não chame existência de PVC de
-prova de persistência; é preciso conferir o conteúdo. Registre os comandos
-específicos usados quando esses componentes estiverem integrados.
+Fala do Gabriel: "O Redis de Notificações é armazenamento da caixa, com AOF e
+PVC. O Redis do Assistente é apenas cache descartável, com LRU e sem PVC.
+O Qdrant conserva a base vetorial em outro volume. Vou escrever um dado,
+recriar cada pod e conferir o mesmo conteúdo. Nenhuma chave do LLM aparece na
+tela; mostramos só os nomes dos Secrets. Base64 não é criptografia."
+
+Depois dos merges #168/#169 e da integração #41/#42, em cluster de demo,
+execute em Bash. Os procedimentos abaixo estão **preparados, não executados**
+neste registro de 2026-11-17 (engine Docker desligado, sem cluster disponível).
+Cronometre as esperas no ensaio antes de prometer o tempo da gravação.
+
+Redis de Notificações, usando REDISCLI_AUTH já definido no StatefulSet:
+
+```bash
+kubectl exec -n ampara redis-notificacoes-0 -- redis-cli CONFIG GET appendonly appendfsync
+kubectl exec -n ampara redis-notificacoes-0 -- redis-cli SET prova:video:52 preservado
+kubectl exec -n ampara redis-notificacoes-0 -- redis-cli GET prova:video:52
+kubectl delete pod -n ampara redis-notificacoes-0
+kubectl wait -n ampara --for=condition=ready pod/redis-notificacoes-0 --timeout=180s
+test "$(kubectl exec -n ampara redis-notificacoes-0 -- redis-cli GET prova:video:52)" = preservado
+kubectl exec -n ampara redis-notificacoes-0 -- redis-cli GET prova:video:52
+kubectl exec -n ampara redis-notificacoes-0 -- redis-cli DEL prova:video:52
+```
+
+A política `everysec` limita a durabilidade de escritas muito recentes; não
+prometa perda zero em queda abrupta. A recriação normal verifica recuperação
+do mesmo volume e AOF, não todos os cenários de desastre.
+
+Qdrant: crie uma coleção exclusiva de teste com um ponto. Não use uma coleção
+da base real. O comando falha se a coleção de teste já existir; nesse caso,
+confira sua origem antes de removê-la e repetir.
+
+```bash
+kubectl exec -i -n ampara deployment/assistente -- python - <<'PY'
+import json
+from urllib.request import Request, urlopen
+
+base = 'http://qdrant-assistente:6333/collections/prova_video_52'
+def chamar(caminho, dados=None, metodo='GET'):
+    corpo = None if dados is None else json.dumps(dados).encode()
+    req = Request(base + caminho, data=corpo, method=metodo,
+                  headers={'Content-Type': 'application/json'})
+    with urlopen(req, timeout=10) as resposta:
+        return json.load(resposta)
+
+chamar('', {'vectors': {'size': 3, 'distance': 'Cosine'}}, 'PUT')
+chamar('/points?wait=true', {'points': [
+    {'id': 1, 'vector': [1.0, 0.0, 0.0], 'payload': {'marca': 'preservado'}}
+]}, 'PUT')
+assert chamar('/points/1')['result']['payload']['marca'] == 'preservado'
+print('Antes: ponto 1 = preservado')
+PY
+kubectl delete pod -n ampara qdrant-assistente-0
+kubectl wait -n ampara --for=condition=ready pod/qdrant-assistente-0 --timeout=180s
+kubectl exec -i -n ampara deployment/assistente -- python - <<'PY'
+import json
+from urllib.request import Request, urlopen
+
+base = 'http://qdrant-assistente:6333/collections/prova_video_52'
+with urlopen(base + '/points/1', timeout=10) as resposta:
+    dado = json.load(resposta)
+assert dado['result']['payload']['marca'] == 'preservado'
+print('Depois: ponto 1 = preservado')
+with urlopen(Request(base, method='DELETE'), timeout=10) as resposta:
+    print('Coleção de teste removida:', resposta.status)
+PY
+```
+
+Mostre a saída antes e depois e o UID novo dos pods. Não chame existência de
+PVC de prova de persistência. Se um assert falhar, interrompa a gravação e
+registre a falha; não marque a #52 ou a #49 como concluída.
 
 ## Ensaio, edição e entrega
 
