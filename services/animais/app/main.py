@@ -10,11 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pythonjsonlogger.json import JsonFormatter
 
-from app.api import animais, health
+from app.api import animais, busca, health
 from app.config import get_settings
+from app.consumidor import Consumidor
 from app.db import criar_cliente_mongo, criar_indices
 from app.outbox_relay import OutboxRelay
 from app.problema import ProblemaHttp
+from app.projetor import aplicar_evento
 
 logger = logging.getLogger(__name__)
 
@@ -55,18 +57,26 @@ async def lifespan(app: FastAPI):
     relay.iniciar()
     app.state.relay = relay
 
-    yield
+    async def projetar(evento, _canal):
+        await aplicar_evento(app.state.banco_escrita, app.state.banco_leitura, evento)
 
-    # Feche na ordem inversa da abertura
-    await relay.parar()
-    await cliente_leitura.close()
-    await cliente_escrita.close()
+    consumidor = Consumidor(settings.rabbitmq_url.get_secret_value(), "animais.projecao", projetar)
+    consumidor.iniciar()
+
+    try:
+        yield
+    finally:
+        await consumidor.parar()
+        await relay.parar()
+        await cliente_leitura.close()
+        await cliente_escrita.close()
 
 
 def create_app() -> FastAPI:
     # Não leia Settings aqui: os testes criam o app sem nenhuma variável de ambiente.
     app = FastAPI(title="Ampara · Animais", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
+    app.include_router(busca.router)
     app.include_router(animais.router)
 
     @app.exception_handler(ProblemaHttp)
