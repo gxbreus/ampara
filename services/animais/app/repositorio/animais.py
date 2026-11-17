@@ -17,6 +17,7 @@ from app.problema import (
     erro_sem_permissao,
     erro_status_exclusivo_saga,
 )
+from app.projetor import aproximar
 from app.schemas.animal import AtualizarAnimalEntrada, NovoAnimalEntrada
 
 
@@ -38,7 +39,7 @@ def montar_evento_outbox(
     coords = animal_doc.get("localizacao", {}).get("coordinates", [0.0, 0.0])
     ponto_aproximado = {
         "type": "Point",
-        "coordinates": [round(coords[0], 3), round(coords[1], 3)],
+        "coordinates": aproximar(*coords),
     }
 
     fotos = animal_doc.get("fotos", [])
@@ -56,6 +57,9 @@ def montar_evento_outbox(
         "nome": animal_doc["nome"],
         "especie": animal_doc["especie"],
         "porte": animal_doc["porte"],
+        "sexo": animal_doc.get("sexo"),
+        "temperamento": animal_doc.get("temperamento", []),
+        "descricao": animal_doc.get("descricao"),
         "idadeMeses": animal_doc["idadeMeses"],
         "fotos": fotos,
         "fotoCapa": foto_capa,
