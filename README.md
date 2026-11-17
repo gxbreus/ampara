@@ -235,20 +235,143 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
-## Como rodar
+## Como executar
 
-Precisa de Docker com o Compose. Na raiz do repositório:
+Pré-requisitos: Git, Docker 24+ com Compose v2, Python 3.12+ e OpenSSL
+(incluído no Git for Windows). Reserve 8 GB de RAM para Docker. Para apps,
+use Node 22+; para Kubernetes, kind, kubectl e Helm conforme o [guia do cluster](k8s/README.md).
+
+Em uma máquina sem checkout nem `.env` anterior, são cinco comandos:
 
 ```bash
-cp .env.example .env
-./scripts/gerar-chaves-jwt.sh      # par RS256 do JWT
-# preencha as senhas no .env
-docker compose up -d --build
+git clone https://github.com/gxbreus/ampara.git
+cd ampara
+python3 scripts/preparar-demo.py
+docker compose up -d --build --wait
+docker compose ps
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+No PowerShell do Windows, substitua apenas o terceiro comando por
+`py -3 scripts/preparar-demo.py` (Python 3.12+ instalado com o launcher).
 
-A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
+O gerador cria `.env` a partir de `.env.example`, com credenciais aleatórias locais e um par
+JWT RS256; não imprime credenciais nem sobrescreve `.env` existente.
+`LLM_API_KEY` fica vazia para configuração posterior do Assistente. Para
+configuração manual, copie `.env.example`, preencha as credenciais e use
+`scripts/gerar-chaves-jwt.sh`. Não gere novas chaves a cada reinício: os tokens
+emitidos com a chave antiga deixam de valer.
+
+O Compose da `develop` atualmente sobe bancos, RabbitMQ, Adoção, Orquestrador,
+Animais, Identidade e BFF Web. Toda a jornada com gateway, BFF Mobile, apps,
+Notificações, Assistente e seed depende das respectivas entregas integradas.
+O comando acima sobe o que o `compose.yaml` desse checkout declara; não comprova
+que funcionalidades ainda em PR estejam disponíveis.
+
+### Endereços de acesso
+
+| Componente | Endereço/condição |
+| --- | --- |
+| Gateway | `http://localhost:8000`, após integrar #43; rotas `/auth/v1`, `/web/v1` e `/mobile/v1` |
+| App Web | desenvolvimento em `http://localhost:5173`, após #63; consulte `apps/web/README.md` |
+| App Mobile | Expo Go no telefone, após #64; `EXPO_PUBLIC_API_URL=http://IP-DO-COMPUTADOR:8000` |
+| RabbitMQ | `http://localhost:15672`; credenciais locais `RABBITMQ_ADMIN_USER/PASSWORD` no `.env` |
+| Qdrant | porta 6333 interna, sem publicação no Compose atual; dashboard no cluster por `kubectl port-forward svc/qdrant-assistente 6333:6333`, somente quando esse Service existir |
+
+Somente o gateway expõe APIs de domínio. Os nomes `animais:8001`,
+`adocao:8080` e demais DNS internos não são endereços do navegador do host.
+Nenhum usuário de demonstração é criado pelo gerador. A #71 prevê as contas
+abaixo; elas só estarão disponíveis depois do seed integrado e executado:
+
+| Conta prevista | E-mail | Uso |
+| --- | --- | --- |
+| ONG Patas de Lavras | `patas@ampara.dev` | responsável pelo Thor |
+| Ana Ribeiro | `ana@ampara.dev` | protetora verificada, responsável pela Luna e pelo Frajola |
+| Abrigo Quatro Patas | `quatropatas@ampara.dev` | ONG pendente de verificação; não pode publicar |
+| Bruna Costa | `bruna@ampara.dev` | adotante com perfil completo |
+| Caio Lima | `caio@ampara.dev` | perfil incompleto para a falha provocada |
+| Diana Souza | `diana@ampara.dev` | concorrência com Bruna |
+| Admin Ampara | `admin@ampara.dev` | verificação de responsáveis |
+
+As senhas vêm de `SEED_SENHA_PADRAO` e, para o administrador, `ADMIN_SENHA`
+conforme a entrega da #71. Não há senha de conta predefinida neste checkout.
+
+### Notificações e Assistente
+
+Após integrar #168 e completar #41/#42, os serviços são acessados pelos BFFs;
+não publique suas portas ou as dos bancos. Para diagnóstico dentro dos containers:
+
+```bash
+docker compose logs --tail=100 notificacoes assistente
+docker compose exec -T notificacoes python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8002/ready').status)"
+docker compose exec -T assistente python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8003/ready').status)"
+```
+
+| Serviço | Porta interna | Configuração de conexão | Prontidão |
+| --- | --- | --- | --- |
+| Notificações | 8002 | `NOTIFICACOES_REDIS_URL`, `NOTIFICACOES_AMQP_URL`, com credenciais geradas no `.env` | Redis e RabbitMQ conectados |
+| Assistente | 8003 | `QDRANT_URL`, `ASSISTENTE_REDIS_URL`, `ANIMAIS_URL`; `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_FALLBACK_MODEL`, `EMBEDDINGS_PROVIDER`, `EMBEDDINGS_MODEL` | Qdrant e Redis; nunca o provedor LLM |
+
+`/health` confirma só que o processo responde. `/ready` retorna 503 se as
+dependências verificadas falharem; no Assistente, chave vazia/inválida não deve
+remover a prontidão. As rotas de domínio com fallback chegam nas #67–#69.
+`ANIMAIS_URL` é definido pelo Compose do PR #168; confira também as variáveis
+de embeddings nesse bloco antes da ingestão #66. Não imprima `.env`, Secrets
+ou URLs com senha ao coletar diagnóstico.
+
+Redis de Notificações exige senha e usa AOF/volume; o Redis do Assistente usa
+LRU e é descartável. O Qdrant mantém `/qdrant/storage` em volume. O dashboard,
+quando o Service existir, abre em `http://localhost:6333/dashboard` após
+`kubectl port-forward -n ampara svc/qdrant-assistente 6333:6333`.
+
+Conferência estática desses nomes realizada em 2026-11-17 contra a develop e
+os PRs #168/#169. Os comandos de diagnóstico acima aguardam integração e
+engine Docker Linux ativo; isso não substitui validação em máquina limpa.
+
+### Kubernetes local
+
+Após preparar o `.env`, siga [k8s/README.md](k8s/README.md): crie o cluster kind,
+rode `scripts/k8s-prep.sh`, construa/carregue as imagens, instale o Kong conforme
+a configuração da #46 e aplique `kubectl apply -k k8s/`.
+Verifique com `kubectl get pods -n ampara -o wide` e
+`kubectl get deploy,svc,ingress -n ampara`. Compose e kind disputam a porta 8000;
+use-os em momentos separados para comparar o roteamento.
+
+### Demonstração e conferência em máquina limpa
+
+Os cenários de `scripts/demo/` e os usuários de exemplo dependem da #71.
+`participantes_falsos.py` simula participantes e não é evidência de integração
+com Animais/Identidade reais. Para um serviço Python isolado, use o README dele.
+
+O [checklist de máquina limpa](docs/execucao/checklist-maquina-limpa.md) registra
+o ensaio por terceiro, tempo total, falhas e revisão dos quatro integrantes.
+Esse ensaio completo ainda não foi realizado; não há data ou resultado presumido.
+
+### Mensagem na DLQ
+
+Confira os logs com `docker compose logs orquestrador animais adocao` e liste
+a fila com `./scripts/dlq.sh listar animais.comandos.dlq`. Identifique `messageId`,
+`sagaId` e a causa, corrija o consumidor e só então use
+`./scripts/dlq.sh reprocessar animais.comandos.dlq "$MESSAGE_ID"` com o ID real.
+Confira novamente a DLQ e a linha do tempo; quando há intervenção esgotada,
+um ADMIN precisa retomar a compensação. O procedimento completo está no
+[runbook de DLQ](docs/operacao/dlq.md), incluindo acesso ao broker no Kubernetes.
+
+### Problemas comuns
+
+| Sintoma | Como conferir e corrigir |
+| --- | --- |
+| Porta 8000 ou 15672 ocupada | confira containers/processos que usam a porta; pare apenas o ambiente Ampara conflitante; não execute Compose e kind na mesma porta ao mesmo tempo |
+| Container termina ou demora a ficar healthy | confira RAM do Docker e `docker compose logs NOME`; aumente recursos ou corrija a dependência que falhou antes de tentar novamente |
+| Expo não alcança a API | use o IP do computador, mesma rede Wi-Fi e porta 8000 liberada no firewall; emulador Android padrão usa `10.0.2.2`, celular não usa `localhost` |
+| Chave LLM ausente | o Assistente deve usar o fallback da sua implementação; a busca não depende da chave; valide esse comportamento depois de integrar #67–#69 |
+| JWT recebe 401 após reinício | confira relógio, expiração e se houve troca das chaves; autentique novamente; mantenha o mesmo par ao reiniciar |
+| Mongo não aceita transações | confira `replicaSet=rs0`, `authSource=admin`, estado primário e nome estável `mongo-animais:27017` |
+| Busca/gateway ainda não existe | confira se #43/#45/#56/#62 foram integradas no checkout; um README não instala código de PR aberto |
+
+A CI roda em PRs e pushes para `develop` e `main`: gitleaks, contratos e, para
+cada componente alterado, lint, testes e build da imagem. No Python: `ruff check`,
+`ruff format --check` e `pytest`.
+
 
 ## Documentação
 
