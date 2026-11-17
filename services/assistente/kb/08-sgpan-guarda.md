@@ -8,4 +8,3 @@ Natureza: síntese editorial da Ampara; não é reprodução integral da fonte.
 ## Guarda responsável
 
 O tutor precisa assegurar alimentação adequada, água fresca, abrigo, higiene, atenção e exercício. O acesso à rua deve ter supervisão; para gatos, proteger janelas e sacadas ajuda a evitar fugas e quedas. Cuidados veterinários e prevenção devem seguir orientação profissional. Planejar quem cuidará diariamente do animal durante viagens faz parte da responsabilidade de longo prazo.
-

@@ -50,4 +50,3 @@ embeddings reais ainda não foram implementadas/validadas nesta entrega.
 Dependem da #42 integrada e de Qdrant/Ollama disponíveis. Esta branch contém
 somente a coleta independente permitida antes dessas dependências. Usar
 Refs #66; não fechar a issue por quantidade de documentos.
-

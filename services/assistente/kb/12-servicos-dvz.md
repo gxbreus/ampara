@@ -8,4 +8,3 @@ Natureza: síntese editorial da Ampara; não é reprodução integral da fonte.
 ## Praça de Atendimento da DVZ
 
 A DVZ de São Paulo informa avaliação de suspeitas de zoonoses e vacinação contra raiva em cães e gatos. A própria página diferencia esses serviços de atendimento clínico geral e recolhimento de animais abandonados. Não presumir que toda unidade de zoonoses oferece qualquer tratamento. Confirmar o serviço e a localização na fonte oficial antes de procurar atendimento; esta referência não informa a rede de Lavras.
-
