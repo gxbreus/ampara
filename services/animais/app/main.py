@@ -17,6 +17,7 @@ from app.db import criar_cliente_mongo, criar_indices
 from app.outbox_relay import OutboxRelay
 from app.problema import ProblemaHttp
 from app.projetor import aplicar_evento
+from app.saga import tratar_comando
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,16 @@ async def lifespan(app: FastAPI):
     consumidor = Consumidor(settings.rabbitmq_url.get_secret_value(), "animais.projecao", projetar)
     consumidor.iniciar()
 
+    async def saga(evento, canal):
+        await tratar_comando(cliente_escrita, app.state.banco_escrita, evento, canal)
+
+    comandos = Consumidor(settings.rabbitmq_url.get_secret_value(), "animais.comandos", saga)
+    comandos.iniciar()
+
     try:
         yield
     finally:
+        await comandos.parar()
         await consumidor.parar()
         await relay.parar()
         await cliente_leitura.close()
