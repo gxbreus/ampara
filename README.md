@@ -365,6 +365,8 @@ O cluster local usa kind com 1 control-plane e 2 workers ([`k8s/kind-config.yaml
 | Identidade | Deployment | 2 | `identidade:3001` | StatefulSet `postgres-identidade` |
 | Animais | Deployment | 2 | `animais:8001` | StatefulSet `mongo-animais` (replica set) |
 | BFF Mobile | Deployment | 2 | `bff-mobile:3020` | — |
+| Notificações | Deployment | 2 | `notificacoes:8002` | StatefulSet `redis-notificacoes` (AOF, PVC 1 Gi) |
+| Assistente | Deployment | 2 | `assistente:8003` | StatefulSet `qdrant-assistente` (PVC 1 Gi) e Deployment `redis-assistente` (cache, sem volume) |
 | RabbitMQ | StatefulSet | 1 | `rabbitmq:5672` | PVC 1 Gi |
 
 Padrões que todos os manifests seguem:
@@ -409,7 +411,7 @@ kubectl get pods -n ampara -l app=animais -o wide       # pods espalhados pelos 
 DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh  # carga com hey, entrando pelo Ingress
 ```
 
-O script manda 300 requisições para `localhost:8000/mobile/v1/animais`, sempre pelo Ingress e nunca direto para um pod. Ele lê em cada resposta o header `X-Animais-Served-By`, que diz qual réplica atendeu, e compara 1 réplica com 3. A evidência de distribuição de carga é que **as três réplicas aparecem na contagem e nenhuma atende mais de 50% das requisições**. Num notebook, as réplicas dividem a mesma CPU, então a vazão não precisa triplicar. Ao terminar, o script volta o Deployment ao número original de réplicas. O roteiro e a tabela com os resultados ficam em `docs/escalabilidade.md`.
+O script manda 300 requisições para `localhost:8000/mobile/v1/animais`, sempre pelo Ingress e nunca direto para um pod. Ele lê em cada resposta o header `X-Animais-Served-By`, que diz qual réplica atendeu, e compara 1 réplica com 3. A evidência de distribuição de carga é que **as três réplicas aparecem na contagem e nenhuma atende mais de 50% das requisições**. Num notebook, as réplicas dividem a mesma CPU, então a vazão não precisa triplicar. Ao terminar, o script volta o Deployment ao número original de réplicas. O roteiro e a tabela com os resultados ficam em [`docs/escalabilidade.md`](docs/escalabilidade.md).
 
 ### Onde está cada critério da avaliação
 
@@ -418,11 +420,11 @@ O script manda 300 requisições para `localhost:8000/mobile/v1/animais`, sempre
 | Dockerfiles e qualidade das imagens | `services/*/Dockerfile`, `bff/*/Dockerfile`, `gateway/Dockerfile`, `infra/*/Dockerfile` e [`docs/imagens.md`](docs/imagens.md) |
 | Compose com volumes e redes | [`compose.yaml`](compose.yaml): blocos `networks:` e `volumes:` no fim do arquivo |
 | Deployments e Services | `k8s/<componente>/deployment.yaml`, `service.yaml` e `*-statefulset.yaml` |
-| Ingress e roteamento | `k8s/gateway/ingress.yaml` e `k8s/kong/`, comparados com [`gateway/kong.template.yml`](gateway/kong.template.yml) |
+| Ingress e roteamento | [`k8s/gateway/ingress.yaml`](k8s/gateway/ingress.yaml) e [`k8s/kong/`](k8s/kong/), comparados com [`gateway/kong.template.yml`](gateway/kong.template.yml) |
 | ConfigMaps e Secrets | `k8s/<componente>/configmap.yaml`, `secret.env.example`, `kustomization.yaml` e [`scripts/k8s-prep.sh`](scripts/k8s-prep.sh) |
-| Escalabilidade | `scripts/escala-demo.sh` e `docs/escalabilidade.md` |
+| Escalabilidade | [`scripts/escala-demo.sh`](scripts/escala-demo.sh) e [`docs/escalabilidade.md`](docs/escalabilidade.md) |
 
-> **Situação em 17/11:** Identidade e Kong (#151), Ingress (#150), Animais e BFF Mobile (#159) e o script de escala (#152) estão em PRs abertos. Notificações e Assistente ainda não têm Dockerfile nem manifests (#41, #42 e #49): o Compose já sobe os bancos deles (Redis e Qdrant), mas não os serviços.
+> **Pendências conhecidas:** Notificações e Assistente ainda não têm `/ready` (#41 e #42), então a readiness deles aponta para `/health`. O multi-stage desses dois ainda não reduz o tamanho da imagem, porque as dependências atuais são só wheels prontos ([`docs/imagens.md`](docs/imagens.md)).
 
 ## Documentação
 
