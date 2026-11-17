@@ -239,6 +239,8 @@ services:
     environment:
       ANIMAIS_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais?replicaSet=rs0&authSource=admin
       ANIMAIS_LEITURA_MONGO_URL: mongodb://${ANIMAIS_DB_USER}:${ANIMAIS_DB_PASSWORD}@mongo-animais:27017/animais_leitura?replicaSet=rs0&authSource=admin
+      ANIMAIS_AMQP_URL: amqp://animais:${RABBITMQ_ANIMAIS_PASSWORD}@rabbitmq:5672/
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
     networks: [services, data-animais]
     depends_on:
       mongo-animais: { condition: service_healthy }
@@ -290,6 +292,24 @@ services:
       timeout: 3s
       retries: 5
     deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    image: ampara/gateway:dev
+    environment:
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
+    ports: ["8000:8000"]
+    networks: [edge]
+    depends_on:
+      identidade: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "kong health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
     restart: unless-stopped
 
 networks:
