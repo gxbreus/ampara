@@ -5,9 +5,12 @@ listados no [índice da apresentação](README.md). Este roteiro complementa os
 slides com falas, referências e registro de ensaios da #36.
 
 Revisão documental de 17/11/2026: o congelamento de 21/10 já passou. Não há
-registro de dois ensaios nesta pasta. Este documento não comprova que eles
-aconteceram nem que o PDF atual corresponde ao arquivo entregue em outubro.
-Anexe somente evidências históricas reais; ajustes atuais precisam de data atual.
+registro de dois ensaios nesta pasta. O histórico comprova a presença do PDF
+antes do congelamento: inclusão em `2b90534`, última alteração em `931d19f`
+(08/10/2026), presente na main em `8e40471` (13/10/2026). O blob
+`d2a39ba6c1399852818a7691c62c0d7e3b4d91aa` é o mesmo nessa main histórica,
+na main e na develop consultadas em 17/11. Isso comprova o arquivo no Git,
+não os ensaios nem o envio por outro canal. Ajustes atuais têm data atual.
 
 ## Ordem e tempo de fala (12 minutos)
 
@@ -28,6 +31,56 @@ Não leia texto corrido. Em cada trecho: descreva uma decisão, mostre a referê
 e explique a consequência quando um serviço cai. Se o slide antigo disser que
 Adoção coordena a SAGA, explicite a mudança da ADR-008: o Orquestrador coordena;
 Adoção guarda a solicitação, decisão humana e o espelho das transições.
+
+### Gabriel: slides 12–14 e decisões atuais
+
+Fala preparada em 17/11, referenciando as branches próprias das #23, #24 e #35
+ainda pendentes de publicação/merge. Não apresentar um contrato fora de develop
+como entrega integrada.
+
+- Slide 12: "O Assistente isola latência, custo e falhas do LLM. Qdrant guarda
+  a base vetorial persistente; Redis dedicado guarda cache descartável. Não
+  compartilho esse Redis com a caixa de notificações. O kickoff escolheu Groq,
+  Ollama como opção local e embeddings multilíngues locais; a ADR-007 registra
+  os limites e a estimativa, sem afirmar qualidade ou latência já medidas."
+- Slide 13: "Perguntas seguem recuperação de até quatro trechos e geração com
+  fontes. Recomendações usam tool na busca de Animais e só podem citar IDs
+  realmente disponíveis. O servidor aplica localização; o LLM não recebe nem
+  escolhe coordenadas. Cache, timeout, retry seletivo, circuito e fallback são
+  responsabilidade do serviço; uma falha de geração não interrompe a SAGA."
+- Slide 14: "Notificações consome adocao.* e conta.verificada. O responsável
+  recebe nova solicitação em aguardando aprovação; os encerramentos respeitam
+  as compensações. A caixa vem do sub do JWT, com cursor e filtro. Marcar lida
+  é idempotente e retorna 204; item alheio retorna 404. AOF e volume preservam
+  a caixa; deduplicação impede aviso repetido na reentrega. HATEOAS pertence à
+  solicitação de Adoção e será explicado pelo Mateus."
+
+O PDF histórico ainda precisa de revisão visual para refletir a ADR-008 nos
+slides da SAGA. Correção da fala não equivale a correção do PDF. Atualizar o
+original compartilhado e exportar nova revisão identificada, preservando o
+registro da entrega de outubro; não afirmar que a versão corrigida já existia.
+
+Perguntas extras para arguição do Gabriel (sortear outro colega para responder):
+
+| Pergunta | Evidência que a resposta deve apontar |
+| --- | --- |
+| Por que chave LLM inválida não deve retirar todos os pods do Service? | readiness só de Qdrant/Redis e fallback nas #42/#69 |
+| Um hit de cache de outra versão da base pode ser reutilizado? | chave com versão da base e modelo na #69 e ADR-007 da #35 |
+| Como provar que o agente não inventou um animal? | IDs e disponibilidade comparados com o retorno da tool na #68 |
+| Qual diferença entre falha do LLM e pergunta sem cobertura? | degradado/fallback versus orientação de domínio no contrato #24 |
+| AOF everysec garante perda zero em qualquer falha? | política de fsync e teste de persistência da #41; não confundir com transação da adoção |
+
+### Pendências conscientes da Parte 2
+
+Registro atual, **não reconstrução de uma decisão tomada em outubro**:
+
+| Issue | Situação em 17/11/2026 e ação necessária |
+| --- | --- |
+| #23 | Contrato validado localmente na branch docs/contrato-notificacoes; publicar, revisar e integrar. |
+| #24 | Contrato validado localmente na branch docs/contrato-assistente; revisar também a adaptação do BFF Mobile. |
+| #35 | ADR preparada na branch docs/adr-assistente; revisar escolhas e estimativa com hipóteses explícitas. |
+| #34 | Conferir o estado da issue e a revisão da arquitetura com o responsável; não encerrar pelo fato de existir documento. |
+| #36 | PDF histórico identificado; dois ensaios e revisão dos slides atualizados ainda sem evidência. |
 
 ## Arguição cruzada
 
@@ -77,5 +130,5 @@ para caber na meta, e cite o commit do material usado.
 - [ ] Dois ensaios reais registrados; um contém arguição cruzada.
 - [ ] Slides não prometem testes que ainda não foram executados.
 - [ ] Issues/PRs pendentes da Parte 2 listados com decisão consciente.
-- [ ] PDF e commit da entrega original identificados, com data verificável.
-- [ ] Integração em main verificada pelo responsável, sem alterar retroativamente o histórico.
+- [x] PDF e commits anteriores ao congelamento identificados, com blob verificável.
+- [x] Presença desse mesmo PDF na main histórica verificada no Git, sem alterar o arquivo.
