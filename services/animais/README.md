@@ -130,3 +130,14 @@ set local isolado: raio/ordenação/cursor, privacidade, versões, responsável 
 reconstrução com conteúdo idêntico. Defina `ANIMAIS_TEST_MONGO_URL` para executá-los.
 A medição de latência com 50 cadastros/1.000 animais e a integração com RabbitMQ
 continuam pendentes; estes resultados não foram estimados.
+
+## Participante da SAGA (#57)
+
+O worker lê animais.comandos e publica respostas em ampara.respostas com routing
+key orquestrador. Efeito, inbox e evento do outbox são transacionais; a resposta
+é confirmada pelo broker antes do ACK. A marca de compensação impede reserva
+tardia. Edições HTTP usam versão esperada para preservar reservas concorrentes.
+
+Em 17/11/2026, 48 testes passaram, incluindo MongoDB 7.0.14 real: 20 reservas
+simultâneas, resposta idempotente, compensação precautória, confirmação, rollback
+e conflito de edição manual. Integração completa com RabbitMQ/serviços ainda pendente.
