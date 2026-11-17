@@ -4,6 +4,7 @@ set -euo pipefail
 base_url="${BASE_URL:-http://localhost:8000}"
 url="${URL:-$base_url/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10}"
 namespace="${NAMESPACE:-ampara}"
+scripts_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 case "$url" in
   http://localhost:8000/*|http://127.0.0.1:8000/*) ;;
@@ -13,6 +14,16 @@ esac
 command -v kubectl >/dev/null || { echo "kubectl não encontrado" >&2; exit 2; }
 command -v hey >/dev/null || { echo "hey não encontrado: instale-o antes da demonstração" >&2; exit 2; }
 command -v curl >/dev/null || { echo "curl não encontrado" >&2; exit 2; }
+
+if [[ "${1:-}" == "--rate-limit-test" ]]; then
+  saida="$(mktemp)"
+  trap 'rm -f -- "$saida"' EXIT
+  echo "Teste separado de 429: mantenha o rate limit normal (600/min)."
+  hey -n 1200 -c 20 "$url" > "$saida"
+  cat "$saida"
+  bash "$scripts_dir/validar-hey.sh" "$saida" 429
+  exit 0
+fi
 
 if [[ "${DEMO_RATE_LIMIT_ELEVATED:-}" != "true" ]]; then
   echo "Defina DEMO_RATE_LIMIT_ELEVATED=true somente depois de aplicar o overlay temporário do rate limit." >&2
@@ -55,16 +66,18 @@ medir() {
   kubectl scale deployment/animais --namespace "$namespace" --replicas="$replicas"
   kubectl rollout status deployment/animais --namespace "$namespace" --timeout=90s
   kubectl get pods --namespace "$namespace" --selector app=animais -o wide
+  if [[ "$replicas" == 3 ]]; then
+    nos="$(kubectl get pods -n "$namespace" -l app=animais --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | awk 'NF {n++} END {print n+0}')"
+    [[ "$nos" -ge 2 ]] || { echo "As três réplicas precisam ocupar pelo menos dois nós." >&2; return 1; }
+  fi
+  # O KIC propaga endpoints depois do rollout; a amostra abaixo continua exigindo 200.
+  sleep 5
   echo "Distribuição de 300 requisições:"
   contar_por_pod "$replicas"
   echo "Carga (20 s, concorrência 20):"
   hey -z 20s -c 20 "$url" > "$temporario/hey"
   cat "$temporario/hey"
-  if grep -Eq 'Error distribution:|\[[345][0-9][0-9]\]' "$temporario/hey"; then
-    echo "Há erros ou respostas não-2xx na carga; não registre a medição como sucesso." >&2
-    return 1
-  fi
-  grep -Eq '\[2[0-9][0-9]\]' "$temporario/hey" || { echo "Nenhuma resposta 2xx na carga." >&2; return 1; }
+  bash "$scripts_dir/validar-hey.sh" "$temporario/hey"
 }
 
 medir 1
