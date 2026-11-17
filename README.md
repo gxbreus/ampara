@@ -251,7 +251,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-O gerador preenche `.env.example` com credenciais aleatórias locais e um par
+O gerador cria `.env` a partir de `.env.example`, com credenciais aleatórias locais e um par
 JWT RS256; não imprime credenciais nem sobrescreve `.env` existente.
 `LLM_API_KEY` fica vazia para configuração posterior do Assistente. Para
 configuração manual, copie `.env.example`, preencha as credenciais e use
@@ -276,8 +276,19 @@ que funcionalidades ainda em PR estejam disponíveis.
 
 Somente o gateway expõe APIs de domínio. Os nomes `animais:8001`,
 `adocao:8080` e demais DNS internos não são endereços do navegador do host.
-Nenhum usuário de demonstração é criado pelo gerador: seed, contas e senhas de
-demo dependem da #71. Não há senha de conta predefinida nesta entrega.
+Nenhum usuário de demonstração é criado pelo gerador. A #71 prevê as contas
+abaixo; elas só estarão disponíveis depois do seed integrado e executado:
+
+| Conta prevista | E-mail | Uso |
+| --- | --- | --- |
+| ONG Patas de Lavras | `patas@ampara.dev` | responsável pelo Thor |
+| Bruna Costa | `bruna@ampara.dev` | adotante com perfil completo |
+| Caio Lima | `caio@ampara.dev` | perfil incompleto para a falha provocada |
+| Diana Souza | `diana@ampara.dev` | concorrência com Bruna |
+| Admin Ampara | `admin@ampara.dev` | verificação de responsáveis |
+
+As senhas vêm de `SEED_SENHA_PADRAO` e, para o administrador, `ADMIN_SENHA`
+conforme a entrega da #71. Não há senha de conta predefinida neste checkout.
 
 ### Kubernetes local
 

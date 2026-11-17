@@ -1,6 +1,7 @@
 """Cria um .env local com credenciais aleatórias e chaves JWT, sem sobrescrever."""
 
 import argparse
+import json
 import os
 import re
 import secrets
@@ -22,7 +23,7 @@ def openssl_disponivel():
 def gerar(template: str) -> str:
     valores = dict(re.findall(r"^([A-Z][A-Z0-9_]*)=(.*)$", template, re.M))
     for nome in valores:
-        if nome.endswith("_PASSWORD"):
+        if nome.endswith(("_PASSWORD", "_SENHA")) or nome == "SEED_SENHA_PADRAO":
             valores[nome] = secrets.token_hex(24)
     for nome, valor in {
         "IDENTIDADE_DB_USER": "identidade", "ANIMAIS_DB_USER": "animais",
@@ -54,7 +55,15 @@ def gerar(template: str) -> str:
     linhas = []
     for linha in template.splitlines():
         nome, separador, _ = linha.partition("=")
-        linhas.append(f"{nome}={valores[nome]}" if separador and nome in valores else linha)
+        if separador and nome in valores:
+            valor = valores[nome]
+            # Mantém PEM já escapado; demais valores também precisam ser válidos
+            # ao carregar .env com Bash (URLs Mongo contêm o operador &).
+            if not (valor.startswith('"') and valor.endswith('"')):
+                valor = json.dumps(valor, ensure_ascii=False)
+            linhas.append(f"{nome}={valor}")
+        else:
+            linhas.append(linha)
     return "\n".join(linhas) + "\n"
 
 
