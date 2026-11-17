@@ -20,7 +20,7 @@ kind create cluster --config k8s/kind-config.yaml
 
 # 4. imagens: o kind não enxerga as imagens do Docker local, é preciso carregá-las
 docker compose build
-for img in rabbitmq adocao orquestrador bff-web; do kind load docker-image ampara/$img:dev --name ampara; done
+for img in rabbitmq adocao orquestrador bff-web notificacoes assistente; do kind load docker-image ampara/$img:dev --name ampara; done
 
 # 5. tudo
 kubectl apply -k k8s/
@@ -61,6 +61,7 @@ Cada linha é uma de duas formas, e nenhuma tem valor de senha:
 | --- | --- |
 | `POSTGRES_PASSWORD=` | o valor de `POSTGRES_PASSWORD` do `.env` |
 | `ADOCAO_DATABASE_URL=postgres://${ADOCAO_DB_USER}:${ADOCAO_DB_PASSWORD}@postgres-adocao:5432/adocao?sslmode=disable` | o modelo com cada `${VAR}` trocado pelo valor do `.env` |
+| `LLM_API_KEY=${LLM_API_KEY:-}` | o valor do `.env`, que pode ficar vazio; sem o `:-`, uma variável vazia faz o script falhar |
 
 ### Chaves do JWT
 
@@ -74,8 +75,12 @@ O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porqu
 | `adocao/` | Deployment (2 réplicas), Service 8080, ConfigMap e StatefulSet `postgres-adocao` (PVC 1 Gi) | o pod do serviço recebe só `ADOCAO_DATABASE_URL` e `ADOCAO_AMQP_URL`; as credenciais de superusuário ficam com o banco |
 | `orquestrador/` | Deployment (2 réplicas), Service 8081 (só probes), ConfigMap e StatefulSet `postgres-orquestrador` (PVC 1 Gi) | conduz a SAGA (ADR-008); recebe só `ORQUESTRADOR_DATABASE_URL` e `ORQUESTRADOR_AMQP_URL`, e os prazos vêm do ConfigMap |
 | `bff-web/` | Deployment (2 réplicas), Service 3010 e ConfigMaps | a chave pública do JWT vem do `jwt.pub` gerado pelo `k8s-prep.sh` |
+| `notificacoes/` | Deployment (2 réplicas), Service 8002 e StatefulSet `redis-notificacoes` (AOF, PVC 1 Gi) | o pod do serviço recebe só `NOTIFICACOES_REDIS_URL` e `NOTIFICACOES_AMQP_URL`; a senha do Redis fica com o banco. Sem ConfigMap por enquanto: as duas variáveis levam senha |
+| `assistente/` | Deployment (2 réplicas), Service 8003, ConfigMap, StatefulSet `qdrant-assistente` (PVC 1 Gi) e Deployment `redis-assistente` | o Redis é só cache do LLM, por isso é Deployment sem volume. `LLM_API_KEY` pode ficar vazia (modo degradado, #69). Modelo e provedor ficam no ConfigMap |
 
 O BFF Web usa `/web/v1/health` também como readiness. O `/web/v1/ready` dele checa os serviços chamados: como readiness, um serviço fora do ar tiraria o BFF inteiro do balanceamento, quando o contrato prevê resposta parcial com `avisos[]` (#29).
+
+Notificações e Assistente ainda não têm `/ready` (#41 e #42), então a readiness deles aponta para `/health` por enquanto. Quando o `/ready` existir, é só trocar o `path` no `deployment.yaml`.
 
 ## Regras para os manifests
 

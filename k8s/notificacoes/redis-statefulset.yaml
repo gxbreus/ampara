@@ -1,0 +1,61 @@
+# Redis da caixa de notificações: com AOF e volume, a caixa de cada usuário sobrevive a um
+# restart do pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-notificacoes
+  labels: { app: redis-notificacoes }
+spec:
+  clusterIP: None          # headless: o StatefulSet tem identidade de rede estável
+  selector: { app: redis-notificacoes }
+  ports:
+    - { name: redis, port: 6379, targetPort: 6379 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-notificacoes
+  labels: { app: redis-notificacoes }
+spec:
+  serviceName: redis-notificacoes
+  replicas: 1
+  selector:
+    matchLabels: { app: redis-notificacoes }
+  template:
+    metadata:
+      labels: { app: redis-notificacoes }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          # o Kubernetes troca $(REDIS_PASSWORD) pelo valor da variável, sem passar por shell
+          args: ["redis-server", "--appendonly", "yes", "--requirepass", "$(REDIS_PASSWORD)"]
+          ports:
+            - { name: redis, containerPort: 6379 }
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: notificacoes-secret, key: REDIS_PASSWORD } }
+            - name: REDISCLI_AUTH        # o redis-cli das probes lê a senha daqui
+              valueFrom: { secretKeyRef: { name: notificacoes-secret, key: REDIS_PASSWORD } }
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli ping | grep -q PONG"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli ping | grep -q PONG"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - { name: dados, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }
