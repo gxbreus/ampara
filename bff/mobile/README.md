@@ -44,3 +44,8 @@ Testes usam serviços simulados; integração completa depende dos serviços dos
 - #45 — esqueleto e Dockerfile
 - #47 — Kubernetes
 - #62 — busca, detalhe e solicitações
+
+Validação de 17/11/2026: 15 testes, lint, tipos e build passaram. As respostas do
+BFF de busca, detalhe, solicitações e linha do tempo são verificadas contra o
+OpenAPI; o JWT é exercitado com pares RSA reais. A medição com 20 cards fica
+abaixo de 6 KB. Esses testes não substituem o ensaio contra os serviços de domínio.
