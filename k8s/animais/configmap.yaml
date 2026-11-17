@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: animais-config }
+data:
+  ANIMAIS_PROJECAO_LAG_ALVO: "5s"
+  ANIMAIS_DATABASE: animais
+  ANIMAIS_LEITURA_DATABASE: animais_leitura
+  ANIMAIS_COLECAO: animais
+  ANIMAIS_LEITURA_COLECAO: animais_busca

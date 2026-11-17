@@ -1,0 +1,76 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth
+  annotations:
+    konghq.com/plugins: rate-limit-auth
+    konghq.com/strip-path: "true"
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /auth/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: identidade
+                port: { number: 3001 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mobile-publico
+  annotations:
+    konghq.com/methods: GET
+    konghq.com/plugins: rate-limit-mobile
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /mobile/v1/animais
+            pathType: Prefix
+            backend:
+              service:
+                name: bff-mobile
+                port: { number: 3020 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mobile
+  annotations:
+    konghq.com/plugins: jwt,rate-limit-mobile
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /mobile/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: bff-mobile
+                port: { number: 3020 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    konghq.com/plugins: jwt,rate-limit-web
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /web/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: bff-web
+                port: { number: 3010 }
