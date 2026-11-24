@@ -291,7 +291,7 @@ DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh   # 1 × 3 réplicas do A
 
 Para mostrar a API fora do Codespace, abra a aba **Ports** e mude a visibilidade da porta 8000 (ou 8080) para *Public*: o GitHub dá uma URL https.
 
-**Parar e voltar.** Um Codespace parado guarda os containers, as imagens e os volumes. Ao reabrir, o compose volta sozinho (`restart: unless-stopped`) e os nós do kind também; em um ou dois minutos o sistema está de pé de novo, sem build. Para apagar tudo: `gh codespace delete`.
+**Parar e voltar.** Um Codespace parado guarda os containers, as imagens, os volumes e os dados do seed. Ao reabrir, nada precisa de build: o compose volta sozinho (`restart: unless-stopped`) em cerca de 2 minutos, e o kind em cerca de 4. Até o controlador do Kong reconfigurar as rotas, o Ingress pode responder `502`. Espere `kubectl get pods -A` mostrar tudo `1/1` e a busca devolver `200`. Por isso, numa apresentação, abra o Codespace uns 10 minutos antes. Para apagar tudo: `gh codespace delete`.
 
 ## Containerização e orquestração (Parte 3)
 
