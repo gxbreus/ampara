@@ -8,8 +8,8 @@ Cada dono preenche a linha da própria imagem ao criar o Dockerfile multi-stage 
 | `ampara/animais` | 215 MB | 185 MB | −14,0% | etapa `builder` em `python:3.12-slim` com virtualenv isolado → `runtime` sem resíduos de cache de instalação, com usuário não-root `appuser` |
 | `ampara/adocao` | 628 MB | 20,5 MB | −96,7% | etapa `golang:1.23-alpine` → `distroless/static-debian12:nonroot`; binário estático com as migrations embutidas, sem shell |
 | `ampara/orquestrador` | 645 MB | 21,2 MB | −96,7% | o mesmo molde da Adoção: `golang:1.23-alpine` → `distroless/static-debian12:nonroot`, binário estático com as migrations embutidas, sem shell |
-| `ampara/notificacoes` | 57,85 MB | 57,85 MB | <0,01% | `python:3.12-slim`, usuário não-root e dependências instaladas no builder. Medição de `docker image inspect` no runner Linux da [#41](execucao/notificacoes-validacao.md). |
-| `ampara/assistente` | 105,75 MB | 105,75 MB | <0,01% | `python:3.12-slim`, usuário não-root. O builder isola a instalação das dependências do LangChain e Qdrant. Medição de `docker image inspect` no runner Linux da [#42](execucao/assistente-validacao.md). |
+| `ampara/notificacoes` | 57,85 MB | 57,85 MB | <0,01% | `python:3.12-slim`, usuário não-root e dependências instaladas no builder. Medição de `docker image inspect` no runner Linux da [#41](https://github.com/gxbreus/ampara/actions/runs/45451238696). |
+| `ampara/assistente` | 105,75 MB | 105,75 MB | <0,01% | `python:3.12-slim`, usuário não-root. O builder isola a instalação das dependências do LangChain e Qdrant. Medição de `docker image inspect` no runner Linux da [#42](https://github.com/gxbreus/ampara/actions/runs/45451316660). |
 | `ampara/bff-web` | 336 MB | 261 MB | −22,3% | etapas `deps` → `build` → `runtime` em `node:22-alpine`, `npm ci --omit=dev`, usuário `node`; sem TypeScript nem tsx na final. O ganho é menor porque o binário do `node` sozinho tem 123 MB; o código e as dependências somam 17 MB |
 | `ampara/bff-mobile` | | | | |
 | `ampara/gateway` | | | | |
