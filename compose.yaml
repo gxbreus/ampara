@@ -253,6 +253,49 @@ services:
     deploy: { resources: { limits: { memory: 256m } } }
     restart: unless-stopped
 
+  notificacoes:
+    build: ./services/notificacoes
+    image: ampara/notificacoes:dev
+    environment:
+      NOTIFICACOES_REDIS_URL: redis://:${NOTIFICACOES_REDIS_PASSWORD}@redis-notificacoes:6379/0
+      NOTIFICACOES_AMQP_URL: amqp://notificacoes:${RABBITMQ_NOTIFICACOES_PASSWORD}@rabbitmq:5672/
+    networks: [services, data-notificacoes]
+    depends_on:
+      redis-notificacoes: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 128m } } }
+    restart: unless-stopped
+
+  assistente:
+    build: ./services/assistente
+    image: ampara/assistente:dev
+    environment:
+      QDRANT_URL: http://qdrant-assistente:6333
+      ASSISTENTE_REDIS_URL: redis://:${ASSISTENTE_REDIS_PASSWORD}@redis-assistente:6379/0
+      ANIMAIS_URL: http://animais:8001
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
+    networks: [services, data-assistente]
+    depends_on:
+      qdrant-assistente: { condition: service_healthy }
+      redis-assistente: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy: { resources: { limits: { memory: 256m } } }
+    restart: unless-stopped
+
   bff-web:
     build: ./bff/web
     image: ampara/bff-web:dev

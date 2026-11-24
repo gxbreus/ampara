@@ -246,7 +246,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade, Notificações, o Assistente e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
