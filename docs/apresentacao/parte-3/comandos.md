@@ -149,8 +149,14 @@ kubectl scale deployment/animais -n ampara --replicas=2
 ## Se algo der errado
 
 ```bash
-# um pod que não sobe: os eventos dele mostram o motivo
-kubectl describe pod <nome-do-pod> -n ampara
+# pods que não estão rodando (só "No resources found" = tudo certo)
+kubectl get pods -n ampara --field-selector=status.phase!=Running
+
+# últimos eventos do cluster: pod reiniciando, probe falhando, imagem faltando, escala
+kubectl get events -n ampara --sort-by=.lastTimestamp | tail -15
+
+# detalhes dos pods de um serviço, pelo label (troque animais pelo serviço com problema)
+kubectl describe pod -n ampara -l app=animais
 
 # logs de um serviço no cluster, legíveis e sem as checagens /health e /ready
 ./scripts/logs.sh animais
