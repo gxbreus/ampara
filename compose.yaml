@@ -244,6 +244,7 @@ services:
     networks: [services, data-animais]
     depends_on:
       mongo-animais: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }   # o outbox e os consumidores precisam do broker
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8001/ready\")' || exit 1"]
       interval: 10s
