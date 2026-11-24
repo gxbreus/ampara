@@ -1,0 +1,21 @@
+{
+  "name": "Ampara",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": { "minikube": "none" }
+  },
+  // O compose completo e o kind com 2 workers juntos passam de 8 GB.
+  "hostRequirements": { "cpus": 4, "memory": "16gb" },
+  // No Codespace, o compose publica o gateway na 8080 e o kind fica com a 8000,
+  // para os dois ambientes rodarem ao mesmo tempo.
+  "containerEnv": {
+    "COMPOSE_FILE": "${containerWorkspaceFolder}/compose.yaml:${containerWorkspaceFolder}/.devcontainer/compose.codespaces.yaml"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [8000, 8080],
+  "portsAttributes": {
+    "8000": { "label": "Ingress Kong (kind)", "onAutoForward": "silent" },
+    "8080": { "label": "Gateway Kong (compose)", "onAutoForward": "silent" }
+  }
+}
