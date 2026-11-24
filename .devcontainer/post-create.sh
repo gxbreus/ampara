@@ -9,8 +9,10 @@ if ! command -v kind >/dev/null; then
   sudo chmod +x /usr/local/bin/kind
 fi
 
+# hey roda pela imagem williamyeh/hey (a mesma da medição em docs/escalabilidade.md), com a
+# rede do host, para alcançar o Ingress em localhost:8000.
 if ! command -v hey >/dev/null; then
-  sudo curl -fsSLo /usr/local/bin/hey https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64
+  printf '#!/bin/sh\nexec docker run --rm --network host williamyeh/hey "$@"\n' | sudo tee /usr/local/bin/hey >/dev/null
   sudo chmod +x /usr/local/bin/hey
 fi
 
