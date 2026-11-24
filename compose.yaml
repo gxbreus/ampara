@@ -103,7 +103,7 @@ services:
 
   redis-notificacoes:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
     environment:
       REDISCLI_AUTH: ${NOTIFICACOES_REDIS_PASSWORD}
     volumes: [redis-notificacoes:/data]
