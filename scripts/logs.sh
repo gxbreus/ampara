@@ -21,9 +21,9 @@ fi
 bruto 2>&1 | jq -rR --arg todos "${TODOS:-}" '
   (fromjson? // null) as $l
   | if $l == null or ($l | type) != "object" then
-      # linha que não é JSON. O log de acesso do uvicorn repete a requisição que o
-      # Animais já registra em JSON, então só aparece com TODOS=1.
-      if $todos == "" and (test("/(health|ready)") or test("^INFO: +[0-9.]+:[0-9]+ - \"")) then empty else . end
+      # linha que não é JSON. As do uvicorn ("INFO:     ...") repetem a requisição que o
+      # Animais já registra em JSON ou só anunciam a partida, então só aparecem com TODOS=1.
+      if $todos == "" and (test("/(health|ready)") or test("^INFO: +")) then empty else . end
     else
       ($l.caminho // $l.req.url // "") as $caminho
       # o pino (Node) registra a rota em "incoming request" e o status em "request completed";
