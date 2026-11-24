@@ -283,7 +283,7 @@ No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na por
 ```bash
 ./scripts/seed.sh        # no compose
 ./scripts/seed.sh k8s    # no cluster
-curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"   # busca pública pelo Ingress
+./scripts/buscar-animais.sh   # busca pública pelo Ingress, em tabela (8080 para o compose)
 ```
 
 **4. Demonstrar.**

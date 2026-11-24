@@ -3,6 +3,7 @@
 Roteiro da demonstração da Parte 3, usado na apresentação e no vídeo. Cada bloco traz os comandos de uma etapa, com um comentário sobre o que cada um faz, para rodar no terminal do Codespace (**Ctrl+`** abre o terminal). Os blocos seguem a ordem da apresentação. Os tempos foram medidos num Codespace de 4 núcleos e 16 GB.
 
 > **No Codespace:** o compose responde em `localhost:8080` e o kind (Ingress) em `localhost:8000`, para os dois rodarem juntos.
+> **Busca em tabela:** o `./scripts/buscar-animais.sh` faz a mesma chamada do app mobile (`GET /mobile/v1/animais`, 10 km em volta de Lavras) e mostra o resultado como tabela. Sem argumento, usa o Ingress do kind (8000); com `8080`, o gateway do compose. Para ver o JSON cru: `curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10" | jq`.
 > **No notebook:** o compose responde em `localhost:8000`. Rode só um dos dois de cada vez, porque ambos usam a porta 8000.
 
 ## 0. Antes da aula: conferir que tudo voltou
@@ -13,12 +14,12 @@ Ao reabrir o Codespace, os containers voltam sozinhos em cerca de 4 minutos, sem
 # todos os pods do cluster devem ficar 1/1 Running
 kubectl get pods -A
 
-# busca pública pelo Ingress do kind: deve devolver os 8 animais do seed
+# busca pública pelo Ingress do kind, em tabela: deve listar os 8 animais do seed
 # (um 502 nos primeiros minutos é normal: o Kong ainda está reconfigurando as rotas)
-curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"
+./scripts/buscar-animais.sh
 
 # a mesma busca pelo gateway do compose
-curl -s "localhost:8080/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"
+./scripts/buscar-animais.sh 8080
 ```
 
 ## 1. Docker: imagens próprias e multi-stage
@@ -50,7 +51,7 @@ docker network ls --filter label=com.docker.compose.project=ampara
 docker volume ls --filter label=com.docker.compose.project=ampara
 
 # prova da persistência: os animais continuam lá depois do down/up
-curl -s "localhost:8080/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"
+./scripts/buscar-animais.sh 8080
 ```
 
 ## 3. Kubernetes: subir do zero (cerca de 2 min)
@@ -108,14 +109,14 @@ kubectl get kongplugins -n ampara
 
 ```bash
 # depois do passo 3 o banco está vazio: a busca não devolve nada
-curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"
+./scripts/buscar-animais.sh
 
 # cadastra uma ONG e 8 animais pela API de escrita do Animais:
 # animal + evento no outbox → RabbitMQ → projeção do CQRS → busca pública
 ./scripts/seed.sh k8s
 
 # agora a busca, pelo Ingress, devolve os animais com a distância de cada um
-curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"
+./scripts/buscar-animais.sh
 ```
 
 ## 7. Escalabilidade: Animais de 1 para 3 réplicas
@@ -151,11 +152,11 @@ kubectl scale deployment/animais -n ampara --replicas=2
 # um pod que não sobe: os eventos dele mostram o motivo
 kubectl describe pod <nome-do-pod> -n ampara
 
-# logs de um serviço no cluster
-kubectl logs -n ampara deploy/animais --tail 30
+# logs de um serviço no cluster, legíveis e sem as checagens /health e /ready
+./scripts/logs.sh animais
 
 # logs de um serviço no compose
-docker compose logs --tail 30 animais
+./scripts/logs.sh animais compose
 
 # Ingress respondendo 502 por muito tempo: reinicia o controlador do Kong
 kubectl rollout restart deployment -n kong
