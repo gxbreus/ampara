@@ -21,11 +21,15 @@ fi
 bruto 2>&1 | jq -rR --arg todos "${TODOS:-}" '
   (fromjson? // null) as $l
   | if $l == null or ($l | type) != "object" then
-      # linha que não é JSON (por exemplo, o log de acesso do uvicorn)
-      if $todos == "" and test("/(health|ready)") then empty else . end
+      # linha que não é JSON. O log de acesso do uvicorn repete a requisição que o
+      # Animais já registra em JSON, então só aparece com TODOS=1.
+      if $todos == "" and (test("/(health|ready)") or test("^INFO: +[0-9.]+:[0-9]+ - \"")) then empty else . end
     else
       ($l.caminho // $l.req.url // "") as $caminho
-      | if $todos == "" and ($caminho | test("/(health|ready)$")) then empty else
+      # o pino (Node) registra a rota em "incoming request" e o status em "request completed";
+      # sem TODOS=1, "request completed" só aparece quando o status não é 2xx
+      | if $todos == "" and (($caminho | test("/(health|ready)$"))
+            or (($l.msg // "") == "request completed" and (($l.res.statusCode // 200) < 300))) then empty else
           ($l.level // $l.nivel // "") as $nivel
           | (if ($nivel | type) == "number" then
                {"10":"TRACE","20":"DEBUG","30":"INFO","40":"WARN","50":"ERROR","60":"FATAL"}[$nivel | tostring]
@@ -38,7 +42,7 @@ bruto 2>&1 | jq -rR --arg todos "${TODOS:-}" '
               ($l.metodo // $l.req.method // empty),
               (if $caminho != "" then $caminho else empty end),
               (($l.status // $l.res.statusCode // empty) | tostring),
-              (($l.duracaoMs // $l.responseTime // empty) | tostring | . + " ms")
+              (($l.duracaoMs // $l.responseTime // empty) | (. * 10 | round / 10) | tostring | . + " ms")
             ] | join("  ")
         end
     end' | tail -n "$linhas"
