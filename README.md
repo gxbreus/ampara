@@ -307,6 +307,8 @@ O sistema roda de duas formas, com as **mesmas imagens**:
 - **Docker Compose:** o ambiente de desenvolvimento. O `compose.yaml` sobe tudo com um comando.
 - **Kubernetes (kind):** o ambiente orquestrado, com réplicas, Ingress, ConfigMaps, Secrets e escala. Os manifests ficam em [`k8s/`](k8s/README.md) e são organizados com kustomize.
 
+**Qual a diferença?** O Docker empacota a aplicação numa imagem e roda containers. Com o Compose, ele sobe vários containers juntos, mas **numa máquina só**: se um container cai, no máximo ele reinicia ali mesmo, e não há várias máquinas, distribuição de carga entre cópias nem atualização sem parada. O Kubernetes é um **orquestrador**: a gente declara o estado desejado ("Animais com 2 réplicas") e ele trabalha o tempo todo para mantê-lo, distribuindo os containers por **vários nós**. Ele recria o pod que morreu, balanceia a carga entre as réplicas pelo Service, escala com um comando (`kubectl scale`), atualiza versões sem derrubar o serviço (*rolling update*), só manda tráfego para o pod pronto (*readiness*) e entrega configuração e credenciais por ConfigMaps e Secrets. Em uma frase: o Docker roda os containers; o Kubernetes decide onde e quantos rodar e os mantém de pé.
+
 Cada conceito do Compose tem um equivalente no Kubernetes:
 
 | No Compose | No Kubernetes | Para que serve |
