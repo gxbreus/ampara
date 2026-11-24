@@ -8,4 +8,8 @@ set -eu
 export JWT_PUBLIC_KEY_YAML="$(printf '%s\n' "$JWT_PUBLIC_KEY" | sed 's/^/          /')"
 envsubst '${JWT_PUBLIC_KEY_YAML}' < /kong/kong.template.yml > /kong/kong.yml
 
+# Um restart do container (docker restart, ou a máquina religando) mantém o sistema de
+# arquivos, e os sockets da execução anterior fazem o nginx falhar com "Address already in use".
+rm -rf "${KONG_PREFIX:-/usr/local/kong}/sockets"
+
 exec /docker-entrypoint.sh kong docker-start
