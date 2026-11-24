@@ -250,6 +250,8 @@ docker compose up -d --build
 
 O `compose.yaml` sobe o sistema inteiro: os bancos, o RabbitMQ, o gateway Kong, os dois BFFs e os seis serviços (Adoção, Orquestrador, Animais, Identidade, Notificações e Assistente). A entrada é `http://localhost:8000`. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
+A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
+
 ### No GitHub Codespaces
 
 Para rodar sem instalar nada, abra um Codespace no repositório (**Code → Codespaces**), com a máquina de 4 núcleos e 16 GB. O [`.devcontainer`](.devcontainer/devcontainer.json) traz Docker, kind, kubectl, helm e hey, e gera um `.env` de demonstração com senhas aleatórias e as chaves do JWT ([`scripts/preparar-env-demo.sh`](scripts/preparar-env-demo.sh)).
@@ -260,8 +262,6 @@ docker compose up -d --build --wait   # compose: gateway em localhost:8080
 ```
 
 No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na porta 8080 ([`compose.codespaces.yaml`](.devcontainer/compose.codespaces.yaml)) e o kind fica com a 8000. Para abrir uma porta fora do Codespace, use a aba **Ports** e mude a visibilidade para *Public*.
-
-A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
 ## Containerização e orquestração (Parte 3)
 
