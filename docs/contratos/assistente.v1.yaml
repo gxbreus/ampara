@@ -1,0 +1,335 @@
+openapi: 3.1.0
+info:
+  title: Ampara — Assistente
+  version: 1.0.0
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  description: |
+    RAG sobre adoção responsável (HU-18) e recomendação com a busca real de
+    Animais (HU-19). Sem chat genérico ou histórico de conversa.
+    O texto é aparado antes da validação; texto vazio, só espaços ou com mais
+    de 1000 caracteres retorna 422. Não enviar CPF, e-mail, endereço ou outros
+    dados pessoais no texto. Não há campos para esses dados no contrato.
+
+    Localização é aplicada pelo servidor na tool, nunca enviada ao LLM nem
+    escolhida por ele. A tool só retorna dados públicos de animais DISPONIVEL;
+    coordenadas e distância exata são removidas antes da geração. O agente
+    executa no máximo três iterações e não inventa IDs ou disponibilidade.
+
+    Falha do provedor, circuito aberto ou chave vazia produz fallback com 200
+    e degradado=true. 503 é reservado à falha que impede também o fallback.
+    Cache em redis-assistente inclui versão da base e modelo na chave; falha
+    do cache permite execução sem cache. Perguntas sem cobertura ou fora do
+    domínio recebem orientação sem inventar fontes. Estado é operacional e
+    interno, não publicado pelo gateway.
+
+    Compatibilidade com bff-mobile.v1.yaml (#30 e integração #62):
+    o BFF aceita um subconjunto dos textos de pergunta (3–500 caracteres),
+    encaminha descricaoRotina como rotina, projeta sugestoes[].motivo como
+    animais[].motivoRecomendacao e Fonte.origem como paginaOuSecao, e compõe
+    explicacao a partir do campo de mesmo nome. Não repassa metadados internos
+    para schemas mobile com additionalProperties=false. Os campos lat/lng
+    precisam chegar do contexto de busca do app: o contrato mobile atual ainda
+    não os declara na recomendação. A integração #62/#65 deve acrescentá-los
+    como opcionais compatíveis e exigir sua presença para executar a busca;
+    não pode inventar coordenadas nem obtê-las do texto ou do LLM.
+servers:
+  - url: http://assistente:8003
+    description: Rede interna; os aplicativos usam os BFFs.
+tags:
+  - name: Assistente
+    description: Perguntas com fontes e recomendação no domínio de adoção.
+  - name: Operação
+    description: Observabilidade interna da dependência de geração.
+security:
+  - bearerAuth: []
+paths:
+  /v1/perguntas:
+    post:
+      tags: [Assistente]
+      operationId: responderPergunta
+      summary: Responde uma dúvida com fontes da base
+      description: Recupera até quatro trechos e mede recuperação e geração separadamente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [pergunta]
+              properties:
+                pergunta:
+                  $ref: '#/components/schemas/Texto'
+            example: {pergunta: Como preparar a casa para receber um gato?}
+      responses:
+        '200':
+          description: Resposta fundamentada, orientação sem cobertura ou fallback.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaPergunta'
+              examples:
+                normal:
+                  value:
+                    resposta: Prepare um ambiente seguro e faça a adaptação gradualmente.
+                    fontes:
+                      - titulo: Guia de adoção responsável
+                        trecho: A adaptação deve ser gradual em ambiente seguro.
+                        origem: base/guia-adocao.md, seção Adaptação
+                    degradado: false
+                    cache: false
+                    latenciaMs: 1250
+                degradada:
+                  value:
+                    resposta: Não consegui gerar uma resposta agora; tente novamente em alguns instantes.
+                    fontes: []
+                    degradado: true
+                    cache: false
+                    latenciaMs: 10000
+                cache:
+                  value:
+                    resposta: Prepare um ambiente seguro e faça a adaptação gradualmente.
+                    fontes:
+                      - titulo: Guia de adoção responsável
+                        trecho: A adaptação deve ser gradual em ambiente seguro.
+                        origem: base/guia-adocao.md, seção Adaptação
+                    degradado: false
+                    cache: true
+                    latenciaMs: 8
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '429':
+          $ref: '#/components/responses/LimiteExcedido'
+        '503':
+          $ref: '#/components/responses/SemFallback'
+  /v1/recomendacoes:
+    post:
+      tags: [Assistente]
+      operationId: recomendarAnimais
+      summary: Recomenda animais disponíveis compatíveis com a rotina
+      description: |
+        Usa GET /v1/animais/busca. Aplica lat, lng e raioKm no servidor;
+        filtrosUsados registra os filtros realmente enviados. Busca vazia
+        retorna sugestoes=[] e explicacao, sem inventar animais. Se Animais
+        estiver indisponível, retorna 200 degradado com sugestoes=[]; se apenas
+        o LLM falhar, o fallback pode usar os animais retornados pela busca.
+        Fontes são apenas referências efetivamente usadas. Exemplos de fontes
+        no contrato são ilustrativos, não evidência de ingestão da base.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rotina, lat, lng]
+              properties:
+                rotina:
+                  $ref: '#/components/schemas/Texto'
+                lat:
+                  type: number
+                  minimum: -90
+                  maximum: 90
+                lng:
+                  type: number
+                  minimum: -180
+                  maximum: 180
+                raioKm:
+                  type: number
+                  minimum: 1
+                  maximum: 100
+                  default: 10
+            example: {rotina: Moro em apartamento e trabalho seis horas fora., lat: -21.2468, lng: -44.9998, raioKm: 10}
+      responses:
+        '200':
+          description: Sugestões reais, busca vazia ou fallback explícito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaRecomendacao'
+              examples:
+                normal:
+                  value:
+                    sugestoes:
+                      - animalId: 65a2f1c4e8b9d3a7f0c1b2d4
+                        nome: Thor
+                        motivo: Porte compatível com a preferência informada; confirme a rotina de cuidados com o responsável.
+                    explicacao: Estas sugestões usam os animais disponíveis retornados pela busca.
+                    filtrosUsados: {lat: -21.2468, lng: -44.9998, raioKm: 10, porte: PEQUENO}
+                    fontes: []
+                    degradado: false
+                    latenciaMs: 1800
+                degradada:
+                  value:
+                    sugestoes: []
+                    explicacao: A busca de animais está temporariamente indisponível. Tente novamente.
+                    filtrosUsados: {lat: -21.2468, lng: -44.9998, raioKm: 10}
+                    fontes: []
+                    degradado: true
+                    latenciaMs: 1500
+                semResultados:
+                  value:
+                    sugestoes: []
+                    explicacao: Não encontramos animais disponíveis com esses filtros; tente ampliar o raio.
+                    filtrosUsados: {lat: -21.2468, lng: -44.9998, raioKm: 10}
+                    fontes: []
+                    degradado: false
+                    latenciaMs: 90
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+        '429':
+          $ref: '#/components/responses/LimiteExcedido'
+        '503':
+          $ref: '#/components/responses/SemFallback'
+  /v1/estado:
+    get:
+      tags: [Operação]
+      operationId: consultarEstadoAssistente
+      summary: Consulta o circuito e os contadores locais
+      description: |
+        Estado por processo/réplica, sem chaves, prompts ou dados pessoais.
+        fechado permite chamadas; aberto usa fallback até tentar novamente;
+        meio-aberto libera uma chamada de prova, fechando em sucesso ou
+        reabrindo em falha. Não substitui /ready nem depende do provedor estar
+        disponível. Contadores reiniciam com o processo.
+      responses:
+        '200':
+          description: Estado do circuito da réplica que atendeu à consulta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Estado'
+              example:
+                circuito: aberto
+                falhasConsecutivas: 5
+                chamadas: 20
+                falhas: 5
+                fallbacks: 8
+                cacheHits: 3
+                tentarNovamenteEm: '2026-11-17T15:01:00Z'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 de Identidade, validado com chave pública.
+  schemas:
+    Texto:
+      type: string
+      minLength: 1
+      maxLength: 1000
+      pattern: '\S'
+      description: Texto aparado, não vazio; sem dados pessoais.
+    Fonte:
+      type: object
+      required: [titulo, trecho, origem]
+      properties:
+        titulo: {type: string}
+        trecho: {type: string}
+        origem:
+          type: string
+          description: Arquivo ou URL e página/seção da fonte recuperada.
+    RespostaPergunta:
+      type: object
+      required: [resposta, fontes, degradado, cache, latenciaMs]
+      properties:
+        resposta: {type: string}
+        fontes:
+          type: array
+          items: {$ref: '#/components/schemas/Fonte'}
+        degradado: {type: boolean, description: true quando o fallback respondeu.}
+        cache: {type: boolean, description: true quando a resposta veio de redis-assistente.}
+        latenciaMs: {type: integer, minimum: 0, description: 'Tempo total da requisição, incluindo cache e fallback.'}
+    Sugestao:
+      type: object
+      required: [animalId, nome, motivo]
+      properties:
+        animalId: {type: string, pattern: '^[0-9a-f]{24}$'}
+        nome: {type: string}
+        motivo: {type: string}
+        fotoThumb: {type: string, format: uri}
+    FiltrosUsados:
+      type: object
+      additionalProperties: false
+      required: [lat, lng, raioKm]
+      properties:
+        lat: {type: number, minimum: -90, maximum: 90}
+        lng: {type: number, minimum: -180, maximum: 180}
+        raioKm: {type: number, minimum: 1, maximum: 100, default: 10}
+        especie: {type: string, enum: [CAO, GATO, OUTRO]}
+        porte: {type: string, enum: [PEQUENO, MEDIO, GRANDE]}
+        idadeMaxMeses: {type: integer, minimum: 0}
+    RespostaRecomendacao:
+      type: object
+      required: [sugestoes, explicacao, filtrosUsados, fontes, degradado, latenciaMs]
+      properties:
+        sugestoes:
+          type: array
+          items: {$ref: '#/components/schemas/Sugestao'}
+        explicacao: {type: string}
+        filtrosUsados: {$ref: '#/components/schemas/FiltrosUsados'}
+        fontes:
+          type: array
+          items: {$ref: '#/components/schemas/Fonte'}
+        degradado: {type: boolean}
+        latenciaMs: {type: integer, minimum: 0}
+    Estado:
+      type: object
+      required: [circuito, falhasConsecutivas, chamadas, falhas, fallbacks, cacheHits, tentarNovamenteEm]
+      properties:
+        circuito: {type: string, enum: [fechado, aberto, meio-aberto]}
+        falhasConsecutivas: {type: integer, minimum: 0}
+        chamadas: {type: integer, minimum: 0}
+        falhas: {type: integer, minimum: 0}
+        fallbacks: {type: integer, minimum: 0}
+        cacheHits: {type: integer, minimum: 0}
+        tentarNovamenteEm:
+          type: [string, 'null']
+          format: date-time
+          description: Próxima prova permitida; null quando o circuito está fechado.
+    Problema:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer, minimum: 400, maximum: 599}
+        detail: {type: string}
+  responses:
+    NaoAutenticado:
+      description: JWT ausente, expirado ou inválido.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problema'}
+          example: {type: 'about:blank', title: Não autenticado, status: 401, detail: É necessário um JWT válido.}
+    DadosInvalidos:
+      description: Texto vazio ou longo demais, localização inválida ou campos desconhecidos.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problema'}
+          example: {type: 'about:blank', title: Dados inválidos, status: 422, detail: O texto deve conter de 1 a 1000 caracteres após aparar espaços.}
+    LimiteExcedido:
+      description: Limite de requisições excedido.
+      headers:
+        Retry-After:
+          description: Segundos até uma nova tentativa.
+          schema: {type: integer, minimum: 1}
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problema'}
+          example: {type: 'about:blank', title: Limite excedido, status: 429, detail: Tente novamente após o intervalo indicado.}
+    SemFallback:
+      description: Nem a resposta principal nem o fallback puderam ser produzidos.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problema'}
+          example: {type: 'about:blank', title: Serviço indisponível, status: 503, detail: Não foi possível produzir uma resposta.}

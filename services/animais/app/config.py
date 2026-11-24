@@ -11,7 +11,7 @@ Regras:
 
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     mongo_url: SecretStr
     leitura_mongo_url: SecretStr
     jwt_public_key: str = Field(default="", validation_alias="JWT_PUBLIC_KEY")
-    rabbitmq_url: SecretStr = Field(default=SecretStr(""), validation_alias="RABBITMQ_URL")
+    rabbitmq_url: SecretStr = Field(
+        default=SecretStr(""), validation_alias=AliasChoices("ANIMAIS_AMQP_URL", "RABBITMQ_URL")
+    )
 
 
 @lru_cache

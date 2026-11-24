@@ -1,0 +1,54 @@
+# O Assistente não guarda estado no pod: os vetores ficam no Qdrant e o cache no Redis, então
+# as 2 réplicas atendem qualquer pergunta.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assistente
+  labels: { app: assistente }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: assistente }
+  template:
+    metadata:
+      labels: { app: assistente }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: assistente }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # appuser da imagem
+      containers:
+        - name: assistente
+          image: ampara/assistente:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8003 }
+          envFrom:
+            - configMapRef: { name: assistente-config }
+          # só as chaves do serviço; REDIS_PASSWORD fica com o Redis
+          env:
+            - name: ASSISTENTE_REDIS_URL
+              valueFrom: { secretKeyRef: { name: assistente-secret, key: ASSISTENTE_REDIS_URL } }
+            - name: LLM_API_KEY
+              valueFrom: { secretKeyRef: { name: assistente-secret, key: LLM_API_KEY } }
+          # TODO(#42): trocar a readiness para /ready (Qdrant e Redis) quando ele existir. O
+          # provedor de LLM nunca entra em probe: fora do ar, o serviço usa o fallback (#69).
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 256Mi }

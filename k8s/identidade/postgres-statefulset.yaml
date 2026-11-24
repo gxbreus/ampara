@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-identidade
+  labels: { app: postgres-identidade }
+spec:
+  clusterIP: None
+  selector: { app: postgres-identidade }
+  ports:
+    - { name: postgres, port: 5432, targetPort: 5432 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-identidade
+  labels: { app: postgres-identidade }
+spec:
+  serviceName: postgres-identidade
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres-identidade }
+  template:
+    metadata:
+      labels: { app: postgres-identidade }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          env:
+            - { name: POSTGRES_DB, value: identidade }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: identidade-secret, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: identidade-secret, key: POSTGRES_PASSWORD } }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d identidade"] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d identidade"] }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - { name: dados, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata: { name: dados }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }

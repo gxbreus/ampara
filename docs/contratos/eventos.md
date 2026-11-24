@@ -1908,6 +1908,29 @@ Snapshot completo do animal (*event-carried state transfer*). Só traz o `pontoA
     "atualizadoEm": {
       "type": "string",
       "format": "date-time"
+    },
+    "sexo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "MACHO",
+        "FEMEA",
+        null
+      ]
+    },
+    "temperamento": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "descricao": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   }
 }
@@ -2105,6 +2128,29 @@ Mesmo snapshot do `animal.criado`. O projetor faz upsert por `version` e descart
     "atualizadoEm": {
       "type": "string",
       "format": "date-time"
+    },
+    "sexo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "MACHO",
+        "FEMEA",
+        null
+      ]
+    },
+    "temperamento": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "descricao": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   }
 }
@@ -2321,6 +2367,29 @@ Snapshot + `statusAnterior`. `sagaId` vem preenchido quando a mudança veio da S
         "null"
       ],
       "format": "uuid"
+    },
+    "sexo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "MACHO",
+        "FEMEA",
+        null
+      ]
+    },
+    "temperamento": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "descricao": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   }
 }
