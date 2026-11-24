@@ -13,7 +13,7 @@
   "containerEnv": {
     "COMPOSE_FILE": "${containerWorkspaceFolder}/compose.yaml:${containerWorkspaceFolder}/.devcontainer/compose.codespaces.yaml"
   },
-  // Abre a cola da demonstração quando o Codespace é criado.
+  // Abre o roteiro de apresentação quando o Codespace é criado.
   "customizations": {
     "codespaces": { "openFiles": ["docs/apresentacao/parte-3/comandos.md"] }
   },

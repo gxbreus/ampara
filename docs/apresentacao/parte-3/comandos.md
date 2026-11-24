@@ -1,6 +1,6 @@
-# Parte 3: comandos da demonstração
+# Parte 3: roteiro de apresentação
 
-Cola para a apresentação e para o vídeo. Copie cada bloco e cole no terminal do Codespace (**Ctrl+`** abre o terminal). Os blocos seguem a ordem da apresentação. Os tempos foram medidos num Codespace de 4 núcleos e 16 GB.
+Roteiro da demonstração da Parte 3, usado na apresentação e no vídeo. Cada bloco traz os comandos de uma etapa, com um comentário sobre o que cada um faz, para rodar no terminal do Codespace (**Ctrl+`** abre o terminal). Os blocos seguem a ordem da apresentação. Os tempos foram medidos num Codespace de 4 núcleos e 16 GB.
 
 > **No Codespace:** o compose responde em `localhost:8080` e o kind (Ingress) em `localhost:8000`, para os dois rodarem juntos.
 > **No notebook:** o compose responde em `localhost:8000`. Rode só um dos dois de cada vez, porque ambos usam a porta 8000.

@@ -257,7 +257,7 @@ A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação d
 > **Atalhos**
 > - [Abrir o Codespace da apresentação](https://github.com/codespaces/ampara-parte3-pj5qg67544wwh94x7), já com o sistema de pé e o seed aplicado. Só abre na conta de quem o criou (`mateus-vitor-ferreira-dev`).
 > - [Criar um Codespace novo](https://codespaces.new/gxbreus/ampara?quickstart=1), para qualquer integrante. Depois, siga os passos abaixo.
-> - [Comandos da demonstração](docs/apresentacao/parte-3/comandos.md): cola comentada para copiar e colar no terminal, na ordem da apresentação.
+> - [Roteiro de apresentação](docs/apresentacao/parte-3/comandos.md): os comandos da demonstração, comentados e na ordem da apresentação.
 
 O Codespace é uma máquina na nuvem do GitHub, aberta pelo navegador, com terminal e VS Code. O [`.devcontainer`](.devcontainer/devcontainer.json) deixa tudo pronto: Docker, kind, kubectl, helm, `hey` e um `.env` de demonstração com senhas aleatórias e as chaves do JWT ([`scripts/preparar-env-demo.sh`](scripts/preparar-env-demo.sh)). Nenhuma senha vai para o Git.
 
