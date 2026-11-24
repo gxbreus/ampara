@@ -252,16 +252,46 @@ O `compose.yaml` sobe o sistema inteiro: os bancos, o RabbitMQ, o gateway Kong, 
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
-### No GitHub Codespaces
+### No GitHub Codespaces (sem instalar nada)
 
-Para rodar sem instalar nada, abra um Codespace no repositório (**Code → Codespaces**), com a máquina de 4 núcleos e 16 GB. O [`.devcontainer`](.devcontainer/devcontainer.json) traz Docker, kind, kubectl, helm e hey, e gera um `.env` de demonstração com senhas aleatórias e as chaves do JWT ([`scripts/preparar-env-demo.sh`](scripts/preparar-env-demo.sh)).
+O Codespace é uma máquina na nuvem do GitHub, aberta pelo navegador, com terminal e VS Code. O [`.devcontainer`](.devcontainer/devcontainer.json) deixa tudo pronto: Docker, kind, kubectl, helm, `hey` e um `.env` de demonstração com senhas aleatórias e as chaves do JWT ([`scripts/preparar-env-demo.sh`](scripts/preparar-env-demo.sh)). Nenhuma senha vai para o Git.
+
+**1. Criar o Codespace.** No GitHub, **Code → Codespaces → ⋯ → New with options**, escolha a branch e a máquina de **4 núcleos e 16 GB** (o compose e o kind juntos não cabem em 8 GB). Pela linha de comando:
 
 ```bash
-docker compose up -d --build --wait   # compose: gateway em localhost:8080
-./scripts/subir-k8s.sh                # kind: Ingress em localhost:8000
+gh codespace create -R gxbreus/ampara -b develop -m standardLinux32gb --idle-timeout 240m
 ```
 
-No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na porta 8080 ([`compose.codespaces.yaml`](.devcontainer/compose.codespaces.yaml)) e o kind fica com a 8000. Para abrir uma porta fora do Codespace, use a aba **Ports** e mude a visibilidade para *Public*.
+**2. Subir o sistema.** No terminal do Codespace:
+
+```bash
+docker compose up -d --build --wait   # compose: gateway em localhost:8080 (uns 6 min na 1ª vez)
+./scripts/subir-k8s.sh                # kind: Ingress em localhost:8000 (uns 8 min na 1ª vez)
+```
+
+No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na porta 8080 ([`compose.codespaces.yaml`](.devcontainer/compose.codespaces.yaml)) e o kind fica com a 8000. O [`subir-k8s.sh`](scripts/subir-k8s.sh) faz os passos do [`k8s/README.md`](k8s/README.md): cria o cluster, instala o Kong Ingress Controller, gera os `secret.env`, carrega as imagens e aplica os manifests.
+
+**3. Popular com dados de demonstração.** O [`seed.sh`](scripts/seed.sh) cria uma ONG e oito animais em Lavras (MG) pelo caminho real do sistema: assina um token de ONG com a chave do `.env`, cadastra cada animal em `POST /v1/animais` (o animal e o evento vão para o outbox), o RabbitMQ entrega o evento ao projetor do CQRS e o modelo de leitura passa a responder a busca. Rodar de novo não duplica nada.
+
+```bash
+./scripts/seed.sh        # no compose
+./scripts/seed.sh k8s    # no cluster
+curl -s "localhost:8000/mobile/v1/animais?lat=-21.24&lng=-45.00&raioKm=10"   # busca pública pelo Ingress
+```
+
+**4. Demonstrar.**
+
+```bash
+kubectl get pods -n ampara -o wide                 # réplicas espalhadas pelos dois workers
+./scripts/teste-rotas.sh                           # 401 sem token, busca pública, 429 no rate limit
+./scripts/rate-limit-demo.sh elevar                # libera a carga em /mobile/v1
+DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh   # 1 × 3 réplicas do Animais
+./scripts/rate-limit-demo.sh restaurar             # volta aos 600/min
+```
+
+Para mostrar a API fora do Codespace, abra a aba **Ports** e mude a visibilidade da porta 8000 (ou 8080) para *Public*: o GitHub dá uma URL https.
+
+**Parar e voltar.** Um Codespace parado guarda os containers, as imagens e os volumes. Ao reabrir, o compose volta sozinho (`restart: unless-stopped`) e os nós do kind também; em um ou dois minutos o sistema está de pé de novo, sem build. Para apagar tudo: `gh codespace delete`.
 
 ## Containerização e orquestração (Parte 3)
 
