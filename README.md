@@ -8,9 +8,11 @@
 
 A Ampara é uma plataforma que organiza o caminho entre o registro de um animal perdido, achado ou disponível para adoção e o encontro de alguém disposto a cuidar dele. O projeto reúne protetores independentes, ONGs e adotantes em um fluxo único, com localização, acompanhamento e notificações.
 
-> Projeto acadêmico desenvolvido para a disciplina de Sistemas Distribuídos. A Parte 1 (concepção e pitch) foi apresentada; agora o repositório concentra o projeto arquitetural da Parte 2 e o planejamento da implementação.
+> Projeto acadêmico desenvolvido para a disciplina de Sistemas Distribuídos. As Partes 1 (concepção e pitch) e 2 (arquitetura) foram apresentadas, e a Parte 3 (containerização e orquestração) está entregue. O próximo passo é a Parte 4, com o sistema em funcionamento.
 
 [Problema](#o-problema) · [Solução](#como-a-ampara-funciona) · [Arquitetura](#arquitetura) · [SAGA](#saga-de-adoção) · [Impacto](#impacto-social) · [Andamento](#andamento) · [Documentação](#documentação)
+
+**Demonstração da Parte 3:** [Abrir o Codespace da apresentação](https://github.com/codespaces/ampara-parte3-pj5qg67544wwh94x7) (só abre na conta `mateus-vitor-ferreira-dev`) · [Roteiro de apresentação](docs/apresentacao/parte-3/comandos.md) · [Criar um Codespace novo](https://codespaces.new/gxbreus/ampara?quickstart=1) · [Como rodar no Codespace](#no-github-codespaces-sem-instalar-nada)
 
 ## O problema
 
