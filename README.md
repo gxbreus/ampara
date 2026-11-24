@@ -214,7 +214,7 @@ O impacto será acompanhado por quatro indicadores:
 | Etapa | Data | Situação |
 | --- | --- | --- |
 | Parte 1 — Concepção e pitch | 17/09 | apresentada |
-| Parte 2 — Arquitetura | 22/10 ou 27/10 (repositório congela em 21/10 às 23h59) | em andamento |
+| Parte 2 — Arquitetura | 22/10 | apresentada |
 | Parte 3 — Containerização e orquestração | 24/11 | entregue ([detalhes](#containerização-e-orquestração-parte-3)) |
 | Parte 4 — Sistema em funcionamento | 10/12 ou 15/12 (repositório congela em 09/12 às 23h59) | planejada |
 
