@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     configurar_logging()
     settings = get_settings()
     async with AsyncExitStack() as stack:
-        qdrant = AsyncQdrantClient(url=settings.qdrant_url, timeout=2)
+        qdrant = AsyncQdrantClient(url=settings.qdrant_url, timeout=2, trust_env=False)
         stack.push_async_callback(qdrant.close)
         app.state.qdrant = qdrant
         redis = Redis.from_url(
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
         stack.push_async_callback(redis.aclose)
         app.state.redis = redis
         animais = await stack.enter_async_context(
-            httpx.AsyncClient(base_url=settings.animais_url, timeout=3)
+            httpx.AsyncClient(base_url=settings.animais_url, timeout=3, trust_env=False)
         )
         app.state.animais = animais
         # O cliente do provedor só será construído sob demanda nas #67/#69.
