@@ -215,7 +215,7 @@ O impacto será acompanhado por quatro indicadores:
 | --- | --- | --- |
 | Parte 1 — Concepção e pitch | 17/09 | apresentada |
 | Parte 2 — Arquitetura | 22/10 ou 27/10 (repositório congela em 21/10 às 23h59) | em andamento |
-| Parte 3 — Containerização e orquestração | 17/11 | em entrega ([detalhes](#containerização-e-orquestração-parte-3)) |
+| Parte 3 — Containerização e orquestração | 24/11 | entregue ([detalhes](#containerização-e-orquestração-parte-3)) |
 | Parte 4 — Sistema em funcionamento | 10/12 ou 15/12 (repositório congela em 09/12 às 23h59) | planejada |
 
 As tarefas de cada etapa, com responsável e semana, estão no [board do projeto](https://github.com/users/mateus-vitor-ferreira-dev/projects/7).
@@ -226,12 +226,14 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 | --- | --- | --- |
 | Adoção | [`services/adocao`](services/adocao) | implementado: solicitações, decisões e linha do tempo (espelho da SAGA via `saga.transicao`), outbox, DLQ, Dockerfile e manifests do k8s |
 | BFF Web | [`bff/web`](bff/web) | implementado: Dockerfile e manifests do k8s |
-| Animais | [`services/animais`](services/animais) | esqueleto (#39) e escrita com transições de status e outbox (#55); o projetor do CQRS na #56 |
-| Notificações | [`services/notificacoes`](services/notificacoes) | base pronta (`/health`, testes, regras); o resto na #41 |
-| Assistente | [`services/assistente`](services/assistente) | base pronta (`/health`, testes, regras); o resto na #42 |
-| Identidade | [`services/identidade`](services/identidade) | esqueleto pronto (#98) |
+| Animais | [`services/animais`](services/animais) | implementado: escrita com transições de status e outbox (#55), projeção CQRS e busca pública (#56), participante da SAGA com inbox e compensação (#57), Dockerfile e manifests do k8s |
+| Notificações | [`services/notificacoes`](services/notificacoes) | base (`/health`, testes), Redis com AOF, Dockerfile, compose e manifests do k8s; o consumo de eventos na #41 |
+| Assistente | [`services/assistente`](services/assistente) | base (`/health`, testes), Qdrant e Redis de cache, Dockerfile, compose e manifests do k8s; o RAG com LangChain na #42 (Parte 4) |
+| Identidade | [`services/identidade`](services/identidade) | esqueleto NestJS (#38), Dockerfile e manifests do k8s; contas e sessão na #53 e comandos da SAGA na #54 |
 | Orquestrador | [`services/orquestrador`](services/orquestrador) | implementado: SAGA extraída da Adoção (#140), outbox, inbox, prazos, DLQ, Dockerfile, compose e manifests do k8s |
-| Gateway, BFF Mobile e apps | [`gateway`](gateway), [`bff/mobile`](bff/mobile), [`apps`](apps) | planejados; o README de cada pasta descreve o escopo |
+| Gateway | [`gateway`](gateway) | implementado: Kong DB-less no compose com rotas, JWT e rate limit (#43); no k8s, Kong Ingress Controller com as mesmas rotas (#46, #50) |
+| BFF Mobile | [`bff/mobile`](bff/mobile) | base com busca pública, Dockerfile e manifests do k8s (#45, #47); a agregação das telas do adotante na #62 |
+| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e app Expo |
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
@@ -246,7 +248,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade, Notificações, o Assistente e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+O `compose.yaml` sobe o sistema inteiro: os bancos, o RabbitMQ, o gateway Kong, os dois BFFs e os seis serviços (Adoção, Orquestrador, Animais, Identidade, Notificações e Assistente). A entrada é `http://localhost:8000`. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
 
@@ -278,7 +280,9 @@ Cada serviço tem o próprio Dockerfile. Nos serviços que compilam código ou i
 | `ampara/orquestrador` (Go) | `golang:1.23-alpine` → `distroless/static:nonroot` | 645 MB | 21,2 MB | −96,7% |
 | `ampara/identidade` (NestJS) | `deps` → `build` → `runtime` em `node:22-alpine` | 511 MB | 325 MB | −36,4% |
 | `ampara/bff-web` (Node/TS) | `deps` → `build` → `runtime` em `node:22-alpine` | 336 MB | 261 MB | −22,3% |
+| `ampara/bff-mobile` (Node/TS) | `deps` → `build` → `runtime` em `node:22-alpine` | 384 MB | 270 MB | −29,7% |
 | `ampara/animais` (FastAPI) | `builder` com virtualenv → `runtime` em `python:3.12-slim` | 215 MB | 185 MB | −14,0% |
+| `ampara/notificacoes` e `ampara/assistente` (FastAPI) | `builder` com virtualenv → `runtime` em `python:3.12-slim` | 233 MB | 233 MB | 0% (hoje só wheels prontos; ver [`docs/imagens.md`](docs/imagens.md)) |
 
 O ganho vai além do tamanho:
 
