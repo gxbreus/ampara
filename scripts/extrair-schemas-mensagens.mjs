@@ -36,11 +36,11 @@ if (args.has("--check")) {
   const existentes = readdirSync(diretorioPadrao).filter((arquivo) => arquivo.endsWith(".schema.json")).sort();
   const esperados = mensagens.map(({ arquivo }) => arquivo).sort();
   if (JSON.stringify(existentes) !== JSON.stringify(esperados)) {
-    throw new Error("os arquivos em docs/contratos/mensagens divergem do catálogo; execute npm run contratos:extrair");
+    throw new Error("os arquivos em docs/contratos/mensagens divergem do catálogo; execute node scripts/extrair-schemas-mensagens.mjs");
   }
   for (const { arquivo, schema } of mensagens) {
     if (readFileSync(resolve(diretorioPadrao, arquivo), "utf8") !== schema) {
-      throw new Error(`${arquivo} diverge de docs/contratos/eventos.md; execute npm run contratos:extrair`);
+      throw new Error(`${arquivo} diverge de docs/contratos/eventos.md; execute node scripts/extrair-schemas-mensagens.mjs`);
     }
   }
 } else {
