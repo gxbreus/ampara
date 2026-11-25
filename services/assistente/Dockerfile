@@ -13,6 +13,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip uninstall -y pip
 
+# o modelo de embeddings (~220 MB, ONNX) é baixado aqui e vai pronto na imagem: o pod roda
+# com o sistema de arquivos somente leitura e a demo pode estar sem internet (#66)
+ARG EMBEDDINGS_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('${EMBEDDINGS_MODEL}', cache_dir='/opt/modelos')"
+
 # Etapa final: só o virtualenv e o código, rodando como usuário não-root.
 FROM python:3.12-slim AS runtime
 
@@ -20,13 +25,19 @@ WORKDIR /app
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    FASTEMBED_CACHE_PATH=/opt/modelos \
+    HF_HUB_OFFLINE=1
 
 RUN groupadd -g 1000 appuser && \
     useradd -u 1000 -g appuser -s /bin/sh appuser
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/modelos /opt/modelos
 COPY app ./app
+# base de conhecimento (#66) e perguntas da avaliação (#70)
+COPY kb ./kb
+COPY avaliacao ./avaliacao
 
 USER appuser
 

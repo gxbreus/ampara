@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.criada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "adotanteId",
+    "animalId"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    }
+  }
+}

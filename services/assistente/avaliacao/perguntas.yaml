@@ -1,0 +1,54 @@
+# Preparação da #70. Referências devem ser transcritas/resumidas da fonte e
+# conferidas por pessoa do grupo. null não é referência nem resultado de avaliação.
+- id: P01
+  categoria: cuidados_caes
+  pergunta: Quais cuidados devo tomar com a vacinação de um filhote de cão adotado?
+  referencia: null
+  fonte_esperada: 06-vacinacao.md
+- id: P02
+  categoria: cuidados_gatos
+  pergunta: Como deixar janelas e varandas seguras antes de adotar um gato?
+  referencia: null
+  fonte_esperada: 11-adote-gatinho.md
+- id: P03
+  categoria: porte_rotina
+  pergunta: Só o porte do cão determina se ele combina com minha casa e rotina?
+  referencia: null
+  fonte_esperada: 03-planejamento.md
+- id: P04
+  categoria: adaptacao
+  pergunta: Como apresentar o animal adotado aos animais que já vivem comigo?
+  referencia: null
+  fonte_esperada: 05-adaptacao.md
+- id: P05
+  categoria: cuidados_resgate
+  pergunta: Encontrei um cão abandonado; por que preciso de avaliação veterinária antes da adaptação?
+  referencia: null
+  fonte_esperada: 04-resgate.md
+- id: P06
+  categoria: legislacao
+  pergunta: O que a Lei 14.064 de 2020 mudou na proteção de cães e gatos contra maus-tratos?
+  referencia: null
+  fonte_esperada: 02-lei-14064.md
+- id: P07
+  categoria: regras_ampara
+  pergunta: Receber o aceite de uma solicitação na Ampara significa que a adoção já foi concluída?
+  referencia: null
+  fonte_esperada: 14-ampara-faq.md
+- id: P08
+  categoria: responsabilidade
+  pergunta: Que responsabilidades devo planejar para cuidar do animal durante viagens?
+  referencia: null
+  fonte_esperada: 08-sgpan-guarda.md
+- id: P09
+  categoria: fora_dominio
+  pergunta: Qual é a capital da França?
+  referencia: null
+  fonte_esperada: null
+  comportamento_esperado: Orientar que o assistente trata de adoção e cuidados com animais; não responder ao tema externo.
+- id: P10
+  categoria: sem_cobertura
+  pergunta: Qual o horário de funcionamento hoje de cada clínica veterinária de Lavras?
+  referencia: null
+  fonte_esperada: null
+  comportamento_esperado: Informar ausência de cobertura nas fontes da Ampara, sem inventar clínicas ou horários.

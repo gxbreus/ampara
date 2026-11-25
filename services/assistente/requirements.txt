@@ -6,7 +6,17 @@ langchain==1.5.0
 # 1.0.0 permite manter o cliente alinhado ao servidor Qdrant 1.12 do Compose.
 langchain-qdrant==1.0.0
 langchain-groq==1.2.0
+# provedores compatíveis com a API da OpenAI (Gemini, GitHub Models, OpenRouter…)
+langchain-openai==1.8.5
 qdrant-client==1.12.2
 redis==5.2.1
 httpx==0.28.1
+# divide a base em trechos citáveis (#66)
+langchain-text-splitters==1.2.0
+# embeddings locais em CPU (ONNX); o modelo vem na imagem (#66)
+fastembed==0.9.1
+# confere o JWT RS256 da Identidade
+PyJWT[crypto]==2.15.1
+# lê as perguntas da avaliação (#70)
+PyYAML==6.0.4
 python-json-logger==3.2.1

@@ -93,7 +93,7 @@ export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
     if (f.idadeMaxMeses != null) q.set("idadeMaxMeses", String(f.idadeMaxMeses));
     if (f.cursor) q.set("cursor", f.cursor);
     const bruta = await http<PaginaBusca>(`/mobile/v1/animais?${q}`, { publico: true });
-    // A busca real de hoje repassa a projeção de Animais; o BFF da #158 completa o cartão.
+    // Normaliza miniatura ausente para os componentes de apresentação.
     pagina = { ...bruta, itens: bruta.itens.map((c) => ({ ...c, fotoThumb: c.fotoThumb ?? "", minhaSolicitacao: c.minhaSolicitacao ?? null })) };
   } else {
     pagina = await simular(() => ({
@@ -165,7 +165,10 @@ export async function minhasSolicitacoes(): Promise<{ itens: SolicitacaoResumo[]
 }
 
 export async function obterSolicitacao(id: string): Promise<SolicitacaoDetalhe> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}`);
+  if (rotas.real("solicitacoes")) {
+    const s = await http<SolicitacaoDetalhe>(`/mobile/v1/solicitacoes/${id}`);
+    return { ...s, podeCancelar: !!s._links?.cancelar };
+  }
   const animal = await (async () => {
     const s = m.solicitacoes.find((x) => x.id === id);
     if (!s) throw naoEncontrado("solicitação");
@@ -187,7 +190,12 @@ export async function linhaDoTempo(id: string): Promise<LinhaDoTempo> {
 }
 
 export async function cancelar(id: string, motivo?: string): Promise<{ id: string; estado: string }> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}/cancelamento`, { method: "POST", corpo: motivo ? { motivo } : {} });
+  if (rotas.real("solicitacoes")) {
+    const s = await obterSolicitacao(id);
+    const acao = s._links?.cancelar;
+    if (!acao) throw new ErroApi(409, "Ação indisponível", "Este pedido não pode mais ser cancelado.");
+    return http(acao.href, { method: acao.method ?? "POST", corpo: motivo ? { motivo } : {} });
+  }
   return simular(() => {
     const s = m.cancelar(id);
     if (!s) throw naoEncontrado("solicitação");
