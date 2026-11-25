@@ -2,6 +2,7 @@
 // sozinha em memória (reserva → valida perfil → espera a ONG → aprova), e cada passo gera
 // uma notificação, para dar para ensaiar a demo sem backend.
 import { novoUuid } from "@c/api";
+import { FOTOS_DEMO } from "@c/fotos-demo";
 import type { AnimalCard, AnimalDetalhe, LinhaDoTempo, Notificacao, PerfilAdocao, SolicitacaoResumo } from "./tipos";
 
 const agora = Date.now();
@@ -31,8 +32,8 @@ export const animais: (AnimalDetalhe & { lat: number; lng: number })[] = base.ma
   idadeMeses,
   temperamento,
   descricao,
-  fotos: [],
-  fotoThumb: "",
+  fotos: FOTOS_DEMO[nome] ? [FOTOS_DEMO[nome]] : [],
+  fotoThumb: FOTOS_DEMO[nome] ?? "",
   bairro,
   cidade: "Lavras",
   responsavel: ONG,

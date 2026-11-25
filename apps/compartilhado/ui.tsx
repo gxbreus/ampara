@@ -1,5 +1,5 @@
 import type React from "react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ErroApi, ESTADOS, STATUS_ANIMAL, dataHora, type Tom } from "./api";
 import { IcAlerta, IcCheck, IcPata, IcX } from "./icones";
 
@@ -129,7 +129,10 @@ const PALETAS = [
 ];
 
 export function Retrato({ nome, especie, src, className = "foto", style }: { nome: string; especie?: string; src?: string | null; className?: string; style?: React.CSSProperties }) {
-  if (src && !src.includes("exemplo.ampara.dev")) return <img className={className} style={style} src={src} alt={`Foto de ${nome}`} width={640} height={480} loading="lazy" decoding="async" />;
+  const [falhou, setFalhou] = useState(false);
+  // sem internet (ou URL quebrada) a foto cai no retrato desenhado, e a tela não fica com imagem quebrada
+  if (src && !falhou && !src.includes("exemplo.ampara.dev"))
+    return <img className={className} style={style} src={src} alt={`Foto de ${nome}`} width={640} height={480} loading="lazy" decoding="async" onError={() => setFalhou(true)} />;
   let h = 0;
   for (const c of nome) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const [fundo, tinta] = PALETAS[h % PALETAS.length];

@@ -1,6 +1,7 @@
 // Dados simulados do painel, no formato do contrato do BFF Web. Ficam em memória e mudam
 // com as ações (aprovar, recusar, cadastrar), para a tela se comportar como a real.
 import { novoUuid } from "@c/api";
+import { FOTOS_DEMO } from "@c/fotos-demo";
 import type {
   AnimalEntrada,
   AnimalPainel,
@@ -36,8 +37,8 @@ export const animais: AnimalPainel[] = base.map(([nome, especie, porte, idadeMes
   porte,
   idadeMeses,
   temperamento,
-  fotos: [],
-  fotoCapa: null,
+  fotos: FOTOS_DEMO[nome] ? [FOTOS_DEMO[nome]] : [],
+  fotoCapa: FOTOS_DEMO[nome] ?? null,
   localizacao: lavras(lat, lng, ["Centro", "Jardim Floresta", "Vila Esperança", "Aquenta Sol"][i % 4]),
   status,
   historicoStatus: [{ status: "DISPONIVEL", em: ha(200 - i * 10), por: "RESPONSAVEL" }, ...(status !== "DISPONIVEL" ? [{ status, em: ha(30 - i), por: (status === "RESERVADO" || status === "ADOTADO" ? "SAGA" : "RESPONSAVEL") as "SAGA" | "RESPONSAVEL" }] : [])],
