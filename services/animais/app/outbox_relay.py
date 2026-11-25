@@ -120,4 +120,6 @@ class OutboxRelay:
                     "Erro ao publicar evento do Outbox; permanecerá pendente.",
                     extra={"docId": str(doc["_id"]), "erro": str(err)},
                 )
-                break
+                # sobe o erro para o laço de fora reconectar: com `break` o relay ficava preso
+                # para sempre a um canal fechado depois que o broker reiniciava
+                raise
