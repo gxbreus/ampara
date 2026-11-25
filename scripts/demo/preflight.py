@@ -1,4 +1,7 @@
-"""Verifica pré-condições da demo; não cria dados nem modifica serviços."""
+"""Verifica pré-condições da demo; não cria dados nem modifica serviços.
+
+Uso: python3 scripts/demo/preflight.py [porta]   (padrão 8000; 8080 no Codespace)
+"""
 
 import shutil
 import sys
@@ -9,15 +12,14 @@ from urllib.request import urlopen
 
 def main():
     raiz = Path(__file__).resolve().parents[2]
+    gateway = f"http://localhost:{sys.argv[1] if len(sys.argv) > 1 else 8000}"
     faltas = []
     for comando in ("docker", "curl"):
         if not shutil.which(comando):
             faltas.append(f"ferramenta indisponível: {comando}")
     for arquivo in (
-        ".env", "scripts/seed.sh", "scripts/demo/reset.sh",
-        "scripts/demo/01-caminho-feliz.sh", "scripts/demo/02-perfil-incompleto.sh",
-        "scripts/demo/03-expiracao.sh", "scripts/demo/04-identidade-fora.sh",
-        "scripts/demo/05-concorrencia.sh", "apps/mobile/package.json", "bff/mobile/package.json",
+        ".env", "scripts/seed.sh", "scripts/teste-rotas.sh",
+        "apps/web/package.json", "apps/mobile/package.json", "bff/mobile/package.json",
     ):
         if not (raiz / arquivo).is_file():
             faltas.append(f"arquivo ausente: {arquivo}")
@@ -29,12 +31,12 @@ def main():
         ("/mobile/v1/solicitacoes", 401),
     ):
         try:
-            with urlopen("http://localhost:8000" + caminho, timeout=10) as resposta:
+            with urlopen(gateway + caminho, timeout=10) as resposta:
                 status = resposta.status
         except HTTPError as erro:
             status = erro.code
         except URLError:
-            faltas.append("gateway indisponível em localhost:8000")
+            faltas.append(f"gateway indisponível em {gateway}")
             break
         if status != esperado:
             faltas.append(f"{caminho}: HTTP {status}, esperado {esperado}")
