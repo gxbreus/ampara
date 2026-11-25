@@ -90,7 +90,7 @@ retornadas; não trate o fallback como resposta RAG válida.
 
 ```bash
 curl --fail-with-body -H "Authorization: Bearer $TOKEN_ADOTANTE" -H 'Content-Type: application/json' --data '{"pergunta":"Como preparar a casa para receber um cão adotado?"}' http://localhost:8000/mobile/v1/assistente/perguntas
-curl --fail-with-body -H "Authorization: Bearer $TOKEN_ADOTANTE" -H 'Content-Type: application/json' --data '{"descricaoRotina":"Moro em apartamento, fico seis horas fora e posso passear de manhã e à noite."}' http://localhost:8000/mobile/v1/assistente/recomendacoes
+curl --fail-with-body -H "Authorization: Bearer $TOKEN_ADOTANTE" -H 'Content-Type: application/json' --data '{"descricaoRotina":"Moro em apartamento, fico seis horas fora e posso passear de manhã e à noite.","lat":-21.2468,"lng":-44.9998,"raioKm":10}' http://localhost:8000/mobile/v1/assistente/recomendacoes
 ```
 
 Na apresentação, repita uma pergunta aquecida e faça outra inédita, por exemplo:
@@ -104,10 +104,10 @@ os IDs/status atuais da busca. A análise com/sem RAG e custo depende da #70.
 O roteiro ainda depende das implementações #66–#70. O contrato mobile usa
 `descricaoRotina` e `animais[].motivoRecomendacao`, enquanto a #24 define
 `rotina` e `sugestoes[].motivo`. A #62 deve adaptar esses campos e a origem das
-fontes. O corpo mobile acima ainda não fornece localização: não considerar a
-recomendação demonstrável antes de #62/#65 levarem lat/lng/raioKm do contexto
-de busca ao servidor. Nunca extrair coordenadas da rotina nem pedir ao LLM que
-as escolha. Atualizar o comando externo conforme o contrato integrado no ensaio.
+fontes. A adaptação e o envio de lat/lng/raioKm estão no PR #210. O comando acima
+usa a referência explícita de Lavras; no app, use a localização e o raio da busca.
+Nunca extrair coordenadas da rotina nem pedir ao LLM que as escolha. A demonstração
+de recomendações só está pronta com #210 integrado e #67/#68 funcionando.
 
 Fala: "Na pergunta, a chain recupera até quatro trechos versionados antes de
 gerar. As fontes precisam corresponder a esses trechos. Na recomendação, a
