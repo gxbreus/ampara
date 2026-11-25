@@ -4,6 +4,7 @@ Utilitários de desenvolvimento e demonstração. Previstos:
 
 | Script | Para quê | Issue |
 | --- | --- | --- |
+| `preparar-demo.py` | cria `.env` com credenciais aleatórias e JWT, sem sobrescrever configuração existente | #73 |
 | `gerar-chaves-jwt.sh` | gera o par de chaves RS256 local | #37 |
 | `k8s-prep.sh` | cria os Secrets do cluster a partir do `secret.env` | #48 |
 | `preparar-env-demo.sh` | gera um `.env` de demonstração com senhas aleatórias e as chaves do JWT; não sobrescreve um `.env` existente | — |
