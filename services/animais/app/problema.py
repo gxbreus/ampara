@@ -86,6 +86,15 @@ def erro_lote_excedido(
     )
 
 
+def erro_conflito_concorrencia() -> ProblemaHttp:
+    return ProblemaHttp(
+        status_code=409,
+        type_uri="https://ampara.dev/problemas/animal-atualizado",
+        title="Animal atualizado por outra operação",
+        detail="Recarregue o animal antes de tentar alterar os dados novamente.",
+    )
+
+
 def erro_identificador_invalido(
     detail: str = "O identificador deve ser um ObjectId de 24 caracteres hexadecimais.",
 ) -> ProblemaHttp:

@@ -42,7 +42,7 @@ kubectl get deploy,svc,ingress -n ampara
 | Tempo | Quem | Execução/tela | Resultado que precisa aparecer | Plano B |
 | --- | --- | --- | --- | --- |
 | 0:00–1:00 | Mateus | diagrama e `kubectl get pods` | gateway, dois BFFs, serviços e Orquestrador separados | diagrama local e `docker compose ps`, identificando qual ambiente está em uso |
-| 1:00–3:00 | Gabriel Cantanhede | busca anônima no Mobile, Thor e comparação do JSON web/mobile | filtro por raio, oito campos do card, foto e distância | curl pelo mesmo gateway; emulador preparado se Expo perder a rede |
+| 1:00–3:00 | Gabriel Cantanhede | busca anônima no Mobile, Thor e comparação do JSON web/mobile | filtro por raio, oito campos do card, foto e distância | curl pelo mesmo gateway ou navegador desktop em viewport de celular se o telefone perder a rede |
 | 3:00–5:00 | Gabriel Cantanhede | cadastrar animal no Web e atualizar busca Mobile | nova escrita refletida na leitura, `atualizadoEm` e tempo medido | consultar `/mobile/v1/animais` pelo terminal sem bypass ao banco de leitura |
 | 5:00–8:00 | Mateus | `bash scripts/demo/01-caminho-feliz.sh`, Web e Mobile | Bruna solicita Thor, ONG aprova, linha do tempo, ADOTADO e aviso | script com APIs reais, acompanhando estados pelo gateway |
 | 8:00–10:00 | Mateus | `bash scripts/demo/04-identidade-fora.sh` e logs | timeout, compensação, ReservaLiberada, FALHOU e Nina de volta à busca; ao religar Identidade, vaga liberada | `bash scripts/demo/02-perfil-incompleto.sh`, Caio/Mel e PERFIL_INVALIDO |
@@ -203,6 +203,6 @@ registre apenas uma fala improvisada como solução. Repita após correções.
 
 - [ ] Dois ensaios reais registrados, com correções verificáveis.
 - [ ] Cache aquecido e pergunta inédita testada.
-- [ ] Planos B de LLM, Expo e cluster exercitados.
+- [ ] Planos B de LLM, navegador mobile e cluster exercitados.
 - [ ] Quatro integrantes revisaram seus trechos e os de outro colega.
 - [ ] Dependências e documentação de avaliação integradas antes do congelamento.

@@ -4,6 +4,8 @@ export interface Config {
   porta: number;
   timeoutMs: number;
   jwtPublicKey: string;
+  // sem ela, o BFF sobe sem eventos em tempo real e /web/v1/eventos responde 503
+  amqpUrl?: string;
   servicos: {
     identidade: string;
     animais: string;
@@ -23,6 +25,7 @@ export function carregarConfig(): Config {
     timeoutMs: Number(process.env.BFF_TIMEOUT_MS ?? 3000),
     // Aceita o PEM com quebras de linha reais ou escapadas como \n (formato do .env).
     jwtPublicKey: obrigatoria("JWT_PUBLIC_KEY").replace(/\\n/g, "\n"),
+    amqpUrl: process.env.BFF_WEB_AMQP_URL || undefined,
     servicos: {
       identidade: process.env.IDENTIDADE_URL ?? "http://identidade:3001",
       animais: process.env.ANIMAIS_URL ?? "http://animais:8001",

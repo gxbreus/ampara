@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ampara — Animais
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Cadastro, gestão e busca geográfica de animais.
     Apresenta separação estrita de CQRS (Command Query Responsibility Segregation):
@@ -711,7 +711,7 @@ components:
             type: string
           default: []
         descricao:
-          type: string
+          type: [string, "null"]
           maxLength: 2000
         fotos:
           type: array
@@ -747,7 +747,7 @@ components:
           items:
             type: string
         descricao:
-          type: string
+          type: [string, "null"]
           maxLength: 2000
         fotos:
           type: array
@@ -813,7 +813,7 @@ components:
           items:
             type: string
         descricao:
-          type: string
+          type: [string, "null"]
         fotos:
           type: array
           items:
@@ -830,7 +830,7 @@ components:
           items:
             $ref: '#/components/schemas/HistoricoStatusItem'
         reservaSagaId:
-          type: string
+          type: [string, "null"]
           format: uuid
           description: ID da solicitação de adoção da SAGA que mantém a reserva ativa.
         version:
@@ -957,7 +957,7 @@ components:
           items:
             type: string
         descricao:
-          type: string
+          type: [string, "null"]
         fotos:
           type: array
           items:
@@ -994,7 +994,7 @@ components:
           items:
             $ref: '#/components/schemas/AnimalBuscaCard'
         proximoCursor:
-          type: string
+          type: [string, "null"]
           description: Cursor opaco para a próxima página. Ausente se for a última página.
 
     PaginaAnimaisEscrita:
@@ -1008,7 +1008,7 @@ components:
           items:
             $ref: '#/components/schemas/AnimalCompleto'
         proximoCursor:
-          type: string
+          type: [string, "null"]
           description: Cursor opaco para a próxima página.
 
     Problema:

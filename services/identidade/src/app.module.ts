@@ -1,8 +1,12 @@
 import { Module } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { HealthController } from './health.controller';
+import { AuthModule } from './auth/auth.module';
+import { ContasModule } from './contas/contas.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { SagaModule } from './saga/saga.module';
 
 @Module({
   imports: [
@@ -10,9 +14,14 @@ import { HealthController } from './health.controller';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
-        genReqId: (request) => request.headers['x-correlation-id']?.toString() ?? randomUUID(),
+        // o middleware de configurarApp já definiu request.id (X-Correlation-Id) antes do pino
+        genReqId: (request) => request.id ?? request.headers['x-correlation-id']?.toString() ?? randomUUID(),
       },
     }),
+    AuthModule,
+    ContasModule,
+    OutboxModule,
+    SagaModule,
   ],
   controllers: [HealthController],
 })

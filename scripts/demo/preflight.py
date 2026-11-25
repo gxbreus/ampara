@@ -14,7 +14,7 @@ def main():
         if not shutil.which(comando):
             faltas.append(f"ferramenta indisponível: {comando}")
     for arquivo in (
-        ".env", "scripts/seed.py", "scripts/demo/reset.sh",
+        ".env", "scripts/seed.sh", "scripts/demo/reset.sh",
         "scripts/demo/01-caminho-feliz.sh", "scripts/demo/02-perfil-incompleto.sh",
         "scripts/demo/03-expiracao.sh", "scripts/demo/04-identidade-fora.sh",
         "scripts/demo/05-concorrencia.sh", "apps/mobile/package.json", "bff/mobile/package.json",
