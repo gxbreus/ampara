@@ -7,6 +7,8 @@ metadata:
 data:
   QDRANT_URL: http://qdrant-assistente:6333
   ANIMAIS_URL: http://animais:8001
-  LLM_PROVIDER: groq
+  # groq, ou openai para APIs compatíveis com a da OpenAI (Gemini: LLM_BASE_URL vazio)
+  LLM_PROVIDER: openai
+  LLM_BASE_URL: ""
   LLM_MODEL: ""
   LLM_FALLBACK_MODEL: ""

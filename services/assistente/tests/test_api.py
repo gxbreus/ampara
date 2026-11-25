@@ -111,3 +111,26 @@ def test_estado_do_circuito():
         "cacheHits",
         "tentarNovamenteEm",
     } <= corpo.keys()
+
+
+def test_provedor_compativel_com_openai_usa_o_gemini_por_padrao():
+    from langchain_openai import ChatOpenAI
+
+    from app.main import criar_llms
+
+    s = Settings(
+        qdrant_url="http://q",
+        ASSISTENTE_REDIS_URL="redis://r",
+        llm_provider="openai",
+        llm_api_key="x",
+    )
+    principal, reserva = criar_llms(s)
+    assert isinstance(principal, ChatOpenAI) and principal.model_name == "gemini-2.5-flash"
+    assert reserva.model_name == "gemini-2.5-flash-lite"
+    assert "generativelanguage.googleapis.com" in str(principal.openai_api_base)
+
+
+def test_sem_chave_nao_cria_llm():
+    from app.main import criar_llms
+
+    assert criar_llms(Settings(qdrant_url="http://q", ASSISTENTE_REDIS_URL="redis://r")) == []

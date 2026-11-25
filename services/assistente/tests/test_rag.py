@@ -265,3 +265,13 @@ async def test_resposta_recusada_nao_vai_para_o_cache():
     redis = RedisFake()
     await rag(llms=[LlmTexto("Sem citação.")], redis=redis).responder("Como apresentar o gato?")
     assert redis.dados == {}
+
+
+async def test_contingencia_usa_os_tres_trechos_principais_com_as_fontes():
+    servico = rag(scores=(0.6, 0.5, 0.4, 0.35), llms=[])
+    servico.settings.trechos_por_resposta = 4
+    r = await servico.responder("Como cuidar de um filhote?")
+    trechos = servico.indice.resultados
+    assert r["degradado"] is True and len(r["fontes"]) == 3
+    for t in trechos[:3]:
+        assert f"“{t.trecho.titulo}”" in r["resposta"]

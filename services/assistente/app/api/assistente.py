@@ -61,7 +61,9 @@ async def perguntas(entrada: PerguntaEntrada, request: Request, _: Usuario):
 
 
 @router.post("/recomendacoes")
-async def recomendacoes(entrada: RecomendacaoEntrada, request: Request, _: Usuario):
+async def recomendacoes(
+    entrada: RecomendacaoEntrada, request: Request, settings: ConfigDep, _: Usuario
+):
     estado = request.app.state
     return await recomendar(
         estado.llms,
@@ -71,6 +73,8 @@ async def recomendacoes(entrada: RecomendacaoEntrada, request: Request, _: Usuar
         entrada.lat,
         entrada.lng,
         entrada.raioKm,
+        embeddings=estado.rag.indice.embeddings,
+        limiar_rotina=settings.limiar_rotina,
     )
 
 

@@ -184,3 +184,53 @@ def test_regras_do_fallback():
     filtros, criterio = regras("Moro em apartamento, gosto de gatos e trabalho 9 horas")
     assert filtros == {"porte_max": "MEDIO", "especie": "GATO", "idade_min": 12}
     assert "apartamento" in criterio
+
+
+class EmbeddingsFake:
+    """Vetor [1, 0] para texto com cara de rotina (moradia, trabalho), [0, 1] para o resto."""
+
+    PISTAS = ("moro", "trabalho", "casa", "quintal", "apto", "apartamento", "tempo")
+
+    def _vetor(self, texto):
+        return [1.0, 0.0] if any(p in texto.lower() for p in self.PISTAS) else [0.0, 1.0]
+
+    def embed_documents(self, textos):
+        # os documentos são os exemplos de rotina: todos contam como rotina
+        return [[1.0, 0.0] for _ in textos]
+
+    def embed_query(self, texto):
+        return self._vetor(texto)
+
+
+async def test_texto_que_nao_e_rotina_orienta_sem_buscar_animais_nem_chamar_o_llm():
+    registro = []
+    llm = AgenteFake({}, {"sugestoes": [{"animalId": "a" * 24, "motivo": "x"}], "explicacao": "x"})
+    r = await recomendar(
+        [llm],
+        resiliencias(),
+        animais_falsos(registro),
+        "Quem é o Neymar Jr?",
+        -21.2,
+        -45.0,
+        10,
+        embeddings=EmbeddingsFake(),
+        limiar_rotina=0.45,
+    )
+    assert r["sugestoes"] == [] and not r["degradado"]
+    assert "rotina" in r["explicacao"]
+    assert registro == [] and llm.mensagens_vistas == []  # nem a busca nem o LLM foram chamados
+
+
+async def test_rotina_curta_passa_pelo_filtro():
+    r = await recomendar(
+        [],
+        resiliencias(),
+        animais_falsos(),
+        "moro sozinho em apto",
+        -21.2,
+        -45.0,
+        10,
+        embeddings=EmbeddingsFake(),
+        limiar_rotina=0.45,
+    )
+    assert r["sugestoes"]  # seguiu para a busca (fallback por regras, sem LLM)

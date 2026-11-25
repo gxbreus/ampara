@@ -14,6 +14,7 @@ O agente do LangChain (LLM com tool calling) lê a rotina da pessoa, decide os f
   com Animais fora do ar, não há como recomendar: sugestoes=[] e degradado=true.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -41,6 +42,40 @@ SISTEMA = (
     "(1 frase) liga o animal à rotina e lembra de confirmar com a ONG. A explicação "
     "(até 2 frases) resume o critério. Português do Brasil."
 )
+
+
+# Rotinas de exemplo para reconhecer, pelo sentido, se o texto descreve uma rotina de vida.
+EXEMPLOS_ROTINA = [
+    "Moro em apartamento pequeno e trabalho fora o dia todo",
+    "Moro numa casa com quintal grande e tenho crianças",
+    "Passo o dia em casa, trabalho em home office",
+    "Fico muitas horas fora de casa por causa do trabalho",
+    "Gosto de caminhar e correr no parque nos fins de semana",
+    "Moro sozinho e quero companhia de um animal tranquilo",
+    "Já tenho um cachorro e um gato em casa",
+    "Tenho pouco espaço e pouco tempo livre",
+    "Sou idoso e procuro um animal calmo",
+    "Viajo bastante e moro em kitnet",
+]
+NAO_E_ROTINA = (
+    "Para recomendar um animal, preciso saber um pouco da sua rotina: onde você mora "
+    "(casa, apartamento, sítio), quanto tempo passa fora, se tem quintal, crianças ou "
+    "outros animais. Por exemplo: “Moro em apartamento e trabalho 6 horas fora”."
+)
+_exemplos_cache: dict[int, object] = {}
+
+
+def parece_rotina(embeddings, texto: str, limiar: float) -> bool:
+    """Compara o texto com rotinas de exemplo usando o mesmo modelo de embeddings do RAG."""
+    import numpy as np
+
+    chave = id(embeddings)
+    if chave not in _exemplos_cache:
+        _exemplos_cache[chave] = np.array(embeddings.embed_documents(EXEMPLOS_ROTINA))
+    exemplos = _exemplos_cache[chave]
+    v = np.array(embeddings.embed_query(texto))
+    similaridade = exemplos @ v / (np.linalg.norm(exemplos, axis=1) * np.linalg.norm(v))
+    return float(similaridade.max()) >= limiar
 
 
 class AnimaisIndisponivel(Exception):
@@ -172,9 +207,23 @@ async def recomendar(
     lat: float,
     lng: float,
     raio_km: float,
+    embeddings=None,
+    limiar_rotina: float = 0.45,
 ) -> dict:
     inicio = time.perf_counter()
     busca = Busca(cliente, lat, lng, raio_km)
+    # texto que não é rotina ("quem é o Neymar?"): orienta, sem buscar animais nem chamar o LLM
+    if embeddings is not None and not await asyncio.to_thread(
+        parece_rotina, embeddings, rotina, limiar_rotina
+    ):
+        return {
+            "sugestoes": [],
+            "explicacao": NAO_E_ROTINA,
+            "filtrosUsados": busca.filtros_usados,
+            "fontes": [],
+            "degradado": False,
+            "latenciaMs": int((time.perf_counter() - inicio) * 1000),
+        }
     degradado = False
     try:
         bruto = None

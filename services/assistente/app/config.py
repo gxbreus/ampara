@@ -23,8 +23,11 @@ KB_PADRAO = Path(__file__).resolve().parent.parent / "kb"
 
 
 class Settings(BaseSettings):
+    # "groq" ou "openai" (qualquer API compatível com a da OpenAI: Gemini, GitHub Models,
+    # OpenRouter…, apontada por LLM_BASE_URL). Trocar de provedor é só trocar variáveis.
     llm_provider: str = "groq"
-    # vazio no .env = estes padrões (decisão 7 do requisitos.md: free tier da Groq, com tools)
+    llm_base_url: str = ""
+    # vazio no .env = o padrão do provedor (veja modelo / modelo_reserva)
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_fallback_model: str = ""
@@ -40,17 +43,27 @@ class Settings(BaseSettings):
     # abaixo disto a pergunta está fora do domínio (medido: perguntas da base ≥ 0,48,
     # "capital da França" 0,10) e não vai ao LLM
     limiar_relevancia: float = 0.30
-    trechos_por_resposta: int = 3
+    # 4 trechos: o assunto costuma estar espalhado em textos curtos da base (ex.: "primeiros
+    # cuidados com filhote" está em resgate, vacinação e adaptação); a checagem de citação
+    # devolve só os que a resposta usou
+    trechos_por_resposta: int = 4
+    # recomendação: abaixo disto o texto não descreve uma rotina (medido: rotinas reais
+    # ≥ 0,58, inclusive curtas como "tenho quintal"; "Neymar", "receita de bolo" ≤ 0,30)
+    limiar_rotina: float = 0.45
     timeout_llm_s: float = 12.0
     cache_ttl_s: int = 24 * 3600
 
     @property
     def modelo(self) -> str:
-        return self.llm_model or "openai/gpt-oss-120b"
+        if self.llm_model:
+            return self.llm_model
+        return "gemini-2.5-flash" if self.llm_provider == "openai" else "openai/gpt-oss-120b"
 
     @property
     def modelo_reserva(self) -> str:
-        return self.llm_fallback_model or "llama-3.1-8b-instant"
+        if self.llm_fallback_model:
+            return self.llm_fallback_model
+        return "gemini-2.5-flash-lite" if self.llm_provider == "openai" else "llama-3.1-8b-instant"
 
 
 @lru_cache

@@ -28,19 +28,22 @@ def criar_llms(settings) -> list:
     if not chave:
         logger.warning("LLM_API_KEY vazia: o assistente responde em modo degradado")
         return []
+    modelos = list(dict.fromkeys([settings.modelo, settings.modelo_reserva]))
+    # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
+    comum = {
+        "api_key": chave,
+        "temperature": 0.2,
+        "max_retries": 0,
+        "timeout": settings.timeout_llm_s,
+    }
+    if settings.llm_provider == "openai":
+        from langchain_openai import ChatOpenAI
+
+        base = settings.llm_base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        return [ChatOpenAI(model=m, base_url=base, **comum) for m in modelos]
     from langchain_groq import ChatGroq
 
-    # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
-    return [
-        ChatGroq(
-            model=modelo,
-            api_key=chave,
-            temperature=0.2,
-            max_retries=0,
-            timeout=settings.timeout_llm_s,
-        )
-        for modelo in dict.fromkeys([settings.modelo, settings.modelo_reserva])
-    ]
+    return [ChatGroq(model=m, **comum) for m in modelos]
 
 
 async def indexar(app: FastAPI, trechos) -> None:

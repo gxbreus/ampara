@@ -113,12 +113,22 @@ def fontes(resultados: list[Resultado]) -> list[dict]:
     ]
 
 
+def resumo(texto: str, frases: int = 2) -> str:
+    partes = re.split(r"(?<=[.!?])\s+", texto.strip())
+    return " ".join(partes[:frases])
+
+
 def contingencia(resultados: list[Resultado]) -> str:
-    principal = resultados[0].trecho
+    """Sem LLM: junta o começo dos trechos mais relevantes, cada um com a sua fonte.
+
+    O assunto costuma estar espalhado por textos curtos da base, então um trecho só (o
+    primeiro) deixava a resposta pobre quando a busca não acertava a ordem.
+    """
+    usados = resultados[:3]
+    partes = [f"“{r.trecho.titulo}”: {resumo(r.trecho.texto)}" for r in usados]
     return (
-        "Não consegui gerar uma resposta completa agora, mas estas fontes da Ampara "
-        "tratam do assunto. "
-        f"Segundo “{principal.titulo}”: {principal.texto}"
+        "Não consegui gerar uma resposta completa agora. Veja o que as fontes da Ampara "
+        "dizem sobre o assunto. " + " ".join(partes)
     )
 
 
@@ -195,7 +205,7 @@ class Rag:
             )
             return {
                 "resposta": contingencia(resultados),
-                "fontes": fontes(resultados),
+                "fontes": fontes(resultados[:3]),
                 "degradado": True,
                 "cache": False,
                 "latenciaMs": ms(),

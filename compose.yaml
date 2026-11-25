@@ -289,6 +289,7 @@ services:
       ASSISTENTE_REDIS_URL: redis://:${ASSISTENTE_REDIS_PASSWORD}@redis-assistente:6379/0
       ANIMAIS_URL: http://animais:8001
       LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
