@@ -185,8 +185,7 @@ jobs:
           [ "$MUDANCAS" = success ] || exit 1
           case "$COMPONENTES" in success|skipped) ;; *) exit 1 ;; esac
 
-  # #88: os testes de contrato (respostas e mensagens reais contra os contratos) entram
-  # neste job. Por enquanto, ele garante que todo contrato OpenAPI é válido.
+  # #88: valida o OpenAPI, os schemas extraídos do catálogo de mensagens e seus exemplos.
   contratos:
     name: contratos
     needs: mudancas
@@ -198,5 +197,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: redocly lint
-        run: npx --yes @redocly/cli@1 lint docs/contratos/*.v1.yaml
+      - name: dependências do validador JSON Schema
+        run: npm ci --prefix bff/web
+      - name: contratos HTTP e mensagens
+        run: bash scripts/validar-contratos.sh

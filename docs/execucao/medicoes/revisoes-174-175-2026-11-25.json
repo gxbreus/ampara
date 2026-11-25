@@ -1,0 +1,32 @@
+{
+  "notificacoes": {
+    "normal": {
+      "health": 200,
+      "ready": 200
+    },
+    "dependencia_pausada": "redis-notificacoes",
+    "falha": {
+      "health": 200,
+      "ready": 503
+    },
+    "restaurado": {
+      "health": 200,
+      "ready": 200
+    }
+  },
+  "assistente": {
+    "normal": {
+      "health": 200,
+      "ready": 200
+    },
+    "dependencia_pausada": "qdrant-assistente",
+    "falha": {
+      "health": 200,
+      "ready": 503
+    },
+    "restaurado": {
+      "health": 200,
+      "ready": 200
+    }
+  }
+}

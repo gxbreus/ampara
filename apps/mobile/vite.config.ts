@@ -8,7 +8,7 @@ const raizDoRepo = fileURLToPath(new URL("../..", import.meta.url));
 const gateway = process.env.AMPARA_GATEWAY ?? "http://localhost:8000";
 
 export default defineConfig({
-  plugins: [react(), devAuth(raizDoRepo)],
+  plugins: [react(), ...(process.env.VITE_AUTH_REAL === "false" ? [devAuth(raizDoRepo)] : [])],
   resolve: { alias: { "@c": fileURLToPath(new URL("../compartilhado", import.meta.url)) } },
   server: {
     port: 5174,

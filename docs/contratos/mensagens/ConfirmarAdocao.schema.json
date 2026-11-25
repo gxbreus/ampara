@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConfirmarAdocao v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "animalId",
+    "adotanteId"
+  ],
+  "properties": {
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    },
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

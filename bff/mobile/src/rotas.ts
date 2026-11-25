@@ -574,21 +574,63 @@ export function rotas(
     );
   }
   for (const acao of ["perguntas", "recomendacoes"]) {
-    app.post(
+    app.post<{ Body: { pergunta?: string; descricaoRotina?: string; lat?: number; lng?: number; raioKm?: number } }>(
       `/mobile/v1/assistente/${acao}`,
-      { onRequest: privado },
+      {
+        onRequest: privado,
+        schema: {
+          body: {
+            type: "object",
+            additionalProperties: false,
+            required: acao === "perguntas" ? ["pergunta"] : ["descricaoRotina", "lat", "lng"],
+            properties: acao === "perguntas"
+              ? { pergunta: { type: "string", minLength: 3, maxLength: 500 } }
+              : {
+                  descricaoRotina: { type: "string", minLength: 10, maxLength: 1000 },
+                  lat: { type: "number", minimum: -90, maximum: 90 },
+                  lng: { type: "number", minimum: -180, maximum: 180 },
+                  raioKm: { type: "number", minimum: 1, maximum: 100 },
+                },
+          },
+        },
+      },
       async (req) => {
         try {
-          return await json<unknown>(
+          const resposta = await json<{
+            resposta: string;
+            fontes: { titulo: string; origem: string }[];
+            sugestoes: { animalId: string; nome: string; motivo: string; fotoThumb?: string }[];
+            explicacao: string;
+            degradado: boolean;
+          }>(
             `${config.servicos.assistente}/v1/${acao}`,
             req,
             {
               method: "POST",
-              body: JSON.stringify(req.body),
+              body: JSON.stringify(acao === "perguntas" ? { pergunta: req.body.pergunta } : {
+                rotina: req.body.descricaoRotina,
+                lat: req.body.lat,
+                lng: req.body.lng,
+                raioKm: req.body.raioKm ?? 10,
+              }),
               headers: { "Content-Type": "application/json" },
               signal: AbortSignal.timeout(20000),
             },
           );
+          return acao === "perguntas" ? {
+            resposta: resposta.resposta,
+            fontes: resposta.fontes.map((f) => ({ titulo: f.titulo, paginaOuSecao: f.origem })),
+            degradado: resposta.degradado,
+          } : {
+            animais: resposta.sugestoes.map((a) => ({
+              animalId: a.animalId,
+              nome: a.nome,
+              motivoRecomendacao: a.motivo,
+              ...(a.fotoThumb ? { fotoThumb: a.fotoThumb } : {}),
+            })),
+            explicacao: resposta.explicacao,
+            degradado: resposta.degradado,
+          };
         } catch (erro) {
           if (erro instanceof ErroServico && erro.status < 500) throw erro;
           const mensagem =

@@ -66,7 +66,8 @@ export interface SolicitacaoDetalhe {
   estado: string;
   criadoEm: string;
   expiraEm?: string;
-  animal: AnimalDetalhe;
+  animal: { id: string; nome?: string } & Partial<Omit<AnimalDetalhe, "id" | "nome">>;
+  _links?: Record<string, { href: string; method?: string }>;
   podeCancelar?: boolean;
   avisos?: string[];
 }
