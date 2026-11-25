@@ -1,8 +1,17 @@
 # Parte 4: roteiro dos dois BFFs
 
-Roteiro da demonstração dos dois *Backends for Frontends* (requisitos **RA-10** e **RA-11**, critério `E-4.4`): por que existe um BFF para cada cliente e a prova, ao vivo, de que eles respondem coisas diferentes para o mesmo animal. Duração: **cerca de 8 minutos**.
+Roteiro da demonstração dos dois *Backends for Frontends* (requisitos **RA-10** e **RA-11**, critério `E-4.4`): por que existe um BFF para cada cliente e a prova, ao vivo, de que eles respondem coisas diferentes para o mesmo animal. Duração: **cerca de 9 minutos, com os quatro integrantes**. Cada um apresenta a parte de que é dono (`docs/planejamento.md` §4), para responder às perguntas da própria área na arguição.
 
-- **Quem fala:** Mateus (dono do BFF Web) abre e conduz os blocos 1 a 3. Gabriel Cantanhede (dono do BFF Mobile) conduz os blocos 4 e 5. Mateus fecha com o bloco 6 e as perguntas.
+| Bloco | Quem apresenta | Por quê | Tempo |
+| --- | --- | --- | --- |
+| 1. O problema e 3. Duas telas | **Mateus Vitor** | dono do BFF Web e dos dois apps | 3 min |
+| 2. O gateway separa os dois mundos | **Gabriel Soares** | dono do API Gateway, do Ingress e da Identidade, que assina o JWT | 1,5 min |
+| 4. A prova em números e 5. Agregação | **Gabriel Cantanhede** | dono do BFF Mobile e do serviço de Animais (CQRS) | 2,5 min |
+| 6. Falha parcial | **Gabriel Nakazato** | dono do Assistente e de Notificações, os serviços que o BFF Mobile trata como "podem falhar" | 2 min |
+
+A ordem dos blocos 2 e 3 é invertida na fala: Mateus faz o bloco 1, passa para o Gabriel Soares no bloco 2 e volta no bloco 3.
+
+- **Passagem de bola:** cada um termina chamando o próximo pelo nome e pelo assunto ("o Gabriel Soares mostra como o gateway separa os dois clientes"). Isso evita silêncio entre os blocos.
 - **Números:** todos foram medidos em 25/11 no cluster kind, pelo gateway, com login real nas contas da demo. Variam um pouco com os dados (fotos, pedidos), mas a proporção se mantém.
 - **Comandos:** usam o gateway em `localhost:8000` (Ingress do kind). No Codespace com compose, troque por `8080` (`AMPARA_GATEWAY=http://localhost:8080` no script).
 
@@ -27,15 +36,15 @@ Deixe abertos, nesta ordem:
 
 > As senhas das contas são a `SEED_SENHA_DEMO` do `.env`. Para os apps usarem o login real, rode-os com `VITE_AUTH_REAL=true` (detalhes em `apps/compartilhado/README.md`).
 
-## 1. O problema: dois públicos, necessidades opostas (1 min)
+## 1. O problema: dois públicos, necessidades opostas (1 min) — *Mateus*
 
 **Fala:** "A Ampara tem dois clientes que olham para o mesmo animal com objetivos opostos. A ONG, no painel web, precisa de **tudo**: onde o animal está, o histórico de status e quem pediu a adoção, com o perfil de cada pessoa, para decidir. O adotante, no celular, precisa de **pouco e rápido**: foto, distância, porte e o estado do **próprio** pedido. E ele **não pode** ver o endereço do abrigo nem os dados de outros adotantes. Um endpoint único teria que escolher: ou mandava dados pessoais de terceiros para o celular, ou obrigava o painel a fazer dezenas de chamadas por tela. Por isso, um BFF para cada cliente."
 
 **Mostrar:** o diagrama de componentes em `docs/arquitetura.md`: App Web → Kong `/web/v1` → BFF Web; App Mobile → Kong `/mobile/v1` → BFF Mobile.
 
-## 2. O gateway separa os dois mundos (1 min)
+## 2. O gateway separa os dois mundos (1,5 min) — *Gabriel Soares*
 
-**Fala:** "Os dois BFFs ficam atrás do Kong, cada um com a sua política."
+**Fala:** "Os dois BFFs ficam atrás do Kong, cada um com a sua política. Quem emite o token é a Identidade, com RS256: ela assina com a chave privada, e o Kong e os BFFs só têm a pública. O papel da pessoa (ONG, adotante…) vai dentro do token."
 
 | | `/web/v1` → BFF Web | `/mobile/v1` → BFF Mobile |
 | --- | --- | --- |
@@ -65,14 +74,16 @@ curl -s -o /dev/null -w '%{http_code}\n' "$G/mobile/v1/animais?lat=-21.2453&lng=
 
 **Esperado:** `401`, o 403 do painel com `"O painel web é exclusivo de protetores, ONGs e administradores."`, `403` e `200`.
 
-## 3. Mesmo animal, duas telas (2 min)
+**Fala (fechando):** "São três camadas: o Kong confere a assinatura, o BFF confere o papel do cliente e o serviço decide sobre o recurso. O Mateus mostra agora o que cada cliente vê quando passa por elas."
+
+## 3. Mesmo animal, duas telas (2 min) — *Mateus*
 
 **Ao vivo, lado a lado:** a ficha do Thor no painel e no app.
 
 - **Painel (ONG):** endereço completo do abrigo (rua, número e CEP), histórico de status com "por você" × "pela SAGA", e os pedidos do animal com o perfil de cada adotante e os botões **Aprovar** e **Recusar**.
 - **App (adotante):** foto grande, sexo, porte e idade, só o **bairro e a cidade**, a ONG com o selo "responsável verificado" e um único botão: **Quero adotar**.
 
-**Fala:** "Os botões de Aprovar e Recusar não são decididos pelo front. Eles vêm dos links HATEOAS da resposta (`_links.aprovar`), e o BFF Web traduz os links da Adoção de `/v1/...` para `/web/v1/...`. Se a solicitação não está esperando decisão, o link não vem e o botão não aparece."
+**Fala:** "Repare que o painel mostra rua e número, e o app só o bairro. Os botões de Aprovar e Recusar não são decididos pelo front. Eles vêm dos links HATEOAS da resposta (`_links.aprovar`), e o BFF Web traduz os links da Adoção de `/v1/...` para `/web/v1/...`. Se a solicitação não está esperando decisão, o link não vem e o botão não aparece. O Gabriel Cantanhede mostra a diferença em números."
 
 ## 4. A prova em números (1,5 min) — *Gabriel Cantanhede*
 
@@ -109,13 +120,17 @@ curl -s -o /dev/null -w '%{http_code}\n' "$G/mobile/v1/animais?lat=-21.2453&lng=
 | Ficha, 1 pedido (Mel / Bolt) | 1.504 / 1.695 B | 760 / 781 B |
 | Item de lista / cartão | 332 B (resumo) | 322 a 337 B (cartão) |
 
-## 5. Agregação sem N+1 (1 min) — *Gabriel Cantanhede*
+## 5. Agregação sem N+1 e leitura pela projeção (1 min) — *Gabriel Cantanhede*
 
 **Fala:** "Cada BFF faz **no máximo uma chamada por serviço por tela**. Na lista de solicitações do painel, o BFF Web pede a página à Adoção e depois **uma única** chamada em lote à Identidade (`/v1/contas?ids=...&incluir=perfil`) e outra a Animais (`/v1/animais?ids=...`). Com 20 pedidos são 3 chamadas internas, e não 41. No celular, a busca logada faz **uma** chamada à Adoção para preencher o `minhaSolicitacao` de todos os cartões de uma vez."
 
+**Fala (CQRS):** "E os dois BFFs nem leem do mesmo lugar. O BFF Mobile busca na **projeção de leitura** de Animais (`animais_busca`, com índice geográfico e dados desnormalizados), feita para muitas buscas por raio. O BFF Web lê o **modelo de escrita**, porque a ONG edita e precisa do dado exato. O campo `atualizadoEm` do cartão mostra a defasagem de alguns segundos da projeção."
+
 **Mostrar (opcional):** `bff/web/src/solicitacoes.ts`, função `complementos`, com o `Promise.all` das duas chamadas em lote.
 
-## 6. Falha parcial: cada BFF degrada do seu jeito (1,5 min)
+**Passagem:** "E quando um desses serviços cai? O Gabriel Nakazato mostra."
+
+## 6. Falha parcial: cada BFF degrada do seu jeito (2 min) — *Gabriel Nakazato*
 
 **Fala:** "Cada rota tem um serviço **essencial** e serviços **complementares**. Se cai um complementar, a rota responde 200 com o que conseguiu e diz o que faltou em `avisos[]`. Se cai o essencial, a rota responde 503. Nunca 500 por culpa de outro serviço. E como cada BFF depende de serviços diferentes, a mesma queda afeta os dois clientes de formas diferentes."
 
@@ -152,22 +167,45 @@ kubectl scale deploy/adocao -n ampara --replicas=2
 - solicitações do web: `503` em `problem+json`;
 - painel do web: `"solicitacoes": null` com o aviso `{"servico":"adocao","motivo":"INDISPONIVEL"}`.
 
-> No compose, troque `kubectl scale ... --replicas=0/2` por `docker compose stop identidade` e `docker compose start identidade`.
+**Assistente fora:** o serviço mais "frágil" (depende de um LLM externo), por isso o BFF Mobile **nunca** quebra por causa dele.
 
-**Fecho (Mateus):** "Dois BFFs não são duplicação: cada um é a API **sob medida** para um cliente. Isso inclui o formato, a segurança, a agregação e o comportamento na falha. A diferença está no contrato de cada um (`docs/contratos/bff-web.v1.yaml` e `bff-mobile.v1.yaml`) e, campo a campo, em `docs/contratos/bff-comparacao.md`."
+```bash
+kubectl scale deploy/assistente -n ampara --replicas=0
+# 200 com degradado: true e uma resposta orientativa (medido: 16 ms)
+curl -s -X POST $G/mobile/v1/assistente/perguntas -H "Authorization: Bearer $ADOTANTE" \
+  -H 'Content-Type: application/json' -d '{"pergunta":"Quais os primeiros cuidados com um filhote?"}' | jq
+# a busca continua normal
+./scripts/buscar-animais.sh
+kubectl scale deploy/assistente -n ampara --replicas=2
+```
+
+**Medido em 25/11:** `{"resposta":"O assistente está indisponível. Você pode continuar buscando animais e acompanhando suas solicitações.","fontes":[],"degradado":true}`. No app, a tela do assistente mostra o balão amarelo "Resposta de contingência".
+
+> **Atenção, Nakazato:** com o Assistente **no ar**, `POST /mobile/v1/assistente/perguntas` hoje responde **404**, porque as rotas do RAG ainda não existem no serviço (#66 a #68). Até elas entrarem, mostre só o caso "fora do ar". Com o RAG pronto, mostre os dois: resposta com fontes e, depois de derrubar, o fallback.
+
+> No compose, troque `kubectl scale ... --replicas=0/2` por `docker compose stop <serviço>` e `docker compose start <serviço>`.
+
+**Fecho (Nakazato passa para o Mateus, que encerra em 20 s):** "Dois BFFs não são duplicação: cada um é a API **sob medida** para um cliente. Isso inclui o formato, a segurança, a agregação e o comportamento na falha. A diferença está no contrato de cada um (`docs/contratos/bff-web.v1.yaml` e `bff-mobile.v1.yaml`) e, campo a campo, em `docs/contratos/bff-comparacao.md`."
 
 ## Perguntas prováveis da arguição
 
-- **"Por que não um BFF só, com um parâmetro `?cliente=mobile`?"** Porque a segurança e o contrato mudariam por parâmetro: o mesmo endpoint teria que saber esconder endereço e dados de terceiros quando o cliente pedisse. Com dois BFFs, o mobile **não tem como** devolver o endereço: o campo não existe no schema de resposta dele. Cada um também evolui, escala e tem rate limit próprio.
-- **"BFF não é só um proxy?"** Não. Ele agrega (3 serviços numa resposta), traduz (GeoJSON `[lng, lat]` de Animais vira `{lat, lng}`; `_links` de `/v1` viram `/web/v1`), corta campos pelo schema e decide o que é essencial e o que é complementar numa falha.
-- **"Onde fica a regra de negócio?"** Nos serviços. O BFF não decide se uma adoção pode ser aprovada: ele só repassa o link que a Adoção mandou. Se o BFF cair, nenhuma regra se perde.
-- **"Por que o mobile lê da projeção (CQRS) e o web do modelo de escrita?"** O adotante faz busca geográfica com muito volume, e a projeção `animais_busca` tem índice `2dsphere` e dados desnormalizados. A ONG precisa do dado exato e atual para editar, então lê o modelo de escrita. A defasagem do CQRS (alguns segundos) só aparece para o adotante, e o campo `atualizadoEm` mostra isso.
-- **"Como o BFF sabe quem é o usuário?"** Pelo JWT RS256 que a Identidade assina. O Kong confere a assinatura, o BFF confere de novo e checa o papel, e o serviço decide sobre o recurso (três camadas). O BFF só conhece a chave **pública**.
+Quem responde cada pergunta está entre parênteses: é o dono da parte. Todos precisam saber o fluxo inteiro, mas cada um responde primeiro pela própria área.
+
+- **(Mateus) "Por que não um BFF só, com um parâmetro `?cliente=mobile`?"** Porque a segurança e o contrato mudariam por parâmetro: o mesmo endpoint teria que saber esconder endereço e dados de terceiros quando o cliente pedisse. Com dois BFFs, o mobile **não tem como** devolver o endereço: o campo não existe no schema de resposta dele. Cada um também evolui, escala e tem rate limit próprio.
+- **(Mateus) "BFF não é só um proxy?"** Não. Ele agrega (3 serviços numa resposta), traduz (GeoJSON `[lng, lat]` de Animais vira `{lat, lng}`; `_links` de `/v1` viram `/web/v1`), corta campos pelo schema e decide o que é essencial e o que é complementar numa falha.
+- **(Mateus) "Onde fica a regra de negócio?"** Nos serviços. O BFF não decide se uma adoção pode ser aprovada: ele só repassa o link que a Adoção mandou. Se o BFF cair, nenhuma regra se perde.
+- **(Gabriel Cantanhede) "Por que o mobile lê da projeção (CQRS) e o web do modelo de escrita?"** O adotante faz busca geográfica com muito volume, e a projeção `animais_busca` tem índice `2dsphere` e dados desnormalizados. A ONG precisa do dado exato e atual para editar, então lê o modelo de escrita. A defasagem do CQRS (alguns segundos) só aparece para o adotante, e o campo `atualizadoEm` mostra isso.
+- **(Gabriel Soares) "Como o BFF sabe quem é o usuário?"** Pelo JWT RS256 que a Identidade assina. O Kong confere a assinatura, o BFF confere de novo e checa o papel, e o serviço decide sobre o recurso (três camadas). O BFF só conhece a chave **pública**.
+
+- **(Gabriel Soares) "Por que o rate limit do mobile é maior?"** Porque são muito mais adotantes do que ONGs, e a busca do celular é pública e repetida (filtros, raio). O limite fica no Kong, antes de chegar a qualquer BFF: no compose ele conta por IP; no k8s, veja a limitação abaixo.
+- **(Gabriel Nakazato) "O que acontece se o LLM ficar lento?"** O BFF Mobile espera até 20 s pelo Assistente (as outras rotas, 2 s) e, se estourar, responde 200 com `degradado: true`. Dentro do Assistente ficam o retry, o circuit breaker, o cache e o fallback do LLM (#69).
+- **(Gabriel Cantanhede) "Por que o mobile tem 8 campos fixos?"** Para o cartão caber em cerca de 300 bytes numa rede móvel: 20 cartões dão cerca de 6 KB. O schema de resposta do Fastify tem `additionalProperties: false`, então qualquer campo a mais é cortado, mesmo que um serviço passe a mandar.
 
 ## Limitações conhecidas (para não ser pego de surpresa)
 
 - **Formato dos avisos:** no web, `avisos[]` traz objetos (`{servico, motivo}`); no mobile, textos prontos para exibir. É intencional, porque o celular mostra o texto direto, mas os contratos documentam formatos diferentes.
 - **Miniatura no mobile:** o `fotoThumb` é a mesma URL da foto inteira, porque o serviço de Animais ainda não gera miniaturas. O campo existe para quando gerar.
+- **Rate limit no k8s:** os plugins `rate-limit-web` e `rate-limit-mobile` (`k8s/kong/plugins.yaml`) não definem `limit_by`, então o Kong conta pelo *consumer* do JWT, e todo token pertence ao mesmo consumer (`ampara-identidade`). Nas rotas autenticadas, os 300/min do web são divididos entre **todas** as ONGs. A busca pública, sem consumer, conta por IP. O compose usa `limit_by: ip` e não tem esse problema. Correção: `limit_by: ip` (ou um consumer por conta) nos dois plugins.
 - **Política da #87:** o BFF Mobile ainda não tem retry com jitter nem circuit breaker; o contrato descreve a política, mas o código só tem timeout.
 
 ## Plano B
