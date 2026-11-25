@@ -1,5 +1,6 @@
-import { Body, ConflictException, Controller, HttpCode, HttpStatus, Post, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { ProblemaException } from '../problemas/problema';
 import { AuthService } from './auth.service';
 import { CriarContaDto, CriarSessaoDto } from './dtos';
 
@@ -15,7 +16,7 @@ export class AuthController {
       return conta;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
-        throw new ConflictException('Já existe uma conta para este e-mail.');
+        throw new ProblemaException('emailJaCadastrado', 'Já existe uma conta para este e-mail.');
       }
       throw error;
     }
@@ -25,7 +26,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async criarSessao(@Body() dto: CriarSessaoDto) {
     const sessao = await this.auth.criarSessao(dto);
-    if (!sessao) throw new UnauthorizedException('E-mail ou senha inválidos.');
+    if (!sessao) throw new ProblemaException('credenciaisInvalidas', 'E-mail ou senha inválidos.');
     return sessao;
   }
 }

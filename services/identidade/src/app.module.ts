@@ -13,7 +13,8 @@ import { OutboxModule } from './outbox/outbox.module';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
-        genReqId: (request) => request.headers['x-correlation-id']?.toString() ?? randomUUID(),
+        // o middleware de configurarApp já definiu request.id (X-Correlation-Id) antes do pino
+        genReqId: (request) => request.id ?? request.headers['x-correlation-id']?.toString() ?? randomUUID(),
       },
     }),
     AuthModule,
