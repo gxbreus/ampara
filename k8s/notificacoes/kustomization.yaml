@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ampara
+# sem ConfigMap por enquanto: as duas variáveis do serviço levam senha (#41)
+resources:
+  - deployment.yaml
+  - service.yaml
+  - redis-statefulset.yaml
+secretGenerator:
+  - name: notificacoes-secret
+    envs: [secret.env]
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,52 @@
+# Com 2 réplicas, as duas consomem a mesma fila do RabbitMQ: cada mensagem vai para uma só,
+# e o inbox (messageId já processado, #60) ignora uma reentrega.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notificacoes
+  labels: { app: notificacoes }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: notificacoes }
+  template:
+    metadata:
+      labels: { app: notificacoes }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: notificacoes }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # appuser da imagem
+      containers:
+        - name: notificacoes
+          image: ampara/notificacoes:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8002 }
+          # só as duas chaves do serviço; REDIS_PASSWORD fica com o banco
+          env:
+            - name: NOTIFICACOES_REDIS_URL
+              valueFrom: { secretKeyRef: { name: notificacoes-secret, key: NOTIFICACOES_REDIS_URL } }
+            - name: NOTIFICACOES_AMQP_URL
+              valueFrom: { secretKeyRef: { name: notificacoes-secret, key: NOTIFICACOES_AMQP_URL } }
+          # TODO(#41): trocar a readiness para /ready (PING no Redis e conexão com o RabbitMQ)
+          # quando ele existir. A liveness continua em /health.
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }

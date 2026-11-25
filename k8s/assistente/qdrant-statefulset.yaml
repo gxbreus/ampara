@@ -1,0 +1,54 @@
+# Banco vetorial da base de conhecimento (#66). Sem volume, a ingestão teria de rodar de
+# novo a cada restart do pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant-assistente
+  labels: { app: qdrant-assistente }
+spec:
+  clusterIP: None          # headless: o StatefulSet tem identidade de rede estável
+  selector: { app: qdrant-assistente }
+  ports:
+    - { name: http, port: 6333, targetPort: 6333 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant-assistente
+  labels: { app: qdrant-assistente }
+spec:
+  serviceName: qdrant-assistente
+  replicas: 1
+  selector:
+    matchLabels: { app: qdrant-assistente }
+  template:
+    metadata:
+      labels: { app: qdrant-assistente }
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.12.6
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 6333 }
+          # /readyz e /livez são do próprio Qdrant; a imagem não tem curl, mas o httpGet
+          # da probe é feito pelo kubelet
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          volumeMounts:
+            - { name: dados, mountPath: /qdrant/storage }
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }

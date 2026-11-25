@@ -11,14 +11,15 @@ Regras:
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="NOTIFICACOES_")
 
-    # TODO(#41): redis_url (NOTIFICACOES_REDIS_URL) e amqp_url (NOTIFICACOES_AMQP_URL),
-    # as duas como SecretStr, sem valor padrão. O formato está no .env.example.
+    redis_url: SecretStr
+    amqp_url: SecretStr
 
 
 @lru_cache

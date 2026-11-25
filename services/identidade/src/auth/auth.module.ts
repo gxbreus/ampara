@@ -27,6 +27,7 @@ const pem = (value: string) => value.replace(/\\n/g, '\n');
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard],
-  exports: [JwtAuthGuard],
+  // o guard é instanciado no módulo de quem o usa, que então precisa do JwtService
+  exports: [JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}
