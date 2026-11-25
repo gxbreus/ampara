@@ -20,14 +20,17 @@ set -a
 . "$env_file"
 set +a
 
-# troca cada ${VAR} pelo valor da variável; falha se ela estiver vazia
+# troca cada ${VAR} pelo valor da variável e falha se ela estiver vazia. ${VAR:-} marca uma
+# variável opcional, que pode ficar vazia (por exemplo, LLM_API_KEY: o Assistente sobe em
+# modo degradado sem ela).
 expandir() {
-  local texto="$1" nome valor
-  while [[ "$texto" =~ \$\{([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
+  local texto="$1" nome opcional valor
+  while [[ "$texto" =~ \$\{([A-Za-z_][A-Za-z0-9_]*)(:-)?\} ]]; do
     nome="${BASH_REMATCH[1]}"
+    opcional="${BASH_REMATCH[2]}"
     valor="${!nome:-}"
-    [ -n "$valor" ] || { echo "variável $nome vazia no .env" >&2; return 1; }
-    texto="${texto//\$\{$nome\}/$valor}"
+    [ -n "$valor" ] || [ -n "$opcional" ] || { echo "variável $nome vazia no .env" >&2; return 1; }
+    texto="${texto//"${BASH_REMATCH[0]}"/"$valor"}"
   done
   printf '%s' "$texto"
 }

@@ -88,7 +88,7 @@ A base acima só tem o `GET /health` e a configuração. O resto da #42 fica com
 - [ ] `lifespan` em `main.py`: `AsyncQdrantClient`, `redis.asyncio` e o `httpx.AsyncClient` do Animais.
 - [ ] `GET /ready` em `api/health.py`: Qdrant e Redis, 503 quando um deles cai, 200 com a chave do LLM vazia, com teste.
 - [ ] Middleware de `X-Correlation-Id` e `X-Served-By` e logs em JSON.
-- [ ] `Dockerfile` multi-stage, com o `build-essential` só na etapa de build se for preciso, e os tamanhos em `docs/imagens.md`.
+- [x] `Dockerfile` multi-stage, com o `build-essential` só na etapa de build se for preciso, e os tamanhos em `docs/imagens.md`.
 - [ ] Bloco `assistente` no `compose.yaml`, nas redes `services` e `data-assistente`.
 
 A CI instala o `requirements-dev.txt` e roda `ruff check`, `ruff format --check` e `pytest` neste serviço (depois do merge do #126). O `docker build` passa a rodar quando o `Dockerfile` existir.
