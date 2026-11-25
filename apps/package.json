@@ -1,0 +1,11 @@
+{
+  "name": "ampara-apps",
+  "private": true,
+  "workspaces": ["web", "mobile"],
+  "scripts": {
+    "dev:web": "npm run dev -w web",
+    "dev:mobile": "npm run dev -w mobile",
+    "build": "npm run build -w web && npm run build -w mobile",
+    "typecheck": "npm run typecheck -w web && npm run typecheck -w mobile"
+  }
+}
