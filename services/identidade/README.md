@@ -26,6 +26,27 @@ O serviço usa somente variáveis de ambiente. A primeira migration em
 `src/migrations/` cria a tabela `contas`; `synchronize` permanece desativado.
 A conexão vem de `IDENTIDADE_DATABASE_URL`, o mesmo nome do `.env.example` da raiz.
 
+Toda resposta de erro sai em `application/problem+json`, no formato `Problema`
+do contrato (`docs/contratos/identidade.v1.yaml`).
+
+## Testes
+
+```bash
+npm test            # unitários e e2e (supertest); o e2e usa o pg-mem, sem infraestrutura
+npm run test:e2e    # só os e2e
+```
+
+Com PostgreSQL e RabbitMQ reais, os e2e também cobrem o que o pg-mem não implementa
+(`FOR UPDATE`, `= ANY($1::uuid[])`) e a publicação da outbox com o usuário
+`identidade`. Cada execução cria e apaga um schema próprio no banco informado:
+
+```bash
+IDENTIDADE_TEST_DATABASE_URL=postgresql://usuario:senha@localhost:5432/identidade \
+IDENTIDADE_TEST_AMQP_URL=amqp://identidade:senha@localhost:5672/ \
+IDENTIDADE_TEST_AMQP_ADMIN_URL=amqp://admin:senha@localhost:5672/ \
+npm test
+```
+
 Pelo Compose, na raiz do repositório:
 
 ```bash
