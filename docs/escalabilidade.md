@@ -58,12 +58,12 @@ ausência da seção de status. Cluster/hey indisponíveis; nenhuma medição re
 
 | Data | Máquina (CPU / RAM) | Kubernetes | Kong | `hey` |
 | --- | --- | --- | --- | --- |
-| _pendente_ | _pendente_ | _pendente_ | _pendente_ | _pendente_ |
+| 17/11/2026 | AMD Ryzen 7 5700U with Radeon Graphics, 16 threads / 9 GB | kind v0.25.0, Kubernetes v1.31.2 (1 control-plane + 2 workers) | Kong Ingress Controller, `kong:3.9` | `williamyeh/hey` (Docker) |
 
 | Réplicas | Req/s | p50 | p95 | Taxa de erro | Distribuição de 300 requisições |
 | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | _pendente_ | _pendente_ | _pendente_ | _pendente_ | _pendente_ |
-| 3 | _pendente_ | _pendente_ | _pendente_ | _pendente_ | _pendente_ |
+| 1 | 248,0 | 78,4 ms | 104,5 ms | 0% (4.976 respostas 200) | 300 em `animais-…-mt6sb` |
+| 3 | 558,0 | 32,9 ms | 69,3 ms | 0% (11.182 respostas 200) | 111 / 100 / 89 (máximo de 37%), pods em `ampara-worker` e `ampara-worker2` |
 
 ## Interpretação
 
@@ -72,3 +72,12 @@ triplicar. A evidência deste requisito é a distribuição: com três réplicas
 pod deve atender parte relevante das 300 requisições e nenhum deve concentrar mais
 de 50% delas. O `kubectl get pods -o wide` da execução deve mostrar os pods em pelo
 menos dois workers.
+
+### Keep-alive e balanceamento
+
+Na primeira execução, com 3 réplicas, só 2 pods receberam tráfego (150 / 150). O Service do
+Kubernetes balanceia por **conexão**, e o `fetch` do BFF Mobile reaproveitava conexões
+keep-alive: cada pod do BFF ficava preso a um pod do Animais, e a réplica nova não recebia
+nada. A correção (`bff/mobile/src/cliente.ts`) usa um `Agent` do undici sem keep-alive nas
+chamadas internas. Cada chamada abre uma conexão nova e passa de novo pelo balanceamento do
+Service, ao custo de um handshake TCP dentro do cluster.

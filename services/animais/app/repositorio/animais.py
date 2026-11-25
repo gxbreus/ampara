@@ -12,11 +12,13 @@ from pymongo.asynchronous.database import AsyncDatabase
 from app.dominio.animal import OrigemTransicao, StatusAnimal, pode_transicionar
 from app.problema import (
     erro_animal_nao_encontrado,
+    erro_conflito_concorrencia,
     erro_identificador_invalido,
     erro_lote_excedido,
     erro_sem_permissao,
     erro_status_exclusivo_saga,
 )
+from app.projetor import aproximar
 from app.schemas.animal import AtualizarAnimalEntrada, NovoAnimalEntrada
 
 
@@ -38,7 +40,7 @@ def montar_evento_outbox(
     coords = animal_doc.get("localizacao", {}).get("coordinates", [0.0, 0.0])
     ponto_aproximado = {
         "type": "Point",
-        "coordinates": [round(coords[0], 3), round(coords[1], 3)],
+        "coordinates": aproximar(*coords),
     }
 
     fotos = animal_doc.get("fotos", [])
@@ -47,7 +49,14 @@ def montar_evento_outbox(
 
     atualizado_em = animal_doc.get("atualizadoEm", agora)
     if isinstance(atualizado_em, datetime):
-        atualizado_em_iso = atualizado_em.isoformat()
+        # BSON preserva milissegundos e retorna UTC sem tzinfo por padrão.
+        # O snapshot ao vivo e o reconstruído precisam ter o mesmo timestamp.
+        atualizado_em_utc = (
+            atualizado_em.replace(tzinfo=UTC)
+            if atualizado_em.tzinfo is None
+            else atualizado_em.astimezone(UTC)
+        )
+        atualizado_em_iso = atualizado_em_utc.isoformat(timespec="milliseconds")
     else:
         atualizado_em_iso = str(atualizado_em)
 
@@ -56,6 +65,9 @@ def montar_evento_outbox(
         "nome": animal_doc["nome"],
         "especie": animal_doc["especie"],
         "porte": animal_doc["porte"],
+        "sexo": animal_doc.get("sexo"),
+        "temperamento": animal_doc.get("temperamento", []),
+        "descricao": animal_doc.get("descricao"),
         "idadeMeses": animal_doc["idadeMeses"],
         "fotos": fotos,
         "fotoCapa": foto_capa,
@@ -245,11 +257,13 @@ async def atualizar_animal(
 
     async with cliente.start_session() as s:
         async with await s.start_transaction():
-            await banco.animais.update_one(
-                {"_id": obj_id},
+            resultado = await banco.animais.update_one(
+                {"_id": obj_id, "version": doc_atual.get("version", 1)},
                 {"$set": campos_atualizar},
                 session=s,
             )
+            if resultado.modified_count != 1:
+                raise erro_conflito_concorrencia()
             await banco.outbox.insert_one(evento_outbox, session=s)
 
     return serializar_animal(doc_modificado)
@@ -311,14 +325,20 @@ async def atualizar_status_animal(
 
     async with cliente.start_session() as s:
         async with await s.start_transaction():
-            await banco.animais.update_one(
-                {"_id": obj_id},
+            resultado = await banco.animais.update_one(
+                {
+                    "_id": obj_id,
+                    "version": doc_atual.get("version", 1),
+                    "status": status_atual.value,
+                },
                 {
                     "$set": campos_atualizar,
                     "$push": {"historicoStatus": novo_historico_item},
                 },
                 session=s,
             )
+            if resultado.modified_count != 1:
+                raise erro_conflito_concorrencia()
             await banco.outbox.insert_one(evento_outbox, session=s)
 
     return serializar_animal(doc_modificado)

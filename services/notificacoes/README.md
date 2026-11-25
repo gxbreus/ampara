@@ -85,7 +85,7 @@ A base acima só tem o `GET /health` e a configuração. O resto da #41 fica com
 - [ ] `lifespan` em `main.py`: Redis com `redis.asyncio` e RabbitMQ com `aio_pika.connect_robust`.
 - [ ] `GET /ready` em `api/health.py`: `PING` no Redis e conexão aberta com o RabbitMQ, 503 quando um deles cai, com teste.
 - [ ] Middleware de `X-Correlation-Id` e `X-Served-By` e logs em JSON.
-- [ ] `Dockerfile` multi-stage e os tamanhos em `docs/imagens.md`.
+- [x] `Dockerfile` multi-stage e os tamanhos em `docs/imagens.md`.
 - [ ] Bloco `notificacoes` no `compose.yaml`, nas redes `services` e `data-notificacoes`, e a prova de persistência do Redis no PR.
 
 A CI instala o `requirements-dev.txt` e roda `ruff check`, `ruff format --check` e `pytest` neste serviço (depois do merge do #126). O `docker build` passa a rodar quando o `Dockerfile` existir.

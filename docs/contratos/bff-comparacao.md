@@ -9,7 +9,7 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
 | Quem pede | a ONG Patas de Lavras, dona do animal | a Bruna, adotante |
 | Rota | `GET /web/v1/animais/{id}` | `GET /mobile/v1/animais/{id}` ou a lista de "minhas solicitações" |
 | Serviços chamados | Animais (modelo de escrita), Adoção e Identidade | Animais (projeção de leitura) e Adoção |
-| Tamanho da resposta | 1.865 bytes | 298 bytes |
+| Tamanho da resposta | 2.097 bytes | 298 bytes |
 | Contrato | [`bff-web.v1.yaml`](bff-web.v1.yaml) | [`bff-mobile.v1.yaml`](bff-mobile.v1.yaml) |
 
 ## Web: o que a ONG vê
@@ -20,11 +20,13 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
   "nome": "Thor",
   "especie": "CAO",
   "porte": "MEDIO",
+  "sexo": "MACHO",
   "idadeMeses": 36,
   "temperamento": [
     "dócil",
     "brincalhão"
   ],
+  "descricao": "Resgatado no Centro, vacinado e castrado.",
   "fotos": [
     "https://exemplo.ampara.dev/fotos/thor-1.jpg",
     "https://exemplo.ampara.dev/fotos/thor-2.jpg"
@@ -35,6 +37,15 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
     "lng": -44.9998,
     "bairro": "Centro",
     "cidade": "Lavras"
+  },
+  "endereco": {
+    "rua": "Rua Santana",
+    "numero": "120",
+    "complemento": null,
+    "bairro": "Centro",
+    "cidade": "Lavras",
+    "uf": "MG",
+    "cep": "37200-000"
   },
   "status": "RESERVADO",
   "historicoStatus": [
@@ -67,6 +78,7 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
       "desfecho": null,
       "expiraEm": "2026-11-20T15:00:00Z",
       "criadoEm": "2026-11-17T15:00:00Z",
+      "decisao": null,
       "adotante": {
         "id": "5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55",
         "nome": "Bruna Silva",
@@ -99,6 +111,7 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
       "desfecho": "RECUSADA",
       "expiraEm": "2026-11-15T10:00:00Z",
       "criadoEm": "2026-11-12T10:00:00Z",
+      "decisao": null,
       "adotante": {
         "id": "9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e",
         "nome": "Carlos Souza",
@@ -147,10 +160,11 @@ O `AnimalCard` tem exatamente os 8 campos definidos na #30. O BFF Mobile usa o m
 | Campo | Web | Mobile | Por quê |
 | --- | --- | --- | --- |
 | `id`, `nome`, `porte` | sim | sim | identificam o animal nas duas telas |
-| `especie`, `idadeMeses`, `temperamento` | sim | não | a ONG edita esses dados; no celular, a busca já filtra por espécie e porte, e o detalhe fica para a tela do animal |
+| `especie`, `sexo`, `idadeMeses`, `temperamento`, `descricao` | sim | não | a ONG edita esses dados; no celular, a busca já filtra por espécie e porte, e o detalhe fica para a tela do animal |
 | `fotos` (todas) e `fotoCapa` | sim | não | a ONG gerencia a galeria |
 | `fotoThumb` (320 px) | não | sim | numa lista em rede móvel, só a miniatura |
 | `localizacao` (coordenada exata) | sim | não | só o responsável vê onde o animal está; o adotante nunca recebe a coordenada (LGPD) |
+| `endereco` completo | sim | não | é o endereço de quem cuida do animal; só o responsável o recebe (LGPD) |
 | `distanciaKm`, `cidade` | não | sim | o adotante decide pela distância; ela é calculada a partir da localização dele, na projeção de leitura |
 | `status`, `historicoStatus` | sim | não | a ONG acompanha reservas e liberações; o adotante só precisa saber da própria solicitação |
 | `solicitacoes[]` com o `adotante` e o perfil | sim | não | a ONG avalia quem pediu; mandar isso ao celular exporia dados pessoais de outros adotantes |
@@ -163,5 +177,5 @@ O `AnimalCard` tem exatamente os 8 campos definidos na #30. O BFF Mobile usa o m
 
 - **Privacidade.** A resposta do painel traz nome, cidade e perfil de cada adotante que pediu o animal, além da coordenada exata. Um endpoint compartilhado teria que esconder campos conforme quem pede, e um erro nessa regra vaza dados pessoais para qualquer adotante.
 - **Modelos diferentes.** O web lê o modelo de escrita de Animais, que é a verdade atual e tem a coordenada exata. O mobile lê a projeção, que é otimizada para busca por raio e aceita alguns segundos de defasagem. São fontes diferentes de propósito (CQRS).
-- **Custo de rede.** O cartão mobile tem 298 bytes, contra 1.865 do detalhe web. Uma página de 20 cartões cabe em cerca de 6 KB. No formato do web, passaria de 37 KB e ainda exigiria consultar a Identidade só para montar dados que o adotante não pode ver.
+- **Custo de rede.** O cartão mobile tem 298 bytes, contra 2.097 do detalhe web. Uma página de 20 cartões cabe em cerca de 6 KB. No formato do web, passaria de 42 KB e ainda exigiria consultar a Identidade só para montar dados que o adotante não pode ver.
 - **Ritmos diferentes.** O painel pode ganhar campos para a ONG sem mudar o app instalado nos celulares, e vice-versa. Cada BFF evolui com o seu cliente (ADR-005).

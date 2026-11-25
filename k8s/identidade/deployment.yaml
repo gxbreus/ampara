@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identidade
+  labels: { app: identidade }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: identidade }
+  template:
+    metadata:
+      labels: { app: identidade }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: identidade }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: identidade
+          image: ampara/identidade:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3001 }
+          envFrom:
+            - configMapRef: { name: identidade-config }
+          env:
+            - name: IDENTIDADE_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: identidade-secret, key: IDENTIDADE_DATABASE_URL } }
+            - name: IDENTIDADE_AMQP_URL
+              valueFrom: { secretKeyRef: { name: identidade-secret, key: IDENTIDADE_AMQP_URL } }
+            - name: JWT_PRIVATE_KEY
+              valueFrom: { secretKeyRef: { name: identidade-secret, key: JWT_PRIVATE_KEY } }
+            - name: JWT_PUBLIC_KEY
+              valueFrom: { secretKeyRef: { name: identidade-jwt-publico, key: JWT_PUBLIC_KEY } }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }

@@ -1,0 +1,237 @@
+openapi: 3.1.0
+info:
+  title: Ampara — Notificações
+  version: 1.0.0
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  description: |
+    Caixa in-app no Redis, consumindo eventos v1 de `ampara.eventos` pela
+    fila `notificacoes.eventos`, conforme `eventos.md`. Cobre HU-15 a HU-17.
+    Não envia e-mail, SMS ou push. Não consome `solicitacao.*`, `saga.*`
+    nem o inexistente `adocao.solicitada`.
+
+    | Evento | Destinatário | Texto |
+    | --- | --- | --- |
+    | adocao.aguardando_aprovacao | responsável (responsavelId) | Nova solicitação para {animalNome} |
+    | adocao.aprovada | adotante (adotanteId) | Sua adoção de {animalNome} foi aprovada |
+    | adocao.concluida | adotante e responsável | Adoção de {animalNome} concluída |
+    | adocao.recusada | adotante | Solicitação de {animalNome} recusada |
+    | adocao.cancelada | adotante | Solicitação de {animalNome} cancelada |
+    | adocao.expirada | adotante | Solicitação de {animalNome} expirada |
+    | adocao.falhou | adotante | Não foi possível seguir com a solicitação de {animalNome}: {motivo} |
+    | conta.verificada | protetor ou ONG (contaId) | Sua conta foi verificada |
+
+    Encerramentos com compensação são publicados após sua conclusão. O texto
+    de falha usa motivo e estadoFinal do catálogo, inclusive quando o animal
+    está indisponível. Eventos repetidos não duplicam itens nem contadores.
+
+    Todas as operações exigem JWT RS256 válido. O usuário vem exclusivamente
+    de `sub`; nenhuma rota aceita usuarioId. A validação usa somente a chave
+    pública de Identidade. O BFF adapta o payload para cada cliente.
+servers:
+  - url: http://notificacoes:8002
+    description: Rede interna; acesso dos aplicativos pelos BFFs.
+tags:
+  - name: Caixa
+    description: Consulta e marcação das notificações do usuário autenticado.
+security:
+  - bearerAuth: []
+paths:
+  /v1/notificacoes:
+    get:
+      tags: [Caixa]
+      operationId: listarNotificacoes
+      summary: Lista a caixa do usuário autenticado
+      description: |
+        Ordena por occurredAt decrescente (exposto como criadaEm), com id
+        decrescente como desempate estável. O cursor é opaco e vinculado ao
+        usuário e ao filtro; cursor inválido ou usado com outro filtro retorna
+        400. Novos eventos não deslocam as páginas já percorridas. Marcar um
+        item como lido o remove das próximas páginas com naoLidas=true.
+        naoLidas=false ou ausente inclui lidas e não lidas.
+      parameters:
+        - name: naoLidas
+          in: query
+          description: Quando true, retorna somente itens não lidos.
+          schema:
+            type: boolean
+            default: false
+        - name: cursor
+          in: query
+          description: proximoCursor da resposta anterior, com o mesmo filtro.
+          schema:
+            type: string
+            minLength: 1
+        - name: limite
+          in: query
+          description: Quantidade máxima de itens por página.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Página da caixa e contador total de não lidas do usuário.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaNotificacoes'
+              examples:
+                comItens:
+                  value:
+                    itens:
+                      - id: 0b8f6c2e-91d4-4a7b-8e13-5c2f9a0d4e61
+                        tipo: adocao.aprovada
+                        titulo: Adoção aprovada
+                        mensagem: Sua adoção de Thor foi aprovada
+                        lida: false
+                        criadaEm: '2026-11-17T15:00:00Z'
+                        link: /solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17
+                    proximoCursor: eyJwYWdpbmEiOiIyIn0
+                    naoLidas: 2
+                vazia:
+                  value: {itens: [], proximoCursor: null, naoLidas: 0}
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/Indisponivel'
+  /v1/notificacoes/{id}/leitura:
+    post:
+      tags: [Caixa]
+      operationId: marcarNotificacaoLida
+      summary: Marca uma notificação como lida
+      description: |
+        Idempotente: repetir a operação retorna 204 e não decrementa novamente
+        o contador. Item inexistente e item de outro usuário retornam o mesmo
+        404, sem revelar a existência ou o proprietário. Não recebe corpo.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador opaco do item.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '204':
+          description: Item lido ou já estava lido; sem corpo.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '404':
+          description: Notificação não encontrada na caixa autenticada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: about:blank
+                title: Notificação não encontrada
+                status: 404
+                detail: Notificação não encontrada na sua caixa.
+        '503':
+          $ref: '#/components/responses/Indisponivel'
+  /v1/notificacoes/leitura-todas:
+    post:
+      tags: [Caixa]
+      operationId: marcarTodasNotificacoesLidas
+      summary: Marca toda a caixa atual como lida
+      description: |
+        Idempotente e sem corpo de entrada. Marca os itens existentes no
+        instante da operação atômica e zera seu contador. Eventos inseridos
+        depois continuam não lidos. Uma caixa vazia também retorna 204.
+      responses:
+        '204':
+          description: Caixa atual marcada como lida; sem corpo.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '503':
+          $ref: '#/components/responses/Indisponivel'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 emitido por Identidade; a caixa é identificada pelo sub.
+  schemas:
+    Notificacao:
+      type: object
+      required: [id, tipo, titulo, mensagem, lida, criadaEm, link]
+      properties:
+        id:
+          type: string
+          description: Identificador estável do item na caixa; não muda em reentregas.
+        tipo:
+          type: string
+          enum: [adocao.aguardando_aprovacao, adocao.aprovada, adocao.concluida, adocao.recusada, adocao.cancelada, adocao.expirada, adocao.falhou, conta.verificada]
+        titulo:
+          type: string
+        mensagem:
+          type: string
+        lida:
+          type: boolean
+        criadaEm:
+          type: string
+          format: date-time
+          description: occurredAt do evento, nunca a hora de consumo.
+        link:
+          type: string
+          format: uri-reference
+          description: Caminho para a solicitação relacionada ou para a conta verificada.
+    PaginaNotificacoes:
+      type: object
+      required: [itens, proximoCursor, naoLidas]
+      properties:
+        itens:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Notificacao'
+        proximoCursor:
+          type: [string, 'null']
+          description: null na última página.
+        naoLidas:
+          type: integer
+          minimum: 0
+          description: Total de itens não lidos da caixa, independente da página.
+    Problema:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+  responses:
+    EntradaInvalida:
+      description: Cursor inválido ou parâmetros fora dos limites.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example: {type: 'about:blank', title: Entrada inválida, status: 400, detail: Cursor ou parâmetros inválidos.}
+    NaoAutenticado:
+      description: JWT ausente, expirado ou inválido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example: {type: 'about:blank', title: Não autenticado, status: 401, detail: É necessário um JWT válido.}
+    Indisponivel:
+      description: Armazenamento temporariamente indisponível; nenhuma marcação foi confirmada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example: {type: 'about:blank', title: Serviço indisponível, status: 503, detail: Tente novamente mais tarde.}

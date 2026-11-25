@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: bff-mobile, labels: { app: bff-mobile } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: bff-mobile } }
+  template:
+    metadata: { labels: { app: bff-mobile } }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app: bff-mobile } }
+      securityContext: { runAsNonRoot: true, runAsUser: 1000 }
+      containers:
+        - name: bff-mobile
+          image: ampara/bff-mobile:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 3020 }]
+          envFrom:
+            - configMapRef: { name: bff-mobile-config }
+            - configMapRef: { name: bff-mobile-jwt }
+          # Mantém busca pública e fallback quando um complementar está fora.
+          # /ready é diagnóstico de todos os upstreams, como no BFF Web.
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }
