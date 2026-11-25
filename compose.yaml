@@ -103,7 +103,7 @@ services:
 
   redis-notificacoes:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--requirepass", "${NOTIFICACOES_REDIS_PASSWORD:?defina no .env}"]
     environment:
       REDISCLI_AUTH: ${NOTIFICACOES_REDIS_PASSWORD}
     volumes: [redis-notificacoes:/data]
@@ -284,6 +284,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-bge-m3}
     networks: [services, data-assistente]
     depends_on:
       qdrant-assistente: { condition: service_healthy }
