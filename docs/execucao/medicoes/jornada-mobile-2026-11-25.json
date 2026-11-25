@@ -1,0 +1,109 @@
+{
+  "conta_id": "00000000-0000-4000-8000-0000000000d1",
+  "animal_id": "6b071be85fdeee988cc96b2c",
+  "pedido_id": "d23df71a-4bec-44af-8f57-09b06c5521ef",
+  "estados_observados": [
+    "SOLICITADA",
+    "AGUARDANDO_APROVACAO",
+    "CANCELADA"
+  ],
+  "etapas_antes_cancelamento": [
+    {
+      "etapa": "SOLICITADA",
+      "descricao": "Solicitação recebida",
+      "concluidaEm": "2026-11-25T17:34:20.48163Z"
+    },
+    {
+      "etapa": "ANIMAL_RESERVADO",
+      "descricao": "Animal reservado para você",
+      "concluidaEm": "2026-11-25T17:34:20.768098Z"
+    },
+    {
+      "etapa": "AGUARDANDO_APROVACAO",
+      "descricao": "Aguardando resposta da ONG",
+      "concluidaEm": "2026-11-25T17:34:20.92656Z"
+    }
+  ],
+  "chamadas": [
+    {
+      "metodo": "POST",
+      "caminho": "/auth/v1/sessoes",
+      "status": 200
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/auth/v1/sessoes",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/eu",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/eu/perfil-adocao",
+      "status": 200
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/mobile/v1/eu/perfil-adocao",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/web/v1/animais",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/animais/6b071be85fdeee988cc96b2c",
+      "status": 200
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/mobile/v1/solicitacoes",
+      "status": 202
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef/linha-do-tempo",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes",
+      "status": 200
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef/cancelamento",
+      "status": 202
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef",
+      "status": 200
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/mobile/v1/solicitacoes/d23df71a-4bec-44af-8f57-09b06c5521ef",
+      "status": 200
+    }
+  ]
+}

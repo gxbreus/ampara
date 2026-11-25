@@ -21,8 +21,14 @@ export function Perfil() {
 
   useEffect(() => {
     if (perfil.data) {
-      const { completo: _c, ...resto } = perfil.data;
-      setF((x) => ({ ...x, ...resto }));
+      const p = perfil.data;
+      setF({
+        tipoMoradia: p.tipoMoradia ?? undefined,
+        temQuintal: p.temQuintal ?? false,
+        outrosAnimais: p.outrosAnimais ?? false,
+        horasForaDeCasa: p.horasForaDeCasa ?? 0,
+        aceiteTermo: p.aceiteTermo ?? false,
+      });
     }
   }, [perfil.data]);
 

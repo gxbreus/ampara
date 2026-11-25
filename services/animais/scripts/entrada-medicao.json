@@ -1,0 +1,19 @@
+{
+  "nome": "Medicao CQRS",
+  "especie": "CAO",
+  "porte": "MEDIO",
+  "sexo": "MACHO",
+  "idadeMeses": 24,
+  "temperamento": ["docil"],
+  "descricao": "Animal sintetico exclusivo da medicao local da issue 165.",
+  "fotos": ["https://example.org/animal.webp"],
+  "localizacao": {"type": "Point", "coordinates": [-44.9998, -21.2468]},
+  "endereco": {
+    "rua": "Rua de teste",
+    "numero": "1",
+    "bairro": "Centro",
+    "cidade": "Lavras",
+    "uf": "MG",
+    "cep": "37200-000"
+  }
+}

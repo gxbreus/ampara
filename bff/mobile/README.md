@@ -58,6 +58,11 @@ e os links externos são reescritos para `/mobile/v1`. Perfil e avisos repassam 
 Authorization original; o Assistente usa prazo de 20 s e fallback em indisponibilidade.
 Testes usam serviços simulados; integração completa depende dos serviços dos demais donos.
 
+O Assistente tem contrato interno próprio: o BFF adapta fontes e sugestões
+para os campos mobile. Recomendações exigem `lat` e `lng` do contexto de busca;
+`raioKm` vale 10 se omitido. Coordenadas ausentes ou inválidas recebem 400 antes
+de chamar o serviço. Metadados de cache e latência ficam no serviço interno.
+
 ## Issues
 
 - #30 — contrato
