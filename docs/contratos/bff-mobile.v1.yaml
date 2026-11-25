@@ -705,14 +705,31 @@ paths:
           application/json:
             schema:
               type: object
-              required: [descricaoRotina]
+              required: [descricaoRotina, lat, lng]
               properties:
                 descricaoRotina:
                   type: string
                   minLength: 10
                   maxLength: 1000
+                lat:
+                  type: number
+                  minimum: -90
+                  maximum: 90
+                  description: Latitude do contexto de busca escolhido pelo adotante.
+                lng:
+                  type: number
+                  minimum: -180
+                  maximum: 180
+                raioKm:
+                  type: number
+                  minimum: 1
+                  maximum: 100
+                  default: 10
               example:
                 descricaoRotina: Moro em apartamento pequeno, trabalho 6 horas fora e gosto de caminhar no parque aos finais de semana.
+                lat: -21.2468
+                lng: -44.9998
+                raioKm: 10
       responses:
         '200':
           description: Recomendações personalizadas de animais.
