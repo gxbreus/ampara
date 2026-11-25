@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PORTES } from "@c/api";
 import { Avisos, Carregando, Erro, Origem, Retrato, SeloEstado, Vazio } from "@c/ui";
-import { buscar, rotas } from "../api/servicos";
+import { buscar, LAVRAS, rotas } from "../api/servicos";
 import type { Especie, Porte } from "../api/tipos";
 
 // Sem permissão de localização, a busca parte do centro de Lavras (onde está o seed).
-const LAVRAS = { lat: -21.2453, lng: -44.9998 };
+// Cada busca guarda o ponto usado; a recomendação do assistente parte dele.
 
 export function Busca() {
   const [ponto, setPonto] = useState(LAVRAS);

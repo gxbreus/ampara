@@ -179,13 +179,15 @@ export function responder(pergunta: string) {
   return { resposta: achada[1], fontes: achada[2], degradado: false };
 }
 
-export function recomendar(rotina: string) {
+// Como o Assistente real, só considera animais dentro do raio a partir do ponto informado.
+export function recomendar(rotina: string, lat = -21.2453, lng = -44.9998, raioKm = 10) {
   const apto = /apartamento|pequeno/i.test(rotina);
   const ativo = /corr|caminh|parque|ativ|esporte/i.test(rotina);
   const fora = /(\d+)\s*h/i.exec(rotina);
   const horas = fora ? Number(fora[1]) : 6;
   const escolhidos = animais
     .filter((a) => a.status === "DISPONIVEL")
+    .filter((a) => distanciaKm(lat, lng, a.lat, a.lng) <= raioKm)
     .filter((a) => (apto ? a.porte !== "GRANDE" : true))
     .filter((a) => (horas >= 8 ? a.especie === "GATO" || a.idadeMeses > 24 : true))
     .sort((a, b) => (ativo ? Number(b.temperamento?.includes("energético")) - Number(a.temperamento?.includes("energético")) : a.idadeMeses - b.idadeMeses))
@@ -197,7 +199,9 @@ export function recomendar(rotina: string) {
       fotoThumb: a.fotoThumb || undefined,
       motivoRecomendacao: `${a.especie === "GATO" ? "Gato" : "Cão"} de porte ${a.porte.toLowerCase()}, ${a.temperamento?.join(" e ")}${apto ? ", combina com apartamento" : ""}.`,
     })),
-    explicacao: `Considerei ${apto ? "a moradia em apartamento" : "a sua moradia"}, cerca de ${horas} h fora de casa${ativo ? " e o gosto por atividade ao ar livre" : ""}.`,
+    explicacao: escolhidos.length === 0
+      ? `Não encontramos animais disponíveis até ${raioKm} km do seu último ponto de busca; tente ampliar o raio na busca.`
+      : `Considerei ${apto ? "a moradia em apartamento" : "a sua moradia"}, cerca de ${horas} h fora de casa${ativo ? " e o gosto por atividade ao ar livre" : ""}.`,
     degradado: false,
   };
 }

@@ -73,7 +73,8 @@ function Duvidas() {
 
 function Recomendacoes() {
   const [rotina, setRotina] = useState("");
-  const rec = useMutation({ mutationFn: recomendar });
+  // Recomenda perto do último ponto de busca (ou do centro de Lavras, se ainda não buscou).
+  const rec = useMutation({ mutationFn: (r: string) => recomendar(r) });
   return (
     <>
       <form style={{ display: "grid", gap: "0.7rem" }} onSubmit={(e) => { e.preventDefault(); rec.mutate(rotina); }}>
