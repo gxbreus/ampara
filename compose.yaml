@@ -284,6 +284,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-bge-m3}
     networks: [services, data-assistente]
     depends_on:
       qdrant-assistente: { condition: service_healthy }
