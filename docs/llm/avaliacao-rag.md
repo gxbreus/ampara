@@ -138,7 +138,7 @@ execução com a chave.
 
 ## Registro pendente e critérios de conclusão
 
-| Item | Estado verificado em 2026-11-17 |
+| Item | Estado verificado em 2026-11-25 |
 | --- | --- |
 | Dez perguntas e categorias | Preparadas; gabaritos aguardam conferência nas fontes |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
