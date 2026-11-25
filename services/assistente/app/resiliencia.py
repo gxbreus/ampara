@@ -67,6 +67,10 @@ class Circuito:
         self.falhas_consecutivas = 0
         self.aberto_ate = None
 
+    def abrir_por(self, segundos: float) -> None:
+        self.aberto_ate = self._agora() + segundos
+        logger.warning("circuito do LLM aberto por cota esgotada", extra={"segundos": segundos})
+
     def falha(self) -> None:
         self.falhas_consecutivas += 1
         # meio-aberto e falhou de novo, ou chegou ao limite: (re)abre
@@ -75,6 +79,12 @@ class Circuito:
             logger.warning(
                 "circuito do LLM aberto", extra={"falhasConsecutivas": self.falhas_consecutivas}
             )
+
+
+def cota_diaria_esgotada(erro: BaseException) -> bool:
+    """429 de cota por dia (ex.: free tier do Gemini): tentar de novo hoje não adianta."""
+    texto = str(erro).lower()
+    return "429" in texto and ("per day" in texto or "perday" in texto)
 
 
 # erros de rede do SDK da Groq (e do httpx por baixo dele) que não têm status HTTP
@@ -132,6 +142,10 @@ class Resiliencia:
                 logger.warning(
                     "falha no LLM", extra={"tentativa": tentativa + 1, "erro": type(erro).__name__}
                 )
+                if cota_diaria_esgotada(erro):
+                    # não gasta tentativas nem espera: abre por 1 h e o próximo modelo assume
+                    self.circuito.abrir_por(3600)
+                    raise
                 if not transitorio(erro) or tentativa == self.tentativas - 1:
                     break
                 # backoff exponencial com jitter "cheio": espera aleatória até 0,4 s, 0,8 s…

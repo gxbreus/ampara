@@ -62,11 +62,26 @@ class Settings(BaseSettings):
         return "gemini-2.5-flash-lite" if self.llm_provider == "openai" else "openai/gpt-oss-120b"
 
     @property
-    def modelo_reserva(self) -> str:
+    def modelos_reserva(self) -> list[str]:
+        """Reservas na ordem, separadas por vírgula em LLM_FALLBACK_MODEL.
+
+        No plano gratuito do Gemini a cota diária é por modelo (20 requisições por dia no
+        flash-lite): encadear modelos multiplica a cota sem custo.
+        """
         if self.llm_fallback_model:
-            return self.llm_fallback_model
-        # reserva estável (versão fixa, nunca "-latest"); só entra quando o principal falha
-        return "gemini-2.5-flash" if self.llm_provider == "openai" else "llama-3.1-8b-instant"
+            return [m.strip() for m in self.llm_fallback_model.split(",") if m.strip()]
+        if self.llm_provider == "openai":
+            return [
+                "gemini-3.5-flash-lite",
+                "gemini-flash-lite-latest",
+                "gemini-3.5-flash",
+                "gemini-2.5-flash",
+            ]
+        return ["llama-3.1-8b-instant"]
+
+    @property
+    def modelo_reserva(self) -> str:
+        return self.modelos_reserva[0]
 
 
 @lru_cache

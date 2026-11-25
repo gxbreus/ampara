@@ -124,9 +124,15 @@ def test_provedor_compativel_com_openai_usa_o_gemini_por_padrao():
         llm_provider="openai",
         llm_api_key="x",
     )
-    principal, reserva = criar_llms(s)
+    principal, *reservas = criar_llms(s)
     assert isinstance(principal, ChatOpenAI) and principal.model_name == "gemini-2.5-flash-lite"
-    assert reserva.model_name == "gemini-2.5-flash"
+    # cota diária por modelo no plano gratuito: várias reservas multiplicam a cota
+    assert [r.model_name for r in reservas] == [
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+    ]
     assert "generativelanguage.googleapis.com" in str(principal.openai_api_base)
 
 

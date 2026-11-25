@@ -28,7 +28,7 @@ def criar_llms(settings) -> list:
     if not chave:
         logger.warning("LLM_API_KEY vazia: o assistente responde em modo degradado")
         return []
-    modelos = list(dict.fromkeys([settings.modelo, settings.modelo_reserva]))
+    modelos = list(dict.fromkeys([settings.modelo, *settings.modelos_reserva]))
     # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
     comum = {
         "api_key": chave,

@@ -275,3 +275,19 @@ async def test_contingencia_usa_os_tres_trechos_principais_com_as_fontes():
     assert r["degradado"] is True and len(r["fontes"]) == 3
     for t in trechos[:3]:
         assert f"“{t.trecho.titulo}”" in r["resposta"]
+
+
+async def test_cota_diaria_esgotada_nao_tenta_de_novo_e_passa_para_a_reserva():
+    class CotaDiaria(Exception):
+        status_code = 429
+
+        def __str__(self):
+            return "Error code: 429 - Generate content requests per day limit exceeded on Free Tier"
+
+    principal = LlmFake([CotaDiaria(), "ok"])
+    reserva = LlmTexto("Vacine com orientação [1].")
+    servico = rag(llms=[principal, reserva])
+    r = await servico.responder("Quando vacinar?")
+    assert not r["degradado"] and r["resposta"] == "Vacine com orientação [1]."
+    assert principal.chamadas == 1  # sem novas tentativas no modelo sem cota
+    assert servico.resiliencias[0].circuito.estado == "aberto"
