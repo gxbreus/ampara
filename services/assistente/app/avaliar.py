@@ -188,6 +188,8 @@ async def avaliar(args) -> None:
                     com["checagemCitacao"] = f"recusada: {erro}"
             sem = await gerar(llm, PROMPT_SEM_RAG, {"pergunta": p["pergunta"]})
 
+        # pausa entre perguntas: o plano gratuito do provedor limita requisições por minuto
+        await asyncio.sleep(args.pausa)
         registros.append(
             {
                 **base,
@@ -256,6 +258,7 @@ async def avaliar(args) -> None:
                     if cenario == "cache_frio"
                     else pergunta
                 )
+                await asyncio.sleep(args.pausa)
                 try:
                     r = await rag.responder(texto)
                 except Exception:  # noqa: BLE001
@@ -298,6 +301,9 @@ def main() -> None:
     parser.add_argument("--preco-saida", type=float, help="US$ por milhão de tokens de saída")
     parser.add_argument("--preco-data", help="data em que o preço oficial foi consultado")
     parser.add_argument("--semente", type=int, default=70)
+    parser.add_argument(
+        "--pausa", type=float, default=0, help="segundos entre chamadas (limite do plano gratuito)"
+    )
     asyncio.run(avaliar(parser.parse_args()))
 
 
