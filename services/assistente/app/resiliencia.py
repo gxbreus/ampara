@@ -36,6 +36,7 @@ class Metricas:
     falhas: int = 0
     fallbacks: int = 0
     cache_hits: int = 0
+    citacoes_invalidas: int = 0
 
 
 @dataclass
@@ -149,6 +150,7 @@ class Resiliencia:
             "falhas": self.metricas.falhas,
             "fallbacks": self.metricas.fallbacks,
             "cacheHits": self.metricas.cache_hits,
+            "citacoesInvalidas": self.metricas.citacoes_invalidas,
             "tentarNovamenteEm": self.circuito.tentar_novamente_em(),
         }
 

@@ -190,3 +190,78 @@ async def test_meio_aberto_que_falha_reabre_na_hora():
     with pytest.raises(TimeoutError):
         await resiliencia.chamar(falha)
     assert circuito.estado == "aberto"
+
+
+# ---------- checagem de citação ----------
+
+
+class LlmTexto(Runnable):
+    """Devolve os textos dados, um por chamada (o último se repete)."""
+
+    def __init__(self, *textos):
+        self.textos, self.chamadas = list(textos), 0
+
+    def invoke(self, entrada, config=None, **_):
+        raise NotImplementedError
+
+    async def ainvoke(self, entrada, config=None, **_):
+        self.chamadas += 1
+        return AIMessage(content=self.textos.pop(0) if len(self.textos) > 1 else self.textos[0])
+
+
+async def test_citacoes_validas_viram_so_as_fontes_citadas_renumeradas():
+    servico = rag(
+        llms=[LlmTexto("Faça a adaptação aos poucos [3]. Consulte o veterinário [1, 3].")]
+    )
+    r = await servico.responder("Como apresentar o gato?")
+    assert not r["degradado"]
+    # [3] aparece primeiro, então vira [1]; o antigo [1] vira [2]
+    assert r["resposta"] == "Faça a adaptação aos poucos [1]. Consulte o veterinário [2, 1]."
+    trechos = servico.indice.resultados
+    assert [f["origem"] for f in r["fontes"]] == [
+        trechos[2].trecho.origem,
+        trechos[0].trecho.origem,
+    ]
+
+
+async def test_resposta_sem_citacao_e_recusada_e_cai_na_contingencia():
+    llm = LlmTexto("Leve ao veterinário e tenha paciência.")
+    servico = rag(llms=[llm])
+    r = await servico.responder("Como apresentar o gato?")
+    assert r["degradado"] is True and "fontes da Ampara" in r["resposta"]
+    assert servico.resiliencia.estado()["citacoesInvalidas"] == 1
+    # o provedor respondeu: checagem de citação não abre o circuito
+    assert servico.resiliencia.estado()["circuito"] == "fechado"
+
+
+async def test_citacao_de_fonte_inexistente_e_recusada():
+    r = await rag(llms=[LlmTexto("Segundo a lei [7], é obrigatório.")]).responder("E a lei?")
+    assert r["degradado"] is True
+
+
+async def test_reserva_salva_quando_o_principal_nao_cita():
+    principal, reserva = LlmTexto("Sem citar nada."), LlmTexto("Vacine com orientação [2].")
+    r = await rag(llms=[principal, reserva]).responder("Quando vacinar?")
+    assert not r["degradado"] and r["resposta"] == "Vacine com orientação [1]."
+    assert principal.chamadas == 1 and reserva.chamadas == 1
+
+
+async def test_sem_cobertura_responde_sem_fontes_e_sem_inventar():
+    llm = LlmTexto("SEM_COBERTURA: As fontes da Ampara não informam horários de clínicas [1].")
+    r = await rag(llms=[llm]).responder("Qual o horário das clínicas de Lavras hoje?")
+    assert not r["degradado"] and r["fontes"] == []
+    assert r["resposta"] == "As fontes da Ampara não informam horários de clínicas."
+    assert "SEM_COBERTURA" not in r["resposta"]
+
+
+async def test_sem_cobertura_sem_o_marcador_tambem_nao_mostra_fontes():
+    r = await rag(
+        llms=[LlmTexto("As fontes da Ampara não cobrem esse ponto; procure a ONG.")]
+    ).responder("x")
+    assert not r["degradado"] and r["fontes"] == []
+
+
+async def test_resposta_recusada_nao_vai_para_o_cache():
+    redis = RedisFake()
+    await rag(llms=[LlmTexto("Sem citação.")], redis=redis).responder("Como apresentar o gato?")
+    assert redis.dados == {}

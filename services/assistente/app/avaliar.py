@@ -35,7 +35,7 @@ from app import conhecimento
 from app.config import get_settings
 from app.indice import Embeddings, Indice
 from app.main import criar_llms
-from app.rag import PROMPT, Rag, contexto
+from app.rag import PROMPT, CitacaoInvalida, Rag, contexto, verificar_citacoes
 from app.resiliencia import Cache, Resiliencia
 
 # sem RAG: o mesmo modelo e as mesmas instruções de estilo, mas sem as fontes
@@ -178,6 +178,14 @@ async def avaliar(args) -> None:
             com = await gerar(
                 llm, PROMPT, {"pergunta": p["pergunta"], "contexto": contexto(relevantes)}
             )
+            # a mesma checagem de citação do serviço: registra se a resposta seria aceita
+            if "resposta" in com:
+                try:
+                    v = verificar_citacoes(com["resposta"], relevantes)
+                    com["checagemCitacao"] = "ok" if v.usados else "sem_cobertura"
+                    com["fontesCitadas"] = [r.trecho.arquivo for r in v.usados]
+                except CitacaoInvalida as erro:
+                    com["checagemCitacao"] = f"recusada: {erro}"
             sem = await gerar(llm, PROMPT_SEM_RAG, {"pergunta": p["pergunta"]})
 
         registros.append(
