@@ -136,16 +136,69 @@ execução com a chave.
   ("se as fontes não cobrirem, diga que não cobrem; nunca invente clínicas ou horários"),
   e isso só é verificável na execução com o LLM.
 
+## Execução com o LLM (25/11/2026, `gemini-2.5-flash-lite`)
+
+Execução real do runner (`--pausa 4 --latencia 10`), base `ae06f1c860d3`, 4 trechos,
+temperatura 0,2, fora do cluster (mesmo código, base, embeddings e modelo; dentro do pod a
+segunda cópia do modelo de embeddings estourou o limite de memória). **A cota gratuita do
+Gemini é de 20 requisições por dia por modelo**: ela acabou no meio da execução, então 9
+chamadas voltaram 429 e estão registradas como erro, não descartadas.
+
+| Pergunta | Com RAG: checagem de citação | Fontes citadas | Geração (ms) | Tokens (entrada/saída) | Sem RAG |
+| --- | --- | --- | --- | --- | --- |
+| P01 vacinação de filhote | ok | 06, 13, 04, 03 | 1.477 | 592/119 | respondeu (811 ms, 86/100) |
+| P02 janelas e gatos | ok | 10, 04, 11 | 737 | 621/78 | 429 |
+| P03 porte e rotina | **sem cobertura** | — | 683 | 608/86 | respondeu (1.073 ms, 83/90) |
+| P04 apresentar a outros animais | 429 | — | — | — | 429 |
+| P05 cão abandonado | ok | 04 | 787 | 603/75 | 429 |
+| P06 Lei 14.064 | ok | 02, 01 | 1.029 | 669/107 | 429 |
+| P07 aceite ≠ adoção concluída | ok | 14 | 692 | 614/67 | 429 |
+| P08 viagens | 429 | — | — | — | 429 |
+| P09 capital da França | recusa sem LLM (similaridade 0,10) | — | 0 | — | 429 |
+| P10 horário das clínicas | **sem cobertura** | — | 782 | 608/49 | respondeu (608 ms, 81/60) |
+
+**Observações (conferidas nas fontes; ainda não substituem a avaliação humana cega):**
+
+- **Todas as 7 respostas com RAG passaram na checagem de citação** (5 citando fontes que
+  existem e 2 declarando sem cobertura). Nenhuma citou fonte inexistente.
+- **P06 é fundamentada:** "parágrafo 1º-A, reclusão de dois a cinco anos, multa e proibição
+  da guarda" está literalmente em `kb/02-lei-14064.md`.
+- **P10 se comportou como o protocolo pede:** com RAG, disse que as fontes não cobrem e não
+  inventou clínicas nem horários. Sem RAG, também não inventou ("não tenho acesso a
+  informações em tempo real").
+- **P03 mostra o custo de uma recuperação ruim:** como a busca não trouxe
+  `03-planejamento.md` (o erro de recuperação já registrado acima), o modelo com RAG
+  respondeu "sem cobertura", enquanto sem RAG deu uma resposta plausível de conhecimento
+  geral. Com RAG o erro é por omissão (seguro), não por invenção.
+- **Tokens:** com RAG a entrada é ~7 vezes maior (≈600 contra ≈85 tokens), por causa dos 4
+  trechos de contexto; a saída é parecida (≈50 a 120 tokens).
+- **Custo:** no plano gratuito, US$ 0. O custo no plano pago não foi calculado porque o
+  preço oficial do modelo não foi consultado e datado nesta execução (use `--preco-entrada`,
+  `--preco-saida` e `--preco-data`).
+
+**Latência (10 chamadas por cenário):** cache frio p50 5,9 s e p95 7,2 s; cache quente
+p50 51 ms. **O cache frio está inflado:** as chamadas aconteceram no limite de requisições
+por minuto do plano gratuito, e as novas tentativas com backoff (429) entram no tempo. Uma
+chamada isolada ao `gemini-2.5-flash-lite` levou cerca de 1 s nos testes. Repetir a medição
+com cota disponível (`--pausa 8` ou mais) antes de apresentar o número.
+
+**Consequência para a operação:** com 20 requisições por dia por modelo, o Assistente usa
+uma lista de reservas (`LLM_FALLBACK_MODEL`, um modelo por cota) e, quando um modelo
+responde "cota diária excedida", o circuito dele abre por 1 hora e a próxima reserva assume
+sem novas tentativas. Para a demo e a gravação, a alternativa sem limite apertado é ativar o
+faturamento do projeto no Google AI Studio (o flash-lite custa frações de centavo por
+pergunta).
+
 ## Registro pendente e critérios de conclusão
 
 | Item | Estado verificado em 2026-11-25 |
 | --- | --- |
 | Dez perguntas e categorias | Preparadas; gabaritos aguardam conferência nas fontes |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
-| Execução com e sem RAG | Runner pronto; recuperação medida em 25/11; geração aguarda `LLM_API_KEY` |
+| Execução com e sem RAG | Executada em 25/11 com `gemini-2.5-flash-lite`: 7 de 10 com RAG e 3 sem RAG (o resto parou na cota diária); repetir completa com cota |
 | Cache, recuperação e falhas observáveis | Implementados (#69): `GET /v1/estado` mostra circuito, falhas, fallbacks e cache hits |
 | Dois avaliadores e médias | Não realizadas |
-| p50/p95 e tokens | Runner pronto (`--latencia N`); não medidos sem a chave |
+| p50/p95 e tokens | Tokens medidos; latência medida mas inflada pelo limite de requisições do plano gratuito |
 | Resultados brutos e conclusão qualitativa | Não disponíveis |
 
 Só escrever onde o RAG ajudou, falhou e precisa melhorar após analisar os
