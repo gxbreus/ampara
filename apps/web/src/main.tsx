@@ -1,5 +1,6 @@
-import "@fontsource-variable/fraunces";
-import "@fontsource-variable/instrument-sans";
+import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/onest";
+import "@fontsource-variable/jetbrains-mono";
 import "@c/base.css";
 import "./estilo.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

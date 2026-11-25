@@ -1,3 +1,4 @@
+import { IcEditar, IcVoltar } from "@c/icones";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ESPECIES, PORTES, STATUS_ANIMAL, idade, relativo } from "@c/api";
@@ -27,16 +28,16 @@ export function AnimalDetalhe() {
 
   return (
     <>
-      <Link to="/animais" className="voltar">← Animais</Link>
+      <Link to="/animais" className="voltar"><IcVoltar tamanho={18} /> Animais</Link>
       <Cabecalho
         titulo={a.nome}
         sobre={<><SeloStatus status={a.status} /> · atualizado {relativo(a.atualizadoEm)}</>}
         origem={rotas.origem("animais")}
-        acoes={<Link className="btn contorno" to={`/animais/${a.id}/editar`}>Editar dados</Link>}
+        acoes={<Link className="btn contorno" to={`/animais/${a.id}/editar`}><IcEditar tamanho={18} /> Editar dados</Link>}
       />
       <Avisos avisos={a.avisos} />
       <div className="detalhe">
-        <div style={{ display: "grid", gap: "1.25rem" }}>
+        <div className="coluna">
           <div className="retrato">
             <Retrato nome={a.nome} especie={a.especie} src={a.fotoCapa} />
           </div>
@@ -48,7 +49,7 @@ export function AnimalDetalhe() {
           </section>
         </div>
 
-        <div style={{ display: "grid", gap: "1.25rem" }}>
+        <div className="coluna">
           <section className="cartao bloco">
             <h2>Ficha</h2>
             <dl className="dados">

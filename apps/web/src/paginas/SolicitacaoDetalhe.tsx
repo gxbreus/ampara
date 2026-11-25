@@ -1,3 +1,4 @@
+import { IcVoltar } from "@c/icones";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -70,7 +71,7 @@ export function SolicitacaoDetalhe() {
 
   return (
     <>
-      <Link to="/solicitacoes" className="voltar">← Solicitações</Link>
+      <Link to="/solicitacoes" className="voltar"><IcVoltar tamanho={18} /> Solicitações</Link>
       <Cabecalho
         titulo={<>Pedido por <em>{s.animal?.nome ?? "um animal"}</em></>}
         sobre={<>feito {relativo(s.criadoEm)} · <SeloEstado estado={s.estado} /></>}
@@ -79,7 +80,7 @@ export function SolicitacaoDetalhe() {
       <Avisos avisos={s.avisos} />
 
       <div className="detalhe">
-        <div style={{ display: "grid", gap: "1.25rem" }}>
+        <div className="coluna">
           {s.animal && (
             <Link to={`/animais/${s.animal.id}`} className="retrato" style={{ display: "block" }}>
               <Retrato nome={s.animal.nome} src={s.animal.fotoCapa} />
@@ -99,7 +100,7 @@ export function SolicitacaoDetalhe() {
           </section>
         </div>
 
-        <div style={{ display: "grid", gap: "1.25rem" }}>
+        <div className="coluna">
           {(s._links.aprovar || s._links.recusar) && (
             <section className="cartao decisao surgir">
               <h2>Sua decisão</h2>
@@ -161,15 +162,17 @@ export function SolicitacaoDetalhe() {
             )}
             {s.motivo && (
               <div className="aviso-faixa">
-                {/^[A-Z0-9_]+$/.test(s.motivo) ? (
-                  <>
-                    <strong>Motivo técnico:</strong> <code>{s.motivo}</code> (a SAGA desfez a reserva sozinha)
-                  </>
-                ) : (
-                  <>
-                    <strong>Motivo:</strong> {s.motivo}
-                  </>
-                )}
+                <span>
+                  {/^[A-Z0-9_]+$/.test(s.motivo) ? (
+                    <>
+                      <strong>Motivo técnico:</strong> <code>{s.motivo}</code>. A SAGA desfez a reserva sozinha.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Motivo:</strong> {s.motivo}
+                    </>
+                  )}
+                </span>
               </div>
             )}
           </section>

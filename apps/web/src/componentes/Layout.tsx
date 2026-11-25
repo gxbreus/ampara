@@ -1,6 +1,9 @@
+import { useTituloPagina } from "@c/ganchos";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, type ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { IcCasa, IcEnvelope, IcEscudo, IcPata, IcSair } from "@c/icones";
+import { Logo } from "@c/marca";
 import { useSessao } from "@c/sessao";
 import { rotas, type Grupo } from "../api/servicos";
 import type { MinhaConta } from "../api/tipos";
@@ -8,31 +11,58 @@ import type { MinhaConta } from "../api/tipos";
 const PAPEIS: Record<string, string> = { ONG: "ONG", PROTETOR: "Protetor(a)", ADMIN: "Administração" };
 const GRUPOS: Grupo[] = ["auth", "eu", "painel", "animais", "solicitacoes", "admin"];
 
+function tituloDaRota(caminho: string) {
+  if (caminho === "/") return "Visão geral";
+  if (caminho === "/animais/novo") return "Cadastrar animal";
+  if (caminho.endsWith("/editar")) return "Editar animal";
+  if (caminho.startsWith("/animais/")) return "Animal";
+  if (caminho === "/animais") return "Animais";
+  if (caminho.startsWith("/solicitacoes/")) return "Solicitação";
+  if (caminho === "/solicitacoes") return "Solicitações";
+  if (caminho.startsWith("/admin")) return "Verificação de contas";
+  return undefined;
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { conta, sair } = useSessao<MinhaConta>();
   const navegar = useNavigate();
   const consultas = useQueryClient();
+  const { pathname } = useLocation();
+  useTituloPagina(tituloDaRota(pathname), "Ampara · Painel");
+
+  // ao trocar de tela, volta ao topo e leva o foco ao conteúdo (leitor de tela anuncia a página nova)
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+    document.getElementById("conteudo")?.focus({ preventScroll: true });
+  }, [pathname]);
+
+  const encerrar = () => {
+    sair();
+    consultas.clear();
+    navegar("/entrar");
+  };
 
   return (
     <div className="casca">
+      <a href="#conteudo" className="pular">Pular para o conteúdo</a>
       <aside className="lateral">
-        <div className="marca">
-          <span className="marca-nome">Ampara</span>
-          <span className="marca-sub">painel de quem cuida</span>
-        </div>
-        <nav>
+        <NavLink to="/" className="lateral-marca" aria-label="Ampara, visão geral">
+          <Logo tamanho={36} sub="painel de quem cuida" />
+        </NavLink>
+
+        <nav className="menu" aria-label="Seções do painel">
           <NavLink to="/" end>
-            <span aria-hidden>◐</span> Visão geral
+            <IcCasa /> <span>Visão geral</span>
           </NavLink>
           <NavLink to="/animais">
-            <span aria-hidden>🐾</span> Animais
+            <IcPata /> <span>Animais</span>
           </NavLink>
           <NavLink to="/solicitacoes">
-            <span aria-hidden>✉</span> Solicitações
+            <IcEnvelope /> <span>Solicitações</span>
           </NavLink>
           {conta?.role === "ADMIN" && (
             <NavLink to="/admin/contas">
-              <span aria-hidden>✓</span> Verificar contas
+              <IcEscudo /> <span>Contas</span>
             </NavLink>
           )}
         </nav>
@@ -53,24 +83,18 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="avatar" aria-hidden>
             {conta?.nome.charAt(0)}
           </div>
-          <div>
+          <div className="quem-texto">
             <strong>{conta?.nome}</strong>
             <small>{PAPEIS[conta?.role ?? ""] ?? conta?.role}</small>
           </div>
-          <button
-            className="sair"
-            title="Sair"
-            onClick={() => {
-              sair();
-              consultas.clear();
-              navegar("/entrar");
-            }}
-          >
-            ⎋<span className="sr-only">Sair</span>
+          <button className="sair" onClick={encerrar} aria-label="Sair da conta" title="Sair">
+            <IcSair />
           </button>
         </div>
       </aside>
-      <main className="conteudo">{children}</main>
+      <main className="conteudo" id="conteudo" tabIndex={-1}>
+        {children}
+      </main>
     </div>
   );
 }
@@ -78,7 +102,7 @@ export function Layout({ children }: { children: ReactNode }) {
 export function Cabecalho({ titulo, sobre, origem, acoes }: { titulo: ReactNode; sobre?: ReactNode; origem?: "real" | "simulado"; acoes?: ReactNode }) {
   return (
     <header className="cabecalho surgir">
-      <div>
+      <div className="cabecalho-texto">
         <h1>{titulo}</h1>
         {(sobre || origem) && (
           <p>

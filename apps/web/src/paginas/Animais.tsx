@@ -1,6 +1,6 @@
+import { IcMais } from "@c/icones";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ESPECIES, PORTES, STATUS_ANIMAL, relativo } from "@c/api";
 import { Avisos, Carregando, Erro, Retrato, SeloStatus, Vazio } from "@c/ui";
 import { listarAnimais, rotas } from "../api/servicos";
@@ -10,7 +10,9 @@ import { Cabecalho } from "../componentes/Layout";
 const FILTROS: (StatusAnimal | undefined)[] = [undefined, "DISPONIVEL", "RESERVADO", "EM_TRATAMENTO", "INDISPONIVEL", "ADOTADO"];
 
 export function Animais() {
-  const [status, setStatus] = useState<StatusAnimal | undefined>();
+  const [params, setParams] = useSearchParams();
+  const status = (params.get("status") as StatusAnimal | null) ?? undefined;
+  const setStatus = (s?: StatusAnimal) => setParams(s ? { status: s } : {}, { replace: true });
   const q = useQuery({ queryKey: ["animais", status ?? "todos"], queryFn: () => listarAnimais({ status }) });
 
   return (
@@ -19,7 +21,7 @@ export function Animais() {
         titulo="Seus animais"
         sobre="Quem está reservado ou adotado muda de status pela SAGA, não à mão."
         origem={rotas.origem("animais")}
-        acoes={<Link className="btn acento" to="/animais/novo">+ Cadastrar animal</Link>}
+        acoes={<Link className="btn acento" to="/animais/novo"><IcMais tamanho={18} /> Cadastrar animal</Link>}
       />
       <div className="chips" role="group" aria-label="Filtrar por status">
         {FILTROS.map((f) => (

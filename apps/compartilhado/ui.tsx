@@ -1,6 +1,7 @@
 import type React from "react";
 import type { ReactNode } from "react";
 import { ErroApi, ESTADOS, STATUS_ANIMAL, dataHora, type Tom } from "./api";
+import { IcAlerta, IcCheck, IcPata, IcX } from "./icones";
 
 export function Selo({ tom = "neutro", children }: { tom?: Tom; children: ReactNode }) {
   return <span className={`selo ${tom}`}>{children}</span>;
@@ -43,7 +44,7 @@ export function Avisos({ avisos }: { avisos?: (string | { servico: string; motiv
   if (!avisos?.length) return null;
   return (
     <div className="aviso-faixa" role="status">
-      <span aria-hidden>⚠</span>
+      <IcAlerta tamanho={20} />
       <div>
         <strong>Resposta parcial.</strong>{" "}
         {avisos
@@ -63,7 +64,7 @@ export function Erro({ erro, onTentar }: { erro: unknown; onTentar?: () => void 
   const e = erro instanceof ErroApi ? erro : null;
   return (
     <div className="aviso-faixa erro" role="alert">
-      <span aria-hidden>✕</span>
+      <IcX tamanho={20} />
       <div style={{ flex: 1 }}>
         <strong>{e?.titulo ?? "Algo deu errado"}.</strong> {e?.detalhe ?? (erro instanceof Error ? erro.message : "")}
         {e && e.status > 0 && <small style={{ opacity: 0.7 }}> (HTTP {e.status})</small>}
@@ -101,7 +102,7 @@ export function LinhaDoTempo({ etapas, atualFinal }: { etapas: EtapaTempo[]; atu
         return (
           <li key={`${e.titulo}-${i}`} className={`${e.falha ? "falha" : ""} ${atual ? "atual" : ""}`}>
             <span className="carimbo" aria-hidden>
-              {e.falha ? "✕" : atual ? "●" : "✓"}
+              {e.falha ? <IcX tamanho={16} strokeWidth={3} /> : atual ? <span style={{ width: 9, height: 9, borderRadius: 9, background: "var(--tinta)" }} /> : <IcCheck tamanho={16} strokeWidth={3} />}
             </span>
             <strong>{e.titulo}</strong>
             {e.detalhe && <small>{e.detalhe} · </small>}
@@ -119,17 +120,16 @@ export const ehFalha = (estado: string) => FALHAS.has(estado);
 // Retrato do animal: usa a foto quando existe; sem foto (o seed não tem), desenha um
 // cartão com a inicial, em cores derivadas do nome. Funciona offline na demo.
 const PALETAS = [
-  ["#c4532f", "#f6e3bd"],
-  ["#6f8a5c", "#f5efe3"],
-  ["#3e6a7d", "#f6e3bd"],
-  ["#8f2d3a", "#f1d6d6"],
-  ["#d99a2b", "#1d2a23"],
-  ["#1d2a23", "#dfe6d3"],
+  ["#ff6a3d", "#1e1b2e"],
+  ["#ffc145", "#1e1b2e"],
+  ["#1f8a5b", "#fff9f1"],
+  ["#ff8fa6", "#1e1b2e"],
+  ["#1e1b2e", "#ffc145"],
+  ["#f6ecde", "#ff6a3d"],
 ];
-const GLIFOS: Record<string, string> = { CAO: "🐕", GATO: "🐈", OUTRO: "🐾" };
 
 export function Retrato({ nome, especie, src, className = "foto", style }: { nome: string; especie?: string; src?: string | null; className?: string; style?: React.CSSProperties }) {
-  if (src && !src.includes("exemplo.ampara.dev")) return <img className={className} style={style} src={src} alt={`Foto de ${nome}`} loading="lazy" />;
+  if (src && !src.includes("exemplo.ampara.dev")) return <img className={className} style={style} src={src} alt={`Foto de ${nome}`} width={640} height={480} loading="lazy" decoding="async" />;
   let h = 0;
   for (const c of nome) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const [fundo, tinta] = PALETAS[h % PALETAS.length];
@@ -140,7 +140,8 @@ export function Retrato({ nome, especie, src, className = "foto", style }: { nom
       aria-label={`Retrato de ${nome}`}
       style={{
         ...style,
-        background: `radial-gradient(circle at ${20 + (h % 60)}% ${15 + (h % 40)}%, ${tinta}33 0 18%, transparent 19%), radial-gradient(circle at 85% 90%, ${tinta}22 0 30%, transparent 31%), ${fundo}`,
+        // formas grandes e chapadas, como recortes de papel colorido
+        background: `radial-gradient(circle at ${15 + (h % 55)}% ${110 - (h % 25)}%, ${tinta}1f 0 34%, transparent 34.5%), radial-gradient(circle at ${88 - (h % 20)}% ${8 + (h % 22)}%, ${tinta}14 0 22%, transparent 22.5%), ${fundo}`,
         color: tinta,
         display: "grid",
         placeItems: "center",
@@ -149,8 +150,10 @@ export function Retrato({ nome, especie, src, className = "foto", style }: { nom
         containerType: "inline-size",
       }}
     >
-      <span style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: "clamp(1.6rem, 24cqw, 7.5rem)", fontStyle: "italic", lineHeight: 1 }}>{nome.charAt(0)}</span>
-      <span style={{ position: "absolute", right: "8%", bottom: "6%", fontSize: "clamp(0.8rem, 8cqw, 1.6rem)", opacity: 0.85 }}>{GLIFOS[especie ?? ""] ?? "🐾"}</span>
+      <span style={{ fontFamily: "var(--display)", fontWeight: 800, fontSize: "clamp(1.6rem, 30cqw, 9rem)", letterSpacing: "-0.06em", lineHeight: 1 }}>{nome.charAt(0)}</span>
+      <span style={{ position: "absolute", right: "7%", bottom: "7%", width: "clamp(14px, 11cqw, 30px)", opacity: 0.9, display: "grid" }} title={especie === "GATO" ? "Gato" : especie === "CAO" ? "Cão" : undefined}>
+        <IcPata tamanho={30} style={{ width: "100%", height: "auto" }} />
+      </span>
     </div>
   );
 }

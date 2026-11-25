@@ -1,3 +1,4 @@
+import { IcSeta } from "@c/icones";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { PORTES, relativo } from "@c/api";
@@ -28,6 +29,7 @@ export function Pedidos() {
             </small>
             <span><SeloEstado estado={s.estado} /></span>
           </div>
+          <IcSeta className="seta" />
         </Link>
       ))}
     </>

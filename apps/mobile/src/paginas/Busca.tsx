@@ -1,6 +1,7 @@
+import { IcLocal } from "@c/icones";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PORTES } from "@c/api";
 import { Avisos, Carregando, Erro, Origem, Retrato, SeloEstado, Vazio } from "@c/ui";
 import { buscar, rotas } from "../api/servicos";
@@ -11,15 +12,32 @@ const LAVRAS = { lat: -21.2453, lng: -44.9998 };
 
 export function Busca() {
   const [ponto, setPonto] = useState(LAVRAS);
-  const [onde, setOnde] = useState<"padrao" | "buscando" | "gps">("padrao");
-  const [raioKm, setRaioKm] = useState(10);
-  const [raioAplicado, setRaioAplicado] = useState(10);
-  const [especie, setEspecie] = useState<Especie | undefined>();
-  const [porte, setPorte] = useState<Porte | undefined>();
+  const [onde, setOnde] = useState<"padrao" | "buscando" | "gps" | "negado">("padrao");
+  // filtros na URL: o link da busca pode ser compartilhado e o "voltar" da ficha mantém a busca
+  const [params, setParams] = useSearchParams();
+  const especie = (params.get("especie") as Especie | null) ?? undefined;
+  const porte = (params.get("porte") as Porte | null) ?? undefined;
+  const raioAplicado = Math.min(100, Math.max(1, Number(params.get("raio")) || 10));
+  const [raioKm, setRaioKm] = useState(raioAplicado);
+  const filtro = (chave: string, valor?: string) =>
+    setParams(
+      (atual) => {
+        const novo = new URLSearchParams(atual);
+        if (valor) novo.set(chave, valor);
+        else novo.delete(chave);
+        return novo;
+      },
+      { replace: true },
+    );
+  const setEspecie = (e?: Especie) => filtro("especie", e);
+  const setPorte = (p?: Porte) => filtro("porte", p);
 
+  // o raio só vai para a URL (e dispara a busca) quando o dedo para de arrastar
   useEffect(() => {
-    const t = setTimeout(() => setRaioAplicado(raioKm), 350);
+    if (raioKm === raioAplicado) return;
+    const t = setTimeout(() => filtro("raio", raioKm === 10 ? undefined : String(raioKm)), 350);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raioKm]);
 
   const usarGps = () => {
@@ -30,7 +48,7 @@ export function Busca() {
         setPonto({ lat: +p.coords.latitude.toFixed(4), lng: +p.coords.longitude.toFixed(4) });
         setOnde("gps");
       },
-      () => setOnde("padrao"),
+      () => setOnde("negado"),
       { timeout: 8000 },
     );
   };
@@ -47,22 +65,27 @@ export function Busca() {
     <>
       <section className="hero surgir">
         <div className="onde">
-          <span>📍 {onde === "gps" ? "Perto de você" : "Lavras, MG"}</span>
+          <span><IcLocal tamanho={17} /> {onde === "gps" ? "Perto de você" : "Lavras, MG"}</span>
           <button onClick={usarGps} disabled={onde === "buscando"}>{onde === "buscando" ? "Localizando…" : "Usar minha localização"}</button>
         </div>
         <h1>
           Quem está esperando por <em>você</em>?
         </h1>
+        {onde === "negado" && (
+          <small role="status" style={{ fontWeight: 600 }}>
+            Sem acesso à localização. Mostrando animais perto do centro de Lavras; libere a localização no navegador para ver os mais próximos de você.
+          </small>
+        )}
         <label className="raio">
           <span>Até {raioKm} km daqui</span>
-          <input type="range" min={1} max={100} value={raioKm} onChange={(e) => setRaioKm(Number(e.target.value))} />
+          <input type="range" min={1} max={100} value={raioKm} aria-valuetext={`${raioKm} quilômetros`} onChange={(e) => setRaioKm(Number(e.target.value))} />
         </label>
       </section>
 
       <div className="filtros" role="group" aria-label="Filtros">
         {([undefined, "CAO", "GATO"] as const).map((e) => (
           <button key={e ?? "todos"} className="chip" aria-pressed={especie === e} onClick={() => setEspecie(e)}>
-            {e === "CAO" ? "🐕 Cães" : e === "GATO" ? "🐈 Gatos" : "Todos"}
+            {e === "CAO" ? "Cães" : e === "GATO" ? "Gatos" : "Todos"}
           </button>
         ))}
         {(["PEQUENO", "MEDIO", "GRANDE"] as const).map((p) => (
@@ -72,8 +95,8 @@ export function Busca() {
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <small style={{ color: "var(--tinta-3)" }}>{q.isSuccess ? `${itens.length} ${itens.length === 1 ? "animal" : "animais"} no raio` : " "}</small>
+      <div className="contador-busca" aria-live="polite">
+        <span>{q.isSuccess ? `${itens.length} ${itens.length === 1 ? "animal" : "animais"} até ${raioAplicado} km` : " "}</span>
         <Origem origem={rotas.origem("busca")} />
       </div>
 

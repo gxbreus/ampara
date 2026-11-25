@@ -1,3 +1,5 @@
+import { useTituloPagina } from "@c/ganchos";
+import { Logo } from "@c/marca";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
@@ -14,6 +16,7 @@ const CONTAS_DEV = [
 ] as const;
 
 export function Entrar() {
+  useTituloPagina("Entrar", "Ampara · Painel");
   const { conta, entrar: guardar, expirou } = useSessao<MinhaConta>();
   const navegar = useNavigate();
   const de = (useLocation().state as { de?: string } | null)?.de ?? "/";
@@ -44,21 +47,21 @@ export function Entrar() {
   return (
     <div className="portal">
       <section className="portal-arte">
-        <span className="marca-nome">Ampara</span>
+        <Logo tamanho={40} arco="var(--tinta)" pata="var(--laranja)" />
         <div>
           <h1>
             Cada resgate merece um <em>lar</em> de verdade.
           </h1>
           <p>O painel onde ONGs e protetores cadastram os animais, acompanham cada pedido de adoção e decidem com calma, vendo o perfil de quem pediu.</p>
         </div>
-        <small style={{ opacity: 0.5 }}>Sistemas Distribuídos · 2026</small>
+        <small className="portal-rodape">Sistemas Distribuídos · 2026</small>
       </section>
 
       <section className="portal-form">
         <form onSubmit={enviar} className="surgir">
           <div>
             <h2>Entrar no painel</h2>
-            <p style={{ color: "var(--tinta-2)", margin: "0.4rem 0 0" }}>
+            <p className="sub">
               Para ONGs, protetores e administração. <span className={`origem ${rotas.origem("auth")}`}>{rotas.origem("auth")}</span>
             </p>
           </div>
@@ -67,11 +70,11 @@ export function Entrar() {
           {erroPapel && <div className="aviso-faixa erro">Esta conta é de adotante. Use o app do adotante (porta 5174).</div>}
           <label className="campo">
             <span>E-mail</span>
-            <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="email" required name="email" autoComplete="username" spellCheck={false} autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
           <label className="campo">
             <span>Senha</span>
-            <input type="password" required autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+            <input type="password" required name="senha" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
           </label>
           <button className="btn acento largo" disabled={login.isPending}>
             {login.isPending ? "Entrando…" : "Entrar"}

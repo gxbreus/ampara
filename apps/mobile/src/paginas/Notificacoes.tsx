@@ -26,7 +26,7 @@ export function Notificacoes() {
         {q.data?.itens.map((n, i) => (
           <button key={n.id} className={`cartao notificacao ${n.lida ? "" : "nova"}`} style={{ animationDelay: `${i * 0.04}s` }} onClick={() => !n.lida && ler.mutate(n.id)}>
             <strong>{n.titulo}</strong>
-            <p>{n.mensagem}</p>
+            <span className="msg">{n.mensagem}</span>
             <time dateTime={n.criadoEm}>{relativo(n.criadoEm)}</time>
           </button>
         ))}

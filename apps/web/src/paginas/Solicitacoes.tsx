@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ESTADOS } from "@c/api";
 import { Avisos, Carregando, Erro, Vazio } from "@c/ui";
 import { listarSolicitacoes, rotas } from "../api/servicos";
@@ -10,7 +10,10 @@ import { LinhaSolicitacao } from "../componentes/LinhaSolicitacao";
 const FILTROS: (EstadoSolicitacao | undefined)[] = [undefined, "AGUARDANDO_APROVACAO", "APROVADA", "CONCLUIDA", "RECUSADA", "PERFIL_INVALIDO", "CANCELADA", "EXPIRADA"];
 
 export function Solicitacoes() {
-  const [estado, setEstado] = useState<EstadoSolicitacao | undefined>();
+  // o filtro mora na URL: dá para compartilhar o link e o "voltar" do navegador respeita
+  const [params, setParams] = useSearchParams();
+  const estado = (params.get("estado") as EstadoSolicitacao | null) ?? undefined;
+  const setEstado = (e?: EstadoSolicitacao) => setParams(e ? { estado: e } : {}, { replace: true });
   const q = useInfiniteQuery({
     queryKey: ["solicitacoes", estado ?? "todas", "paginas"],
     queryFn: ({ pageParam }) => listarSolicitacoes({ estado, cursor: pageParam }),

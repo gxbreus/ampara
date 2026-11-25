@@ -1,3 +1,4 @@
+import { IcAlerta, IcEnviar, IcFonte } from "@c/icones";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -44,12 +45,12 @@ function Duvidas() {
             <div key={i} className="balao eu">{m.texto}</div>
           ) : (
             <div key={i} className={`balao ia ${m.resposta.degradado ? "degradado" : ""}`}>
-              {m.resposta.degradado && <strong style={{ display: "block", marginBottom: "0.3rem" }}>⚠ Resposta de contingência</strong>}
+              {m.resposta.degradado && <strong style={{ display: "flex", gap: "0.3rem", alignItems: "center", marginBottom: "0.3rem" }}><IcAlerta tamanho={17} /> Resposta de contingência</strong>}
               {m.resposta.resposta}
               {!!m.resposta.fontes?.length && (
                 <div className="fontes">
                   <b>Fontes</b>
-                  {m.resposta.fontes.map((f) => <span key={f.titulo + f.paginaOuSecao}>📄 {f.titulo} · {f.paginaOuSecao}</span>)}
+                  {m.resposta.fontes.map((f) => <span key={f.titulo + f.paginaOuSecao}><IcFonte tamanho={15} /> {f.titulo} · {f.paginaOuSecao}</span>)}
                 </div>
               )}
             </div>
@@ -62,9 +63,9 @@ function Duvidas() {
       <form className="compositor" onSubmit={(e: FormEvent) => { e.preventDefault(); enviar(texto); }}>
         <label className="campo" style={{ flex: 1 }}>
           <span className="sr-only">Sua dúvida</span>
-          <textarea rows={2} maxLength={500} placeholder="Pergunte sobre adoção responsável…" value={texto} onChange={(e) => setTexto(e.target.value)} />
+          <textarea rows={2} maxLength={500} placeholder="Ex.: quando vacinar um filhote…" value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!pergunta.isPending) enviar(texto); } }} enterKeyHint="send" />
         </label>
-        <button className="btn acento" disabled={pergunta.isPending || texto.trim().length < 3}>Enviar</button>
+        <button className="btn acento" aria-label="Enviar pergunta" disabled={pergunta.isPending || texto.trim().length < 3}><IcEnviar /></button>
       </form>
     </>
   );
@@ -78,7 +79,7 @@ function Recomendacoes() {
       <form style={{ display: "grid", gap: "0.7rem" }} onSubmit={(e) => { e.preventDefault(); rec.mutate(rotina); }}>
         <label className="campo">
           <span>Conte sobre sua rotina</span>
-          <textarea rows={4} minLength={10} maxLength={1000} required placeholder="Ex.: moro em apartamento, trabalho 6 h fora e gosto de caminhar no parque aos finais de semana." value={rotina} onChange={(e) => setRotina(e.target.value)} />
+          <textarea rows={4} minLength={10} maxLength={1000} required placeholder="Ex.: moro em apartamento, trabalho 6 h fora e gosto de caminhar no parque…" value={rotina} onChange={(e) => setRotina(e.target.value)} />
         </label>
         <button className="btn acento largo" disabled={rec.isPending || rotina.trim().length < 10}>{rec.isPending ? "Procurando quem combina com você…" : "Recomendar animais"}</button>
       </form>

@@ -16,7 +16,10 @@ O atalho vem de `resolve.alias` em `vite.config.ts` e de `paths` em `tsconfig.js
 | `api.ts` | Cliente HTTP (`http()`): token Bearer, erros `application/problem+json` viram `ErroApi`, 401 com sessão guardada dispara o logout. `criarRotas()` liga cada grupo de rotas ao backend ou à simulação. Também guarda o vocabulário comum: estados da SAGA, status do animal, espécies, portes e datas. |
 | `ui.tsx` | Componentes comuns: `Selo`, `SeloEstado`, `SeloStatus`, `Avisos` (falha parcial dos BFFs), `Erro`, `Carregando`, `Vazio`, `LinhaDoTempo` (os "carimbos" da SAGA), `Retrato` (desenho do animal quando não há foto) e `Origem` (selo real/simulado). |
 | `sessao.tsx` | `SessaoProvider` e `useSessao()`: token e conta no `localStorage`, logout quando o token expira e filtro por papel (o web aceita ONG, PROTETOR e ADMIN; o mobile, só ADOTANTE). |
-| `base.css` | A identidade visual: cores, fontes (Fraunces e Instrument Sans), botões, campos, cartões, selos e animações. Cada app só acrescenta o próprio layout em `src/estilo.css`. |
+| `base.css` | A identidade visual (tokens, tipografia, botões, campos, cartões, selos, animações, foco e `prefers-reduced-motion`). Cada app só acrescenta o próprio layout em `src/estilo.css`. |
+| `marca.tsx` | A logo: `Simbolo` (o arco de abrigo com a pata) e `Logo` (símbolo + "ampara"). A versão em SVG para documentos está em `docs/assets/logo-ampara.svg`, e o favicon em `public/favicon.svg` de cada app. |
+| `icones.tsx` | Ícones de traço único (24×24, traço 2) usados nos dois apps, no lugar de emojis. |
+| `ganchos.ts` | `useTituloPagina` (título da aba por tela) e `useAvisoSaida` (avisa antes de fechar com formulário não salvo). |
 | `dev-auth.ts` | Login de desenvolvimento, explicado abaixo. |
 
 ## Rotas reais × simuladas
@@ -53,3 +56,13 @@ Quando a #149 entrar na `develop`, rode com `VITE_AUTH_REAL=true`: o plugin sai 
 ## Proxy
 
 Os dois apps chamam o gateway pelo mesmo origin: `/auth/v1`, `/web/v1` e `/mobile/v1` passam pelo proxy do Vite até `http://localhost:8000` (o Kong, no compose ou no kind). Assim não há problema de CORS. Para outro endereço, use `AMPARA_GATEWAY=http://host:porta npm run dev:web`.
+
+## Identidade visual
+
+Direção: **sinalização de abrigo**, gráfica e calorosa, como as placas e adesivos de um abrigo moderno.
+
+- **Logo:** um arco (casa e abraço ao mesmo tempo) com uma pata recortada. O arco é laranja; em fundo laranja, use `<Logo arco="var(--tinta)" pata="var(--laranja)" />`.
+- **Cores:** `--laranja` #ff6a3d (marca, ações principais), `--tinta` #1e1b2e (texto, bordas), `--papel` #fff9f1 (fundo). Apoio: `--mel` #ffc145, `--verde` #1f8a5b, `--rosa` #ff8fa6. O `--lilas` #7f6cf0 fica reservado para o Assistente (IA). Estados: `--erro` e `--info`.
+- **Tipografia:** Bricolage Grotesque nos títulos (`--display`), Onest no texto (`--texto`) e JetBrains Mono em código e selos técnicos (`--mono`). Todas vêm do npm (`@fontsource-variable/*`), sem depender de CDN na demo.
+- **Assinatura:** cartões e botões com borda de tinta de 2px e sombra dura deslocada (`--sombra-dura`). Os botões afundam ao clicar.
+- **Acessibilidade:** alvo de toque mínimo de 44px (`--toque`), foco visível em laranja, `--tinta-3` com contraste ≥ 4,5:1 no papel e animações desligadas com `prefers-reduced-motion`.

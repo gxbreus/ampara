@@ -27,7 +27,7 @@ const MENSAGEM: Record<string, string> = {
   AGUARDANDO_APROVACAO: "Tudo certo do seu lado. A ONG está avaliando o pedido.",
   APROVADA: "A ONG aprovou! Falta só concluir.",
   COMPENSANDO: "Desfazendo a reserva…",
-  CONCLUIDA: "Parabéns, a adoção está concluída. 🎉",
+  CONCLUIDA: "Parabéns, a adoção está concluída!",
   PERFIL_INVALIDO: "O pedido parou porque o perfil de adoção está incompleto.",
   RECUSADA: "A ONG recusou este pedido.",
   CANCELADA: "Você cancelou este pedido.",
@@ -60,12 +60,12 @@ export function PedidoDetalhe() {
 
   return (
     <>
-      <Topo voltar titulo={<>Pedido por <em>{p.animal.nome}</em></>} direita={<Origem origem={rotas.origem("solicitacoes")} />} />
+      <Topo voltar="/pedidos" titulo={<>Pedido por <em>{p.animal.nome}</em></>} direita={<Origem origem={rotas.origem("solicitacoes")} />} />
       <Avisos avisos={p.avisos} />
       <section className={`estado-grande ${e.tom} surgir`} aria-live="polite">
         <small>{e.rotulo}</small>
         <strong>{MENSAGEM[p.estado] ?? e.rotulo}</strong>
-        {p.expiraEm && p.estado === "AGUARDANDO_APROVACAO" && <span style={{ fontSize: "0.85rem", opacity: 0.8 }}>A ONG tem até {dataHora(p.expiraEm)} ({relativo(p.expiraEm)}).</span>}
+        {p.expiraEm && p.estado === "AGUARDANDO_APROVACAO" && <span className="prazo">A ONG tem até {dataHora(p.expiraEm)} ({relativo(p.expiraEm)}).</span>}
       </section>
 
       <Link to={`/animais/${p.animal.id}`} className="cartao pedido">

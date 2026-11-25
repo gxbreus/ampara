@@ -1,3 +1,4 @@
+import { IcMais, IcSeta } from "@c/icones";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ESTADOS, STATUS_ANIMAL } from "@c/api";
@@ -31,7 +32,7 @@ export function Painel() {
       <Cabecalho
         titulo={<>{saudacao()}, <em>{conta?.nome.split(" ")[0]}</em>.</>}
         sobre="Como estão os seus animais e quem está esperando uma resposta."
-        acoes={<Link className="btn acento" to="/animais/novo">+ Cadastrar animal</Link>}
+        acoes={<Link className="btn acento" to="/animais/novo"><IcMais tamanho={18} /> Cadastrar animal</Link>}
       />
 
       {painel.isError && <Erro erro={painel.error} onTentar={() => painel.refetch()} />}
@@ -41,6 +42,7 @@ export function Painel() {
         <Link to="/solicitacoes" className="cartao numero destaque">
           <span className="valor">{p?.solicitacoes?.aguardandoAprovacao ?? "–"}</span>
           <span className="rotulo">aguardando sua decisão</span>
+          <span className="seta" aria-hidden><IcSeta tamanho={20} /></span>
         </Link>
         <div className="cartao numero">
           <span className="valor">{p?.animais?.total ?? "–"}</span>

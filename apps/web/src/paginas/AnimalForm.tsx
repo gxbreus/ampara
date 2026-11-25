@@ -1,3 +1,5 @@
+import { useAvisoSaida } from "@c/ganchos";
+import { IcLocal, IcVoltar } from "@c/icones";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -35,6 +37,10 @@ export function AnimalForm() {
     }
   }, [atual.data]);
 
+  const original = useState(() => JSON.stringify(VAZIO))[0];
+  const sujo = JSON.stringify(d) !== (atual.data ? JSON.stringify((({ nome, especie, porte, idadeMeses, temperamento: t, fotos, localizacao }) => ({ nome, especie, porte, idadeMeses, temperamento: t, fotos, localizacao }))(atual.data)) : original);
+  useAvisoSaida(sujo);
+
   const salvar = useMutation({
     mutationFn: (dados: AnimalEntrada) => (editando ? editarAnimal(id!, dados) : cadastrarAnimal(dados)),
     onSuccess: (a) => {
@@ -66,7 +72,7 @@ export function AnimalForm() {
 
   return (
     <>
-      <Link to={editando ? `/animais/${id}` : "/animais"} className="voltar">← Voltar</Link>
+      <Link to={editando ? `/animais/${id}` : "/animais"} className="voltar"><IcVoltar tamanho={18} /> Voltar</Link>
       <Cabecalho titulo={editando ? <>Editar <em>{d.nome}</em></> : "Cadastrar animal"} sobre="Os dados aparecem na busca dos adotantes em poucos segundos (projeção do CQRS)." origem={rotas.origem("animais")} />
       <form className="cartao formulario" onSubmit={enviar}>
         {salvar.isError && <Erro erro={salvar.error} />}
@@ -93,26 +99,26 @@ export function AnimalForm() {
           </label>
           <label className="campo">
             <span>Idade (meses)</span>
-            <input type="number" min={0} required value={d.idadeMeses} onChange={(e) => setD({ ...d, idadeMeses: Number(e.target.value) })} />
+            <input type="number" inputMode="numeric" name="idadeMeses" min={0} required value={d.idadeMeses} onChange={(e) => setD({ ...d, idadeMeses: Number(e.target.value) })} />
           </label>
         </div>
         <label className="campo">
           <span>Temperamento (separe por vírgula)</span>
-          <input placeholder="dócil, brincalhão" value={temperamento} onChange={(e) => setTemperamento(e.target.value)} />
+          <input placeholder="Ex.: dócil, brincalhão…" value={temperamento} onChange={(e) => setTemperamento(e.target.value)} />
         </label>
         <label className="campo">
           <span>Fotos (uma URL por linha)</span>
-          <textarea rows={2} placeholder="https://…" value={foto} onChange={(e) => setFoto(e.target.value)} />
+          <textarea rows={2} placeholder="https://exemplo.com/foto.jpg…" value={foto} onChange={(e) => setFoto(e.target.value)} />
         </label>
         <fieldset>
           <legend>Onde o animal está</legend>
           <div className="grade-campos">
             <label className="campo"><span>Bairro</span><input required value={d.localizacao.bairro} onChange={(e) => loc("bairro", e.target.value)} /></label>
             <label className="campo"><span>Cidade</span><input required value={d.localizacao.cidade} onChange={(e) => loc("cidade", e.target.value)} /></label>
-            <label className="campo"><span>Latitude</span><input type="number" step="any" min={-90} max={90} required value={d.localizacao.lat} onChange={(e) => loc("lat", e.target.value)} /></label>
-            <label className="campo"><span>Longitude</span><input type="number" step="any" min={-180} max={180} required value={d.localizacao.lng} onChange={(e) => loc("lng", e.target.value)} /></label>
+            <label className="campo"><span>Latitude</span><input type="number" inputMode="decimal" name="lat" step="any" min={-90} max={90} required value={d.localizacao.lat} onChange={(e) => loc("lat", e.target.value)} /></label>
+            <label className="campo"><span>Longitude</span><input type="number" inputMode="decimal" name="lng" step="any" min={-180} max={180} required value={d.localizacao.lng} onChange={(e) => loc("lng", e.target.value)} /></label>
           </div>
-          <button type="button" className="btn contorno pequeno" style={{ justifySelf: "start" }} onClick={usarMinhaLocalizacao}>⌖ Usar minha localização</button>
+          <button type="button" className="btn contorno pequeno" style={{ justifySelf: "start" }} onClick={usarMinhaLocalizacao}><IcLocal tamanho={18} /> Usar minha localização</button>
           <small style={{ color: "var(--tinta-3)" }}>O adotante só vê o bairro e a distância aproximada, nunca o ponto exato.</small>
         </fieldset>
         <div className="acoes">

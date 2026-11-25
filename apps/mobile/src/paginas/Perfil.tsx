@@ -1,3 +1,4 @@
+import { useAvisoSaida } from "@c/ganchos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +25,12 @@ export function Perfil() {
       setF((x) => ({ ...x, ...resto }));
     }
   }, [perfil.data]);
+
+  const sujo = !!perfil.data && (() => {
+    const { completo: _c, ...salvoAgora } = perfil.data;
+    return (Object.keys(f) as (keyof Form)[]).some((k) => (f[k] ?? null) !== (salvoAgora[k] ?? null));
+  })();
+  useAvisoSaida(sujo);
 
   const salvar = useMutation({
     mutationFn: () => salvarPerfil(f),
@@ -63,12 +70,13 @@ export function Perfil() {
         </label>
         <label className="campo">
           <span>Horas fora de casa por dia: {f.horasForaDeCasa ?? 0} h</span>
-          <input type="range" min={0} max={24} value={f.horasForaDeCasa ?? 0} onChange={(e) => setF({ ...f, horasForaDeCasa: Number(e.target.value) })} style={{ accentColor: "var(--terracota)", padding: 0, border: 0, background: "none" }} />
+          <input type="range" min={0} max={24} aria-valuetext={`${f.horasForaDeCasa ?? 0} horas`} value={f.horasForaDeCasa ?? 0} onChange={(e) => setF({ ...f, horasForaDeCasa: Number(e.target.value) })} style={{ accentColor: "var(--terracota)", padding: 0, border: 0, background: "none" }} />
         </label>
         <label className="check"><input type="checkbox" checked={!!f.temQuintal} onChange={(e) => setF({ ...f, temQuintal: e.target.checked })} /> Tenho quintal ou área externa</label>
         <label className="check"><input type="checkbox" checked={!!f.outrosAnimais} onChange={(e) => setF({ ...f, outrosAnimais: e.target.checked })} /> Já tenho outros animais</label>
         <label className="check"><input type="checkbox" checked={!!f.aceiteTermo} onChange={(e) => setF({ ...f, aceiteTermo: e.target.checked })} /> Li e aceito o termo de adoção responsável</label>
-        <button className="btn acento largo" disabled={salvar.isPending}>{salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar perfil"}</button>
+        <button className="btn acento largo" disabled={salvar.isPending}>{salvar.isPending ? "Salvando…" : salvo ? "Perfil salvo" : "Salvar perfil"}</button>
+        <span className="sr-only" role="status">{salvo ? "Perfil de adoção salvo." : ""}</span>
       </form>
 
       <button

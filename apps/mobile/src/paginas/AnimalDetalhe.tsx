@@ -1,3 +1,5 @@
+import { IcEscudo, IcLocal } from "@c/icones";
+import { BotaoVoltar } from "../componentes/Casca";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -35,14 +37,14 @@ export function AnimalDetalhe() {
     <>
       <div className="ficha-foto">
         <Retrato nome={a.nome} especie={a.especie} src={a.fotos[0] ?? a.fotoThumb} />
-        <button className="voltar-btn" onClick={() => history.back()} aria-label="Voltar">←</button>
+        <BotaoVoltar />
       </div>
       <section className="cartao ficha-corpo surgir">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
           <div>
             <h1>{a.nome}</h1>
-            <small style={{ color: "var(--tinta-3)" }}>
-              {a.bairro ? `${a.bairro}, ` : ""}
+            <small className="local">
+              <IcLocal tamanho={15} /> {a.bairro ? `${a.bairro}, ` : ""}
               {a.cidade} · atualizado {relativo(a.atualizadoEm)}
             </small>
           </div>
@@ -61,7 +63,7 @@ export function AnimalDetalhe() {
           <div style={{ flex: 1 }}>
             <strong>{a.responsavel.nome}</strong>
             <br />
-            <small style={{ color: "var(--tinta-3)" }}>{a.responsavel.verificado ? "✓ responsável verificado" : "responsável em verificação"}</small>
+            <small>{a.responsavel.verificado ? <><IcEscudo tamanho={15} /> responsável verificado</> : "responsável em verificação"}</small>
           </div>
         </div>
         {a.status !== "DISPONIVEL" && !a.minhaSolicitacao && <SeloStatus status={a.status} />}

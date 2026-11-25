@@ -1,3 +1,5 @@
+import { useTituloPagina } from "@c/ganchos";
+import { Logo } from "@c/marca";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -6,6 +8,7 @@ import { cadastrar } from "../api/servicos";
 import type { NovaConta } from "../api/tipos";
 
 export function Cadastro() {
+  useTituloPagina("Criar conta", "Ampara · Painel");
   const [dados, setDados] = useState<NovaConta>({ nome: "", email: "", senha: "", cidade: "", tipo: "ONG" });
   const criar = useMutation({ mutationFn: () => cadastrar(dados) });
   const campo = (k: keyof NovaConta) => ({ value: dados[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setDados({ ...dados, [k]: e.target.value }) });
@@ -18,7 +21,7 @@ export function Cadastro() {
   return (
     <div className="portal">
       <section className="portal-arte">
-        <span className="marca-nome">Ampara</span>
+        <Logo tamanho={40} arco="var(--tinta)" pata="var(--laranja)" />
         <div>
           <h1>
             Junte-se a quem <em>ampara</em>.
@@ -29,7 +32,7 @@ export function Cadastro() {
       </section>
       <section className="portal-form">
         {criar.isSuccess ? (
-          <div className="surgir" style={{ maxWidth: 400, display: "grid", gap: "1rem" }}>
+          <div className="surgir portal-caixa" role="status">
             <h2>Conta criada 🎉</h2>
             <p>
               {criar.data.statusVerificacao === "PENDENTE_VERIFICACAO"
@@ -51,19 +54,19 @@ export function Cadastro() {
             </label>
             <label className="campo">
               <span>Nome</span>
-              <input required {...campo("nome")} />
+              <input required name="nome" autoComplete="organization" {...campo("nome")} />
             </label>
             <label className="campo">
               <span>E-mail</span>
-              <input type="email" required {...campo("email")} />
+              <input type="email" required name="email" autoComplete="email" spellCheck={false} autoCapitalize="none" {...campo("email")} />
             </label>
             <label className="campo">
               <span>Senha (mínimo 8)</span>
-              <input type="password" required minLength={8} {...campo("senha")} />
+              <input type="password" required minLength={8} name="senha" autoComplete="new-password" {...campo("senha")} />
             </label>
             <label className="campo">
               <span>Cidade</span>
-              <input required {...campo("cidade")} />
+              <input required name="cidade" autoComplete="address-level2" {...campo("cidade")} />
             </label>
             <button className="btn acento largo" disabled={criar.isPending}>
               {criar.isPending ? "Criando…" : "Criar conta"}
