@@ -14,7 +14,9 @@ Ao reabrir o Codespace, os containers voltam sozinhos em cerca de 4 minutos, sem
 # todos os pods do cluster devem ficar 1/1 Running
 kubectl get pods -A
 
-# busca pública pelo Ingress do kind, em tabela: deve listar os 8 animais do seed
+# busca pública pelo Ingress do kind, em tabela: deve listar os animais disponíveis do seed
+# num raio de 10 km (12 dos 20; os de Ijaci e Perdões ficam fora do raio e os reservados
+# ou adotados pelos pedidos prontos não aparecem)
 # (um 502 nos primeiros minutos é normal: o Kong ainda está reconfigurando as rotas)
 ./scripts/buscar-animais.sh
 
@@ -111,8 +113,10 @@ kubectl get kongplugins -n ampara
 # depois do passo 3 o banco está vazio: a busca não devolve nada
 ./scripts/buscar-animais.sh
 
-# cadastra uma ONG e 8 animais pela API de escrita do Animais:
-# animal + evento no outbox → RabbitMQ → projeção do CQRS → busca pública
+# cria as contas (2 ONGs, protetora, admin e adotantes), cadastra 20 animais pela API de
+# escrita do Animais (animal + evento no outbox → RabbitMQ → projeção do CQRS → busca
+# pública) e faz pedidos reais pela SAGA: 3 aguardando aprovação, 1 concluído, 1 recusado
+# e 1 com perfil inválido
 ./scripts/seed.sh k8s
 
 # agora a busca, pelo Ingress, devolve os animais com a distância de cada um

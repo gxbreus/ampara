@@ -278,7 +278,7 @@ docker compose up -d --build --wait   # compose: gateway em localhost:8080 (uns 
 
 No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na porta 8080 ([`compose.codespaces.yaml`](.devcontainer/compose.codespaces.yaml)) e o kind fica com a 8000. O [`subir-k8s.sh`](scripts/subir-k8s.sh) faz os passos do [`k8s/README.md`](k8s/README.md): cria o cluster, instala o Kong Ingress Controller, gera os `secret.env`, carrega as imagens e aplica os manifests.
 
-**3. Popular com dados de demonstração.** O [`seed.sh`](scripts/seed.sh) cria uma ONG e oito animais em Lavras (MG) pelo caminho real do sistema: assina um token de ONG com a chave do `.env`, cadastra cada animal em `POST /v1/animais` (o animal e o evento vão para o outbox), o RabbitMQ entrega o evento ao projetor do CQRS e o modelo de leitura passa a responder a busca. Rodar de novo não duplica nada.
+**3. Popular com dados de demonstração.** O [`seed.sh`](scripts/seed.sh) cria as contas da demo (duas ONGs, uma protetora, o admin e os adotantes) e 20 animais com foto em Lavras (MG) e nas cidades vizinhas pelo caminho real do sistema: assina o token de cada responsável com a chave do `.env`, cadastra cada animal em `POST /v1/animais` (o animal e o evento vão para o outbox), o RabbitMQ entrega o evento ao projetor do CQRS e o modelo de leitura passa a responder a busca. Depois faz pedidos de adoção reais pela SAGA, para o painel da ONG já ter pedidos aguardando aprovação, concluído, recusado e com perfil inválido. Rodar de novo não duplica nada.
 
 ```bash
 ./scripts/seed.sh        # no compose
