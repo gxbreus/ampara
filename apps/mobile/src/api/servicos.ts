@@ -17,8 +17,11 @@ import type {
   SolicitacaoResumo,
 } from "./tipos";
 
-// #158 e #149 integrados: as jornadas do adotante usam os serviços reais.
-// Notificações continuam simuladas até a implementação de #60.
+// Situação em 25/11 na develop:
+// - auth: Identidade real (#149); com VITE_AUTH_REAL=true o login passa pelo gateway;
+// - busca, detalhe, solicitacoes e conta: BFF Mobile (#158) + Animais, Adoção e Identidade;
+// - assistente: RAG real (#66 a #69), projetado pelo BFF Mobile;
+// - notificacoes: o serviço ainda não tem as rotas (#60), então segue simulado.
 export type Grupo = "auth" | "busca" | "detalhe" | "solicitacoes" | "notificacoes" | "conta" | "assistente";
 const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "conta", "assistente"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
@@ -27,7 +30,6 @@ const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não e
 
 // Os cartões da última busca, para o detalhe simulado mostrar o animal real que a pessoa tocou.
 const cartoesVistos = new Map<string, AnimalCard>();
-let contextoBusca: Pick<FiltroBusca, "lat" | "lng" | "raioKm"> | undefined;
 
 // ---------- autenticação ----------
 
@@ -54,7 +56,35 @@ export async function cadastrar(dados: { nome: string; email: string; senha: str
 
 // ---------- busca e detalhe ----------
 
+// Ponto padrão quando não há GPS nem busca anterior: centro de Lavras (onde está o seed).
+export const LAVRAS = { lat: -21.2453, lng: -44.9998 };
+export type Ponto = { lat: number; lng: number; raioKm: number };
+
+// O último ponto de busca (GPS ou padrão, com o raio aplicado) fica na sessão: a
+// recomendação do assistente procura animais perto dele (lat/lng são obrigatórios no BFF).
+const CHAVE_PONTO = "ampara:mobile:ultimo-ponto";
+function guardarPonto({ lat, lng, raioKm }: Ponto) {
+  try {
+    sessionStorage.setItem(CHAVE_PONTO, JSON.stringify({ lat, lng, raioKm }));
+  } catch {
+    // armazenamento indisponível (modo privado): a recomendação usa o ponto padrão
+  }
+}
+export function ultimoPonto(): Ponto {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(CHAVE_PONTO) ?? "null") as Partial<Ponto> | null;
+    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) {
+      const raioKm = Math.min(100, Math.max(1, Number(p.raioKm) || 10));
+      return { lat: p.lat!, lng: p.lng!, raioKm };
+    }
+  } catch {
+    // valor corrompido ou armazenamento indisponível: cai no padrão
+  }
+  return { ...LAVRAS, raioKm: 10 };
+}
+
 export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
+  guardarPonto(f);
   let pagina: PaginaBusca;
   if (rotas.real("busca")) {
     const q = new URLSearchParams({ lat: String(f.lat), lng: String(f.lng), raioKm: String(f.raioKm), limite: "20" });
@@ -80,7 +110,6 @@ export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
     }));
   }
   for (const c of pagina.itens) cartoesVistos.set(c.id, c);
-  contextoBusca = { lat: f.lat, lng: f.lng, raioKm: f.raioKm };
   return pagina;
 }
 
@@ -223,10 +252,9 @@ export async function perguntar(pergunta: string): Promise<RespostaPergunta> {
   return simular(() => m.responder(pergunta), 900 + Math.random() * 700);
 }
 
-export async function recomendar(descricaoRotina: string): Promise<RespostaRecomendacao> {
-  if (rotas.real("assistente")) {
-    if (!contextoBusca) throw new ErroApi(400, "Localização necessária", "Faça uma busca por animais para escolher a localização e o raio antes de pedir recomendações.");
-    return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina, ...contextoBusca } });
-  }
-  return simular(() => m.recomendar(descricaoRotina), 1200 + Math.random() * 800);
+// Envia o último ponto de busca; sem busca anterior, o centro de Lavras.
+export async function recomendar(descricaoRotina: string, ponto: Ponto = ultimoPonto()): Promise<RespostaRecomendacao> {
+  const { lat, lng, raioKm } = ponto;
+  if (rotas.real("assistente")) return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina, lat, lng, raioKm } });
+  return simular(() => m.recomendar(descricaoRotina, lat, lng, raioKm), 1200 + Math.random() * 800);
 }

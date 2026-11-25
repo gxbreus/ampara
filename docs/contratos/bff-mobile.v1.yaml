@@ -654,9 +654,15 @@ paths:
       tags: [Assistente]
       summary: Tira dúvidas sobre adoção responsável com IA (RAG)
       description: |
-        Encaminha a dúvida do usuário para a chain de RAG do serviço Assistente,
-        que busca fontes nos guias oficiais de posse responsável.
-        
+        Encaminha a dúvida do usuário para a chain de RAG do serviço Assistente
+        (`POST /v1/perguntas` em assistente.v1.yaml), que busca fontes nos guias
+        oficiais de posse responsável.
+
+        **Projeção:** o BFF repassa apenas `pergunta` e converte a resposta do Assistente
+        para este formato: `Fonte.origem` vira `fontes[].paginaOuSecao`. Metadados internos
+        (`cache`, `latenciaMs`, `fontes[].trecho`) não são repassados.
+        Texto rejeitado pelo Assistente (vazio ou só espaços) volta como 422.
+
         **Resiliência:**
         Timeout estendido de 20 s. Se o modelo LLM ou o serviço falharem ou derem timeout,
         o BFF não quebra com 500: retorna resposta com `degradado: true` e mensagem orientativa.
@@ -688,14 +694,30 @@ paths:
           $ref: '#/components/responses/ParametrosInvalidos'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
 
   /mobile/v1/assistente/recomendacoes:
     post:
       tags: [Assistente]
       summary: Solicita recomendação de animais compatíveis com a rotina
       description: |
-        Usa o agente do Assistente com tool que consulta animais reais e cruza com a
-        rotina descrita pelo adotante. Timeout de 20 s; degradação graciosa em caso de falha.
+        Usa o agente do Assistente (`POST /v1/recomendacoes` em assistente.v1.yaml), com
+        tool que consulta animais reais perto do ponto informado e cruza com a rotina
+        descrita pelo adotante.
+
+        `lat` e `lng` são obrigatórios: o app envia o último ponto de busca (GPS ou
+        ponto padrão). Sem eles, ou fora dos limites, o BFF responde 400 sem chamar o
+        Assistente; o BFF nunca inventa coordenadas nem as extrai do texto.
+
+        **Projeção:** o BFF envia `descricaoRotina` como `rotina` junto com `lat`, `lng` e
+        `raioKm`, e converte a resposta: `sugestoes[].motivo` vira
+        `animais[].motivoRecomendacao` e `explicacao` é mantida. Metadados internos
+        (`filtrosUsados`, `fontes`, `latenciaMs`) não são repassados.
+        Texto rejeitado pelo Assistente volta como 422.
+
+        **Resiliência:** timeout de 20 s; se o Assistente falhar, der timeout ou responder
+        5xx, o BFF responde 200 com `animais: []` e `degradado: true`.
       operationId: obterRecomendacoesAssistenteMobile
       security:
         - bearerAuth: []
@@ -715,19 +737,21 @@ paths:
                   type: number
                   minimum: -90
                   maximum: 90
-                  description: Latitude do contexto de busca escolhido pelo adotante.
+                  description: Latitude do último ponto de busca do adotante (-90 a 90).
                 lng:
                   type: number
                   minimum: -180
                   maximum: 180
+                  description: Longitude do último ponto de busca do adotante (-180 a 180).
                 raioKm:
                   type: number
                   minimum: 1
                   maximum: 100
                   default: 10
+                  description: Raio da busca de animais em quilômetros.
               example:
                 descricaoRotina: Moro em apartamento pequeno, trabalho 6 horas fora e gosto de caminhar no parque aos finais de semana.
-                lat: -21.2468
+                lat: -21.2453
                 lng: -44.9998
                 raioKm: 10
       responses:
@@ -741,6 +765,8 @@ paths:
           $ref: '#/components/responses/ParametrosInvalidos'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
 
 components:
   securitySchemes:

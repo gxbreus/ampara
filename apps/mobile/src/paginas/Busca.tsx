@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PORTES } from "@c/api";
 import { Avisos, Carregando, Erro, Origem, Retrato, SeloEstado, Vazio } from "@c/ui";
-import { buscar, rotas } from "../api/servicos";
+import { buscar, LAVRAS, rotas } from "../api/servicos";
 import type { Especie, Porte } from "../api/tipos";
 
 // Sem permissão de localização, a busca parte do centro de Lavras (onde está o seed).
-const LAVRAS = { lat: -21.2453, lng: -44.9998 };
+// Cada busca guarda o ponto usado; a recomendação do assistente parte dele.
 
 export function Busca() {
   const [ponto, setPonto] = useState(LAVRAS);
@@ -82,17 +82,23 @@ export function Busca() {
         </label>
       </section>
 
-      <div className="filtros" role="group" aria-label="Filtros">
-        {([undefined, "CAO", "GATO"] as const).map((e) => (
-          <button key={e ?? "todos"} className="chip" aria-pressed={especie === e} onClick={() => setEspecie(e)}>
-            {e === "CAO" ? "Cães" : e === "GATO" ? "Gatos" : "Todos"}
-          </button>
-        ))}
-        {(["PEQUENO", "MEDIO", "GRANDE"] as const).map((p) => (
-          <button key={p} className="chip" aria-pressed={porte === p} onClick={() => setPorte(porte === p ? undefined : p)}>
-            {PORTES[p]}
-          </button>
-        ))}
+      {/* dois grupos que cabem inteiros na tela: nada de linha rolando de lado com chip cortado */}
+      <div className="filtros-bloco">
+        <div className="segmentado" role="group" aria-label="Espécie">
+          {([undefined, "CAO", "GATO"] as const).map((e) => (
+            <button key={e ?? "todos"} aria-pressed={especie === e} onClick={() => setEspecie(e)}>
+              {e === "CAO" ? "Cães" : e === "GATO" ? "Gatos" : "Todos"}
+            </button>
+          ))}
+        </div>
+        <div className="porte" role="group" aria-label="Porte">
+          <span>Porte</span>
+          {([undefined, "PEQUENO", "MEDIO", "GRANDE"] as const).map((p) => (
+            <button key={p ?? "qualquer"} className="chip" aria-pressed={porte === p} onClick={() => setPorte(p)}>
+              {p ? PORTES[p] : "Qualquer"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="contador-busca" aria-live="polite">
