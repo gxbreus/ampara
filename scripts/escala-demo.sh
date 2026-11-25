@@ -18,7 +18,12 @@ command -v curl >/dev/null || { echo "curl não encontrado" >&2; exit 2; }
 if [[ "${1:-}" == "--rate-limit-test" ]]; then
   saida="$(mktemp)"
   trap 'rm -f -- "$saida"' EXIT
-  echo "Teste separado de 429: mantenha o rate limit normal (600/min)."
+  limite="$(kubectl get kongplugin rate-limit-mobile -n "$namespace" -o jsonpath='{.config.minute}' 2>/dev/null || true)"
+  echo "Teste separado de 429 em /mobile/v1 (limite atual: ${limite:-desconhecido}/min; o normal é 600)."
+  if [[ "$limite" =~ ^[0-9]+$ ]] && (( limite > 1200 )); then
+    echo "O limite está elevado; rode ./scripts/rate-limit-demo.sh restaurar antes deste teste." >&2
+    exit 2
+  fi
   hey -n 1200 -c 20 "$url" > "$saida"
   cat "$saida"
   bash "$scripts_dir/validar-hey.sh" "$saida" 429
@@ -34,7 +39,8 @@ replicas_originais="$(kubectl get deployment/animais -n "$namespace" -o jsonpath
 temporario="$(mktemp -d)"
 limpar() {
   kubectl scale deployment/animais -n "$namespace" --replicas="$replicas_originais" >&2 || true
-  rm -f -- "$temporario/distribuicao" "$temporario/headers" "$temporario/contagem" "$temporario/hey"
+  rm -f -- "$temporario/distribuicao" "$temporario/headers" "$temporario/contagem" "$temporario/hey" \
+    "$temporario/pods" "$temporario/sonda"
   rmdir -- "$temporario"
 }
 trap limpar EXIT
@@ -60,18 +66,51 @@ contar_por_pod() {
   ' "$temporario/contagem" || { echo "Distribuição não atende ao critério de $replicas réplica(s)." >&2; return 1; }
 }
 
+# Pods do Animais que continuam no ar, sem os que estão terminando: "nome nó".
+listar_pods() {
+  kubectl get pods -n "$namespace" -l app=animais --field-selector=status.phase=Running --no-headers \
+    -o custom-columns='NOME:.metadata.name,NO:.spec.nodeName,SAINDO:.metadata.deletionTimestamp' \
+    | awk '$3 == "<none>" {print $1, $2}'
+}
+
+# Depois do rollout, o Service do Animais e o Kong levam alguns segundos para enxergar os
+# endpoints novos (e largar os que saíram). Sonda a busca até que só os pods esperados
+# respondam e todos apareçam; desiste depois de 15 tentativas (~30 s).
+aguardar_endpoints() {
+  local replicas="$1" tentativa status vistos
+  for tentativa in $(seq 15); do
+    listar_pods > "$temporario/pods"
+    : > "$temporario/sonda"
+    for _ in $(seq $((replicas * 10))); do
+      status="$(curl --silent --max-time 5 --output /dev/null --dump-header "$temporario/headers" --write-out '%{http_code}' "$url" || true)"
+      [[ "$status" == 200 ]] || continue
+      awk 'tolower($1) == "x-animais-served-by:" {gsub("\r", "", $2); print $2}' "$temporario/headers" >> "$temporario/sonda"
+    done
+    vistos="$(sort -u "$temporario/sonda" | awk 'NF {n++} END {print n+0}')"
+    if [[ "$vistos" == "$replicas" ]] \
+      && sort -u "$temporario/sonda" | awk 'NR == FNR {ok[$1] = 1; next} !($1 in ok) {fora = 1} END {exit fora}' "$temporario/pods" -; then
+      echo "Endpoints prontos na tentativa $tentativa: $vistos pod(s) respondendo."
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Os endpoints não refletiram $replicas réplica(s) em ~30 s; não meça agora." >&2
+  return 1
+}
+
 medir() {
   local replicas="$1"
   echo "== ${replicas} réplica(s) =="
   kubectl scale deployment/animais --namespace "$namespace" --replicas="$replicas"
   kubectl rollout status deployment/animais --namespace "$namespace" --timeout=90s
   kubectl get pods --namespace "$namespace" --selector app=animais -o wide
-  if [[ "$replicas" == 3 ]]; then
-    nos="$(kubectl get pods -n "$namespace" -l app=animais --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | awk 'NF {n++} END {print n+0}')"
-    [[ "$nos" -ge 2 ]] || { echo "As três réplicas precisam ocupar pelo menos dois nós." >&2; return 1; }
+  if [[ "$replicas" -gt 1 ]]; then
+    local nos
+    nos="$(listar_pods | awk '{print $2}' | sort -u | awk 'NF {n++} END {print n+0}')"
+    [[ "$nos" -ge 2 ]] || { echo "As $replicas réplicas estão em $nos nó(s); o critério pede pelo menos dois." >&2; return 1; }
+    echo "Réplicas distribuídas em $nos nós."
   fi
-  # O KIC propaga endpoints depois do rollout; a amostra abaixo continua exigindo 200.
-  sleep 5
+  aguardar_endpoints "$replicas"
   echo "Distribuição de 300 requisições:"
   contar_por_pod "$replicas"
   echo "Carga (20 s, concorrência 20):"
