@@ -9,6 +9,10 @@ import { Erro, Origem } from "@c/ui";
 import { entrar, rotas } from "../api/servicos";
 import type { MinhaConta } from "../api/tipos";
 
+// Com o login simulado (VITE_AUTH_REAL=false) qualquer senha serve; com a Identidade real,
+// a conta do seed usa a SEED_SENHA_DEMO do .env.
+const LOGIN_SIMULADO = import.meta.env.VITE_LOGIN_SIMULADO === true;
+
 export function Entrar() {
   useTituloPagina("Entrar", "Ampara");
   const { conta, entrar: guardar, expirou } = useSessao<MinhaConta>();
@@ -44,9 +48,12 @@ export function Entrar() {
         <p style={{ textAlign: "center", margin: 0, fontSize: "0.92rem" }}>Primeira vez? <Link to="/cadastro">Crie sua conta</Link></p>
         <Link to="/" className="link-discreto">Só quero olhar os animais <IcSeta tamanho={17} /></Link>
         {import.meta.env.DEV && (
-          <button type="button" className="chip" style={{ justifySelf: "center" }} onClick={() => { setEmail("adotante@ampara.dev"); setSenha("demo1234"); }}>
-            Usar conta de desenvolvimento
-          </button>
+          <>
+            <button type="button" className="chip" style={{ justifySelf: "center" }} onClick={() => { setEmail("adotante@ampara.dev"); setSenha(LOGIN_SIMULADO ? "demo1234" : ""); }}>
+              {LOGIN_SIMULADO ? "Usar conta de desenvolvimento" : "Usar conta do seed"}
+            </button>
+            {!LOGIN_SIMULADO && <small style={{ textAlign: "center" }}>A senha é a SEED_SENHA_DEMO do .env.</small>}
+          </>
         )}
       </form>
     </div>

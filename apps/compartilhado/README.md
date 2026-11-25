@@ -42,7 +42,7 @@ Enquanto a Identidade não tem as rotas de autenticação (#149), este plugin do
 
 - Roda só no `npm run dev` (`apply: "serve"`). O build de produção não o inclui.
 - Sem a chave, responde 503 e pede para rodar `./scripts/gerar-chaves-jwt.sh`.
-- Contas de teste (qualquer senha):
+- Contas de teste (qualquer senha, só com o plugin ativo; a tela de login avisa o modo):
 
 | E-mail | Papel | Observação |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ Enquanto a Identidade não tem as rotas de autenticação (#149), este plugin do
 | `admin@ampara.dev` | ADMIN | libera a tela de verificação de contas |
 | `adotante@ampara.dev` | ADOTANTE | para o App Mobile |
 
-A Identidade já tem login (#149) e o `scripts/seed.sh` cria essas mesmas quatro contas nela, com os mesmos ids e e-mails. Para usar o login real, rode com `VITE_AUTH_REAL=true`: o plugin sai do caminho e o proxy manda `/auth/v1` para o gateway. A senha passa a ser a `SEED_SENHA_DEMO` do `.env` (o plugin aceitava qualquer uma).
+A Identidade já tem login (#149) e o `scripts/seed.sh` cria essas mesmas quatro contas nela, com os mesmos ids e e-mails. No App Web, o login real vem com `VITE_AUTH_REAL=true`: o plugin sai do caminho e o proxy manda `/auth/v1` para o gateway. No App Mobile o login real já é o padrão, e o plugin só entra com `VITE_AUTH_REAL=false`. Com o login real, a senha é a `SEED_SENHA_DEMO` do `.env` (o plugin aceitava qualquer uma), e os atalhos da tela de login preenchem só o e-mail.
 
 ## Proxy
 
