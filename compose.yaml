@@ -289,11 +289,12 @@ services:
       ASSISTENTE_REDIS_URL: redis://:${ASSISTENTE_REDIS_PASSWORD}@redis-assistente:6379/0
       ANIMAIS_URL: http://animais:8001
       LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
-      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-bge-m3}
+      # chave pública RS256: o Assistente confere o JWT como os outros serviços
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?gere com scripts/gerar-chaves-jwt.sh}
     networks: [services, data-assistente]
     depends_on:
       qdrant-assistente: { condition: service_healthy }
@@ -303,8 +304,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 10s
-    deploy: { resources: { limits: { memory: 256m } } }
+      start_period: 60s
+    # o modelo de embeddings fica na memória (~800 MB com o runtime ONNX)
+    deploy: { resources: { limits: { memory: 1g } } }
     restart: unless-stopped
 
   bff-web:
