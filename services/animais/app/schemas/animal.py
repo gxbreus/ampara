@@ -69,6 +69,9 @@ class HistoricoStatusItem(BaseModel):
     motivo: str | None = None
     alteradoEm: datetime
     alteradoPor: str
+    # a SAGA grava o id dela em cada mudança de status que faz (saga.py); sem este campo,
+    # o extra="forbid" derrubava com 500 toda listagem depois da primeira reserva
+    sagaId: str | None = None
 
 
 class AnimalCompleto(BaseModel):
