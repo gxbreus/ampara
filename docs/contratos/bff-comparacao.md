@@ -4,6 +4,8 @@ O BFF Web e o BFF Mobile devolvem o mesmo animal com formatos diferentes, porque
 
 **Momento do exemplo:** 17/11, logo depois das 15h. A Bruna Silva solicitou o Thor, a SAGA reservou o animal e a solicitação está em `AGUARDANDO_APROVACAO`. Uma solicitação anterior, do Carlos Souza, foi recusada.
 
+> **Medição real (25/11, cluster kind, login real, dados do seed):** a ficha do Thor sem pedidos tem 1.089 bytes no web e 762 no mobile; com um pedido (Mel e Bolt), o web vai a 1.504–1.695 bytes e o mobile fica em 760–781. Os números deste documento vêm dos exemplos dos contratos, com duas solicitações e mais fotos, por isso são maiores. Para medir de novo: `./scripts/comparar-bffs.sh Thor`. Roteiro da demonstração em [`docs/apresentacao/parte-4/roteiro-bffs.md`](../apresentacao/parte-4/roteiro-bffs.md).
+
 | | BFF Web | BFF Mobile |
 | --- | --- | --- |
 | Quem pede | a ONG Patas de Lavras, dona do animal | a Bruna, adotante |
