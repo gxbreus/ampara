@@ -22,10 +22,11 @@ interface ContaDev {
   statusVerificacao: "PENDENTE_VERIFICACAO" | "VERIFICADA";
 }
 
-// A ONG usa o mesmo id do seed de Animais (scripts/seed/seed_animais.py), para o painel
-// enxergar os animais e as solicitações reais dela.
+// As ONGs e a protetora usam os mesmos ids do seed de Animais (scripts/seed/seed_animais.py),
+// para o painel enxergar os animais e as solicitações reais de cada uma.
 export const CONTAS_DEV: ContaDev[] = [
   { id: "00000000-0000-4000-8000-0000000000a1", nome: "ONG Patinhas de Lavras", email: "ong@ampara.dev", role: "ONG", cidade: "Lavras", statusVerificacao: "VERIFICADA" },
+  { id: "00000000-0000-4000-8000-0000000000a2", nome: "Abrigo Amigo Fiel", email: "ong2@ampara.dev", role: "ONG", cidade: "Perdões", statusVerificacao: "VERIFICADA" },
   { id: "00000000-0000-4000-8000-0000000000b1", nome: "Rita Protetora", email: "protetor@ampara.dev", role: "PROTETOR", cidade: "Lavras", statusVerificacao: "VERIFICADA" },
   { id: "00000000-0000-4000-8000-0000000000c1", nome: "Admin Ampara", email: "admin@ampara.dev", role: "ADMIN", cidade: "Lavras", statusVerificacao: "VERIFICADA" },
   { id: "00000000-0000-4000-8000-0000000000d1", nome: "Bruna Silva", email: "adotante@ampara.dev", role: "ADOTANTE", cidade: "Lavras", statusVerificacao: "VERIFICADA" },

@@ -11,6 +11,7 @@ import type { MinhaConta } from "../api/tipos";
 // Contas do login de desenvolvimento (apps/compartilhado/dev-auth.ts); qualquer senha.
 const CONTAS_DEV = [
   ["ong@ampara.dev", "ONG"],
+  ["ong2@ampara.dev", "ONG 2"],
   ["protetor@ampara.dev", "Protetor"],
   ["admin@ampara.dev", "Admin"],
 ] as const;

@@ -1,4 +1,5 @@
-// Seed de demonstração da Identidade: as contas da demo, com ids fixos.
+// Seed de demonstração da Identidade: as contas da demo, com ids fixos: duas ONGs, a
+// protetora, o admin, a adotante principal e seis adotantes dos pedidos prontos.
 //
 // Roda dentro do container (ou pod) da Identidade, que já tem `pg` e `bcrypt` e a
 // IDENTIDADE_DATABASE_URL no ambiente. A senha das contas chega em SEED_SENHA só durante a
@@ -9,8 +10,9 @@
 // animais do seed, e trocar o login de desenvolvimento pelo real não muda nada nos apps.
 //
 // Rodar de novo não duplica: cada conta é atualizada pelo id (nome, e-mail, papel, cidade,
-// status e senha voltam ao valor da demo). A ONG já é registrada como verificada na réplica
-// `responsaveis` de Animais pelo seed de Animais, então aqui não se publica conta.verificada.
+// status e senha voltam ao valor da demo; o perfil de adoção também). As ONGs e a protetora
+// já são registradas como verificadas na réplica `responsaveis` de Animais pelo seed de
+// Animais, então aqui não se publica conta.verificada.
 const { Client } = require("pg");
 const bcrypt = require("bcrypt");
 
@@ -18,13 +20,32 @@ const CUSTO_BCRYPT = 10; // o mesmo de services/identidade/src/auth/senha.ts
 
 const CONTAS = [
   { id: "00000000-0000-4000-8000-0000000000a1", nome: "ONG Patinhas de Lavras", email: "ong@ampara.dev", role: "ONG", cidade: "Lavras" },
+  { id: "00000000-0000-4000-8000-0000000000a2", nome: "Abrigo Amigo Fiel", email: "ong2@ampara.dev", role: "ONG", cidade: "Perdões" },
   { id: "00000000-0000-4000-8000-0000000000b1", nome: "Rita Protetora", email: "protetor@ampara.dev", role: "PROTETOR", cidade: "Lavras" },
   { id: "00000000-0000-4000-8000-0000000000c1", nome: "Admin Ampara", email: "admin@ampara.dev", role: "ADMIN", cidade: "Lavras" },
   { id: "00000000-0000-4000-8000-0000000000d1", nome: "Bruna Silva", email: "adotante@ampara.dev", role: "ADOTANTE", cidade: "Lavras" },
+  // adotantes dos pedidos prontos da demo (scripts/seed/seed_pedidos.py)
+  { id: "00000000-0000-4000-8000-0000000000e1", nome: "Carlos Mendes", email: "carlos@ampara.dev", role: "ADOTANTE", cidade: "Lavras" },
+  { id: "00000000-0000-4000-8000-0000000000e2", nome: "Ana Rodrigues", email: "ana@ampara.dev", role: "ADOTANTE", cidade: "Lavras" },
+  { id: "00000000-0000-4000-8000-0000000000e3", nome: "Juliana Costa", email: "juliana@ampara.dev", role: "ADOTANTE", cidade: "Ijaci" },
+  { id: "00000000-0000-4000-8000-0000000000e4", nome: "Pedro Almeida", email: "pedro@ampara.dev", role: "ADOTANTE", cidade: "Lavras" },
+  { id: "00000000-0000-4000-8000-0000000000e5", nome: "Lucas Ferreira", email: "lucas@ampara.dev", role: "ADOTANTE", cidade: "Ribeirão Vermelho" },
+  { id: "00000000-0000-4000-8000-0000000000e6", nome: "Marcos Oliveira", email: "marcos@ampara.dev", role: "ADOTANTE", cidade: "Perdões" },
 ];
 
-// a adotante da demo já tem o perfil completo, para pedir um animal sem passar pelo formulário
-const PERFIL_ADOTANTE = { contaId: "00000000-0000-4000-8000-0000000000d1", tipoMoradia: "CASA", temQuintal: true, outrosAnimais: false, horasForaDeCasa: 4 };
+// Perfis de adoção. A Bruna (adotante@) tem o perfil completo, para pedir um animal ao vivo
+// sem passar pelo formulário. O Lucas tem o perfil INCOMPLETO de propósito (sem horas fora de
+// casa e sem o aceite do termo): o pedido dele termina em PERFIL_INVALIDO na SAGA.
+// aceite: true grava o aceite do termo (mantém a data de um aceite anterior); false o apaga.
+const PERFIS = [
+  { contaId: "00000000-0000-4000-8000-0000000000d1", tipoMoradia: "CASA", temQuintal: true, outrosAnimais: false, horasForaDeCasa: 4, aceite: true },
+  { contaId: "00000000-0000-4000-8000-0000000000e1", tipoMoradia: "CASA", temQuintal: true, outrosAnimais: true, horasForaDeCasa: 6, aceite: true },
+  { contaId: "00000000-0000-4000-8000-0000000000e2", tipoMoradia: "APARTAMENTO", temQuintal: false, outrosAnimais: false, horasForaDeCasa: 8, aceite: true },
+  { contaId: "00000000-0000-4000-8000-0000000000e3", tipoMoradia: "SITIO", temQuintal: true, outrosAnimais: true, horasForaDeCasa: 2, aceite: true },
+  { contaId: "00000000-0000-4000-8000-0000000000e4", tipoMoradia: "APARTAMENTO", temQuintal: false, outrosAnimais: false, horasForaDeCasa: 10, aceite: true },
+  { contaId: "00000000-0000-4000-8000-0000000000e5", tipoMoradia: "APARTAMENTO", temQuintal: false, outrosAnimais: null, horasForaDeCasa: null, aceite: false },
+  { contaId: "00000000-0000-4000-8000-0000000000e6", tipoMoradia: "CASA", temQuintal: true, outrosAnimais: false, horasForaDeCasa: 5, aceite: true },
+];
 
 async function main() {
   const senha = process.env.SEED_SENHA ?? "";
@@ -61,15 +82,16 @@ async function main() {
       if (rows[0].criada) criadas += 1;
     }
 
-    const p = PERFIL_ADOTANTE;
-    await banco.query(
-      `INSERT INTO perfis_adocao (conta_id, tipo_moradia, tem_quintal, outros_animais, horas_fora_de_casa, aceite_termo_em)
-       VALUES ($1, $2, $3, $4, $5, now())
-       ON CONFLICT (conta_id) DO UPDATE SET tipo_moradia = EXCLUDED.tipo_moradia, tem_quintal = EXCLUDED.tem_quintal,
-         outros_animais = EXCLUDED.outros_animais, horas_fora_de_casa = EXCLUDED.horas_fora_de_casa,
-         aceite_termo_em = COALESCE(perfis_adocao.aceite_termo_em, EXCLUDED.aceite_termo_em)`,
-      [p.contaId, p.tipoMoradia, p.temQuintal, p.outrosAnimais, p.horasForaDeCasa],
-    );
+    for (const p of PERFIS) {
+      await banco.query(
+        `INSERT INTO perfis_adocao (conta_id, tipo_moradia, tem_quintal, outros_animais, horas_fora_de_casa, aceite_termo_em)
+         VALUES ($1, $2, $3, $4, $5, CASE WHEN $6::boolean THEN now() END)
+         ON CONFLICT (conta_id) DO UPDATE SET tipo_moradia = EXCLUDED.tipo_moradia, tem_quintal = EXCLUDED.tem_quintal,
+           outros_animais = EXCLUDED.outros_animais, horas_fora_de_casa = EXCLUDED.horas_fora_de_casa,
+           aceite_termo_em = CASE WHEN $6::boolean THEN COALESCE(perfis_adocao.aceite_termo_em, EXCLUDED.aceite_termo_em) END`,
+        [p.contaId, p.tipoMoradia, p.temQuintal, p.outrosAnimais, p.horasForaDeCasa, p.aceite],
+      );
+    }
 
     await banco.query("COMMIT");
     console.log(`seed identidade: ${criadas} contas criadas, ${CONTAS.length - criadas} atualizadas (${CONTAS.map((c) => c.email).join(", ")})`);
