@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VagaLiberada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adotanteId",
+    "liberou"
+  ],
+  "properties": {
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "liberou": {
+      "type": "boolean"
+    }
+  }
+}
