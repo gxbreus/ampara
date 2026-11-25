@@ -28,6 +28,7 @@ from app.resiliencia import CircuitoAberto, Resiliencia
 
 logger = logging.getLogger(__name__)
 MAX_ITERACOES = 3
+PORTES = {"PEQUENO": "pequeno", "MEDIO": "médio", "GRANDE": "grande"}
 CAMPOS_PUBLICOS = ("id", "nome", "especie", "porte", "sexo", "idadeMeses", "bairro", "fotoThumb")
 
 SISTEMA = (
@@ -149,7 +150,8 @@ async def recomendar_sem_llm(busca: Busca, rotina: str) -> dict:
         {
             "animalId": a["id"],
             "motivo": (
-                f"{a['nome']} ({a.get('porte', '').lower()}) combina com {criterio}; "
+                f"{a['nome']} (porte {PORTES.get(a.get('porte'), 'não informado')}) "
+                f"combina com {criterio}; "
                 "confirme a rotina de cuidados com a ONG."
             ),
         }
