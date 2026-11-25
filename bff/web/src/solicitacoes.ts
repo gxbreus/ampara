@@ -20,11 +20,12 @@ interface Link {
   method?: "POST";
 }
 
-interface SolicitacaoAdocao {
+export interface SolicitacaoAdocao {
   id: string;
   estado: string;
   desfecho: string | null;
   motivo: string | null;
+  decisao?: string | null; // desde a 1.2.0 da Adoção (ADR-008)
   animalId: string;
   animalNome: string | null;
   adotanteId: string;
@@ -33,7 +34,7 @@ interface SolicitacaoAdocao {
   _links: Record<string, Link>;
 }
 
-interface PaginaAdocao {
+export interface PaginaAdocao {
   _embedded: { solicitacoes: SolicitacaoAdocao[] };
   _links: { next?: Link };
 }
@@ -42,7 +43,7 @@ interface HistoricoAdocao {
   itens: { de: string | null; para: string; evento: string; em: string }[];
 }
 
-interface ContaComPerfil {
+export interface ContaComPerfil {
   id: string;
   nome: string;
   cidade: string;
@@ -55,11 +56,12 @@ interface ContaComPerfil {
   } | null;
 }
 
-// TODO(#21): conferir com o contrato de Animais quando ele existir.
+// Só o que o painel usa do animal (docs/contratos/animais.v1.yaml, AnimalCompleto). A busca
+// em lote de Animais devolve { itens: [...] }, e a capa é a primeira foto.
 interface AnimalDeAnimais {
   id: string;
   nome: string;
-  fotoCapa: string | null;
+  fotos: string[];
 }
 
 // --- tradução para o formato do painel (docs/contratos/bff-web.v1.yaml)
@@ -89,7 +91,7 @@ function proximoCursor(pagina: PaginaAdocao): string | null {
 // Sem Animais, o nome vem da cópia que a Adoção guardou na reserva; a foto fica null.
 function animal(s: SolicitacaoAdocao, animais: Map<string, AnimalDeAnimais>) {
   const a = animais.get(s.animalId);
-  if (a) return { id: a.id, nome: a.nome, fotoCapa: a.fotoCapa ?? null };
+  if (a) return { id: a.id, nome: a.nome, fotoCapa: a.fotos[0] ?? null };
   return s.animalNome ? { id: s.animalId, nome: s.animalNome, fotoCapa: null } : null;
 }
 
@@ -113,11 +115,11 @@ async function complementos(chamar: Cliente, config: Config, req: FastifyRequest
           `${config.servicos.identidade}/v1/contas?${new URLSearchParams({ ids: adotantes.join(","), incluir: "perfil" })}`, req, avisos)
       : null,
     animais.length
-      ? complementar<AnimalDeAnimais[]>(chamar, "animais",
+      ? complementar<{ itens: AnimalDeAnimais[] }>(chamar, "animais",
           `${config.servicos.animais}/v1/animais?${new URLSearchParams({ ids: animais.join(",") })}`, req, avisos)
       : null,
   ]);
-  return { contas: porId(contas), animais: porId(bichos), avisos };
+  return { contas: porId(contas), animais: porId(bichos?.itens ?? null), avisos };
 }
 
 interface Dependencias {
@@ -156,6 +158,7 @@ export function rotasDeSolicitacoes(r: FastifyInstance, { config, verificar, cha
           desfecho: s.desfecho,
           expiraEm: s.expiraEm,
           criadoEm: s.criadoEm,
+          decisao: s.decisao ?? null,
           animal: animal(s, animais),
           adotante: adotante(s, contas),
           _links: traduzirLinks(s._links),
@@ -179,6 +182,7 @@ export function rotasDeSolicitacoes(r: FastifyInstance, { config, verificar, cha
       motivo: s.motivo,
       expiraEm: s.expiraEm,
       criadoEm: s.criadoEm,
+      decisao: s.decisao ?? null,
       animal: animal(s, animais),
       adotante: adotante(s, contas),
       historico: historico.itens.map(({ de, para, evento, em }) => ({ de, para, evento, em })),
@@ -195,7 +199,7 @@ export function rotasDeSolicitacoes(r: FastifyInstance, { config, verificar, cha
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
     });
-    return { id: s.id, estado: s.estado, desfecho: s.desfecho, _links: traduzirLinks(s._links) };
+    return { id: s.id, estado: s.estado, desfecho: s.desfecho, decisao: s.decisao ?? null, _links: traduzirLinks(s._links) };
   }
 
   r.post<{ Params: { id: string } }>(

@@ -1,4 +1,7 @@
-# Dependências de execução, com versão fixada. A #41 acrescenta redis, aio-pika e python-json-logger.
+# Dependências de execução, com versão fixada.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic-settings==2.7.1
+redis==5.2.1
+aio-pika==9.5.4
+python-json-logger==3.2.1
