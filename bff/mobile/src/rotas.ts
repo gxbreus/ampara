@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { exigirRoles } from "./auth.js";
 import type { Dependencias } from "./app.js";
 
@@ -28,7 +28,8 @@ interface Animal {
   fotoThumb?: string | null;
   fotos?: string[];
   porte: string;
-  cidade: string;
+  // Projeção de busca traz `cidade`; o modelo de escrita (`GET /v1/animais?ids=`) traz `endereco.cidade`.
+  cidade?: string;
   distanciaKm: number;
   atualizadoEm: string;
   especie: string;
@@ -39,8 +40,27 @@ interface Animal {
   bairro: string;
   status: string;
   responsavel: { id: string; nome: string; verificado: boolean };
-  endereco?: unknown;
+  endereco?: { cidade?: string };
   historicoStatus?: unknown;
+}
+// Miniatura do cartão. A projeção de busca já entrega `fotoThumb`; o modelo de escrita
+// (`AnimalCompleto`, devolvido por `GET /v1/animais?ids=`) só tem `fotos`. Nesse caso
+// aplica a mesma regra que o Animais usa para montar `fotoThumb` na projeção
+// (services/animais/app/repositorio/animais.py, montar_evento_outbox: a primeira foto).
+function miniatura(a: Animal): string | null {
+  return a.fotoThumb ?? a.fotos?.[0] ?? null;
+}
+// Cartão resumido do animal na lista de solicitações: mesmos campos do AnimalCard da
+// busca que fazem sentido fora de uma busca geográfica (sem distância e sem minhaSolicitacao).
+// Só copia campos conhecidos: o endereço completo do modelo de escrita nunca sai do BFF.
+function resumo(id: string, a: Animal | undefined, nomeReserva?: string) {
+  return {
+    id,
+    nome: a?.nome ?? nomeReserva,
+    fotoThumb: a ? miniatura(a) : null,
+    porte: a?.porte,
+    cidade: a?.cidade ?? a?.endereco?.cidade,
+  };
 }
 function ficha(a: Animal) {
   const {
@@ -150,8 +170,24 @@ export function rotas(
     ["ADOTANTE"],
     "Esta área é exclusiva de adotantes.",
   );
-  const opcional = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (req.headers.authorization) return privado(req, reply);
+  // Rotas públicas (busca e detalhe): um token só enriquece a resposta. Token ausente,
+  // malformado, vencido ou de outro role não bloqueia: a requisição segue como anônima,
+  // sem consultar a Adoção e sem repassar o Authorization recusado aos serviços.
+  const opcional = async (req: FastifyRequest) => {
+    const [esquema, token] = (req.headers.authorization ?? "").split(" ");
+    if (esquema === "Bearer" && token) {
+      try {
+        const usuario = await verificar(token);
+        if (usuario.role === "ADOTANTE") {
+          req.usuario = usuario;
+          return;
+        }
+      } catch {
+        // degrada para anônimo
+      }
+    }
+    req.usuario = undefined;
+    delete req.headers.authorization;
   };
   const adocao = config.servicos.adocao + "/v1/solicitacoes";
   async function json<T>(
@@ -271,6 +307,13 @@ export function rotas(
         "X-Animais-Served-By",
         response.headers.get("x-served-by") ?? "desconhecido",
       );
+      // O Animais valida os filtros (FastAPI responde 422); o contrato do BFF prevê 400.
+      if (response.status === 400 || response.status === 422)
+        throw new ErroServico(
+          400,
+          "parametros-invalidos",
+          "Confira a localização e os filtros da busca.",
+        );
       if (!response.ok)
         throw new ErroServico(
           response.status >= 500 ? 503 : response.status,
@@ -324,22 +367,26 @@ export function rotas(
             animalId: { type: "string", pattern: "^[0-9a-f]{24}$" },
           },
         },
+        // Opcional, como no contrato. Quando vier, segue os limites da Adoção (8 a 128).
         headers: {
           type: "object",
-          required: ["idempotency-key"],
           properties: {
-            "idempotency-key": { type: "string", minLength: 1, maxLength: 128 },
+            "idempotency-key": { type: "string", minLength: 8, maxLength: 128 },
           },
         },
       },
     },
     async (req, reply) => {
+      // Sem chave, o BFF não inventa uma: um UUID novo a cada tentativa não deduplica nada.
+      // A Adoção aceita o POST sem a chave e continua impedindo duas solicitações ativas
+      // para o mesmo animal (409).
+      const chave = req.headers["idempotency-key"];
       const s = await json<Solicitacao>(adocao, req, {
         method: "POST",
         body: JSON.stringify(req.body),
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": String(req.headers["idempotency-key"]),
+          ...(typeof chave === "string" ? { "Idempotency-Key": chave } : {}),
         },
       });
       return reply
@@ -387,13 +434,7 @@ export function rotas(
             desfecho: s.desfecho,
             motivo: s.motivo,
             _links: links(s),
-            animal: {
-              id: s.animalId,
-              nome: a?.nome ?? s.animalNome,
-              fotoThumb: a?.fotos?.[0] ?? null,
-              porte: a?.porte,
-              cidade: a?.cidade,
-            },
+            animal: resumo(s.animalId, a, s.animalNome),
           };
         }),
         proximoCursor: pagina._links.next

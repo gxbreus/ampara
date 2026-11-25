@@ -41,7 +41,8 @@ export function criarApp({ config, verificar, chamar, logger = true }: Dependenc
   app.setNotFoundHandler({ preHandler: privado }, (_req, reply) => reply.code(404).send({ codigo: "nao-encontrado", mensagem: "Rota não encontrada." }));
   app.setErrorHandler((error, req, reply) => {
     if (error instanceof ErroServico) return reply.code(error.status).send({ codigo: error.codigo, mensagem: error.message });
-    if (error instanceof Error && "validation" in error) return reply.code(422).send({ codigo: "validacao", mensagem: "Confira os campos enviados." });
+    // Validação de schema (path, query, header, corpo) é ParametrosInvalidos no contrato: 400.
+    if (error instanceof Error && "validation" in error) return reply.code(400).send({ codigo: "parametros-invalidos", mensagem: "Confira os campos enviados." });
     req.log.error(error);
     const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
     return reply.code(timeout ? 504 : 502).send({ codigo: timeout ? "servico-lento" : "servico-indisponivel", mensagem: "Serviço temporariamente indisponível. Tente novamente." });

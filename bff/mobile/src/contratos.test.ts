@@ -78,8 +78,14 @@ test("respostas reais do BFF seguem os schemas OpenAPI de busca e solicitações
         return Response.json(animal);
       if (url.startsWith("http://animais/v1/animais/busca"))
         return Response.json({ itens: [animal], proximoCursor: null });
-      if (url.startsWith("http://animais/v1/animais?"))
-        return Response.json({ itens: [animal] });
+      if (url.startsWith("http://animais/v1/animais?")) {
+        // Modelo de escrita (AnimalCompleto): sem fotoThumb/cidade, com endereco completo.
+        const { id, nome, especie, porte, sexo, idadeMeses, fotos, status } = animal;
+        const endereco = { rua: "Rua A", numero: "1", bairro: "Centro", cidade: "Lavras", uf: "MG", cep: "37200-000" };
+        return Response.json({
+          itens: [{ id, nome, especie, porte, sexo, idadeMeses, fotos, status, endereco }],
+        });
+      }
       if (url.startsWith("http://adocao/v1/solicitacoes?"))
         return Response.json({
           _embedded: { solicitacoes: [solicitacao] },
