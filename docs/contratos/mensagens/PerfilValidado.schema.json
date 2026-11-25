@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PerfilValidado v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adotanteId"
+  ],
+  "properties": {
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

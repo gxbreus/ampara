@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "adocao.falhou v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "animalId",
+    "animalNome",
+    "adotanteId",
+    "responsavelId",
+    "estadoFinal",
+    "motivo"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    },
+    "animalNome": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "responsavelId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "estadoFinal": {
+      "type": "string",
+      "enum": [
+        "REJEITADA_INDISPONIVEL",
+        "PERFIL_INVALIDO",
+        "FALHOU"
+      ]
+    },
+    "motivo": {
+      "type": "string",
+      "enum": [
+        "INDISPONIVEL",
+        "INEXISTENTE",
+        "PERFIL_INCOMPLETO",
+        "LIMITE_SOLICITACOES",
+        "CONTA_INEXISTENTE",
+        "TIMEOUT_T1",
+        "TIMEOUT_T2",
+        "CONFIRMACAO_RECUSADA"
+      ]
+    },
+    "camposFaltando": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
