@@ -18,11 +18,12 @@ import type {
 } from "./tipos";
 
 // Situação em 25/11 na develop:
-// - auth: o Vite assina o token (apps/compartilhado/dev-auth.ts) até a Identidade ter login (#149);
-// - busca: GET /mobile/v1/animais já passa pelo BFF Mobile até a projeção de Animais;
-// - o resto do BFF Mobile está no PR #158; notificações na #60; assistente na #67/#68.
+// - auth: Identidade real (#149); com VITE_AUTH_REAL=true o login passa pelo gateway;
+// - busca, detalhe, solicitacoes e conta: BFF Mobile (#158) + Animais, Adoção e Identidade;
+// - assistente: RAG real (#66 a #69), projetado pelo BFF Mobile;
+// - notificacoes: o serviço ainda não tem as rotas (#60), então segue simulado.
 export type Grupo = "auth" | "busca" | "detalhe" | "solicitacoes" | "notificacoes" | "conta" | "assistente";
-const PADRAO_REAIS: Grupo[] = ["auth", "busca"];
+const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "conta", "assistente"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
 
 const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não existe ${o} com este identificador.`);
