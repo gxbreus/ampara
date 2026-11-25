@@ -9,6 +9,6 @@ Entrada única dos clientes: roteamento, validação do JWT (RS256, chave públi
 | `/mobile/v1` | BFF Mobile — JWT |
 | `/web/v1` | BFF Web — JWT |
 
-Aqui fica o `kong.template.yml`: a chave pública entra por variável de ambiente, e nenhum segredo é versionado.
+Aqui fica o `kong.template.yml`. A imagem própria gera o `kong.yml` em tempo de inicialização usando a chave pública recebida por variável de ambiente; nenhum segredo é versionado. O gateway publica somente a porta `8000`.
 
 **Responsável:** Gabriel Soares · **Issues:** #27 (rotas e ADR-005), #43 (Kong no compose), #46 (Kubernetes), #50 (Ingress)

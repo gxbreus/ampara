@@ -44,11 +44,7 @@ class OutboxRelay:
             try:
                 conexao = await aio_pika.connect_robust(self.rabbitmq_url)
                 canal = await conexao.channel(publisher_confirms=True)
-                exchange = await canal.declare_exchange(
-                    "ampara.eventos",
-                    type=aio_pika.ExchangeType.TOPIC,
-                    durable=True,
-                )
+                exchange = await canal.get_exchange("ampara.eventos", ensure=False)
 
                 while not self._parar.is_set():
                     await self._processar_lote_pendente(exchange)
@@ -76,13 +72,23 @@ class OutboxRelay:
 
         for doc in pendentes:
             try:
-                corpo = json.dumps(doc["payload"]).encode("utf-8")
+                envelope = {
+                    "messageId": doc["messageId"],
+                    "type": doc["type"],
+                    "version": 1,
+                    "correlationId": doc.get("correlationId", doc["messageId"]),
+                    "sagaId": doc.get("sagaId"),
+                    "occurredAt": doc["criadoEm"].replace(tzinfo=UTC).isoformat(),
+                    "payload": doc["payload"],
+                }
+                corpo = json.dumps(envelope).encode("utf-8")
                 mensagem = Message(
                     body=corpo,
                     delivery_mode=DeliveryMode.PERSISTENT,
                     content_type="application/json",
                     message_id=doc.get("messageId"),
                     type=doc.get("type"),
+                    correlation_id=envelope["correlationId"],
                 )
 
                 # Publicação com publisher confirms garantida pelo canal
