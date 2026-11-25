@@ -17,5 +17,7 @@ def test_historico_aceita_saga_id_gravado_pela_saga():
 
 
 def test_historico_manual_continua_sem_saga_id():
-    item = HistoricoStatusItem(status="EM_TRATAMENTO", alteradoEm=datetime.now(UTC), alteradoPor="RESPONSAVEL")
+    item = HistoricoStatusItem(
+        status="EM_TRATAMENTO", alteradoEm=datetime.now(UTC), alteradoPor="RESPONSAVEL"
+    )
     assert item.sagaId is None
