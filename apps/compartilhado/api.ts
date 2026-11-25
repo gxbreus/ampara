@@ -156,12 +156,18 @@ export function idade(meses: number) {
   return `${anos} ${anos === 1 ? "ano" : "anos"}`;
 }
 
+// O serviço de Animais (Python) devolve datas UTC sem o fuso ("2026-11-25T15:13:05.088000").
+// O navegador leria isso como horário local e erraria em 3 h; sem fuso, vale UTC.
+export function lerData(iso: string) {
+  return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`);
+}
+
 const fmtData = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-export const dataHora = (iso?: string | null) => (iso ? fmtData.format(new Date(iso)) : "—");
+export const dataHora = (iso?: string | null) => (iso ? fmtData.format(lerData(iso)) : "—");
 
 export function relativo(iso?: string | null) {
   if (!iso) return "—";
-  const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  const s = Math.round((Date.now() - lerData(iso).getTime()) / 1000);
   const futuro = s < 0;
   const a = Math.abs(s);
   const txt = a < 60 ? `${a}s` : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} d`;

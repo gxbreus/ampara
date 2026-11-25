@@ -22,10 +22,10 @@ import type {
 
 // Situação em 25/11 na develop:
 // - auth: o Vite assina o token (apps/compartilhado/dev-auth.ts) até a Identidade ter login (#149);
-// - solicitacoes: BFF Web + Adoção prontos;
-// - painel e animais: no PR #147; eu e admin: dependem da Identidade (#149).
+// - solicitacoes, painel e animais: BFF Web (#147) + Adoção + Animais prontos;
+// - eu e admin: dependem das rotas de conta da Identidade (#149).
 export type Grupo = "auth" | "eu" | "painel" | "animais" | "solicitacoes" | "admin";
-const PADRAO_REAIS: Grupo[] = ["auth", "solicitacoes"];
+const PADRAO_REAIS: Grupo[] = ["auth", "solicitacoes", "painel", "animais"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
 
 const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não existe ${o} com este identificador.`);
@@ -81,16 +81,7 @@ export async function listarAnimais(filtro: { status?: StatusAnimal; cursor?: st
   return simular(() => ({
     itens: m.animais
       .filter((a) => !filtro.status || a.status === filtro.status)
-      .map((a) => ({
-        id: a.id,
-        nome: a.nome,
-        especie: a.especie,
-        porte: a.porte,
-        status: a.status,
-        fotoCapa: a.fotoCapa,
-        solicitacoesAtivas: m.solicitacoes.filter((s) => s.animal?.id === a.id && ["SOLICITADA", "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO", "APROVADA"].includes(s.estado)).length,
-        atualizadoEm: a.atualizadoEm,
-      })),
+      .map(m.resumo),
     proximoCursor: null,
     avisos: [],
   }));
@@ -105,22 +96,23 @@ export async function obterAnimal(id: string): Promise<AnimalPainel> {
   });
 }
 
-export async function cadastrarAnimal(dados: AnimalEntrada): Promise<AnimalPainel> {
+// POST, PUT e PATCH devolvem o resumo do animal; quem precisa da ficha busca de novo.
+export async function cadastrarAnimal(dados: AnimalEntrada): Promise<AnimalResumo> {
   if (rotas.real("animais")) return http("/web/v1/animais", { method: "POST", corpo: dados, headers: { "Idempotency-Key": crypto.randomUUID() } });
-  return simular(() => m.novoAnimal(dados));
+  return simular(() => m.resumo(m.novoAnimal(dados)));
 }
 
-export async function editarAnimal(id: string, dados: AnimalEntrada): Promise<AnimalPainel> {
+export async function editarAnimal(id: string, dados: AnimalEntrada): Promise<AnimalResumo> {
   if (rotas.real("animais")) return http(`/web/v1/animais/${id}`, { method: "PUT", corpo: dados });
   return simular(() => {
     const a = m.animais.find((x) => x.id === id);
     if (!a) throw naoEncontrado("animal");
-    Object.assign(a, dados, { fotoCapa: dados.fotos[0] ?? null, atualizadoEm: new Date().toISOString() });
-    return { ...a, solicitacoes: m.solicitacoesDoAnimal(id) };
+    m.atualizar(a, dados);
+    return m.resumo(a);
   });
 }
 
-export async function alterarStatus(id: string, status: "DISPONIVEL" | "EM_TRATAMENTO" | "INDISPONIVEL"): Promise<AnimalPainel> {
+export async function alterarStatus(id: string, status: "DISPONIVEL" | "EM_TRATAMENTO" | "INDISPONIVEL"): Promise<AnimalResumo> {
   if (rotas.real("animais")) return http(`/web/v1/animais/${id}/status`, { method: "PATCH", corpo: { status } });
   return simular(() => {
     const a = m.animais.find((x) => x.id === id);
@@ -131,7 +123,7 @@ export async function alterarStatus(id: string, status: "DISPONIVEL" | "EM_TRATA
     a.status = status;
     a.historicoStatus.push({ status, em: new Date().toISOString(), por: "RESPONSAVEL" });
     a.atualizadoEm = new Date().toISOString();
-    return { ...a, solicitacoes: m.solicitacoesDoAnimal(id) };
+    return m.resumo(a);
   });
 }
 
