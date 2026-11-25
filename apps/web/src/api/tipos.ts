@@ -44,6 +44,9 @@ export interface PerfilResumo {
 export type Adotante = { id: string; nome: string; cidade: string; perfil: PerfilResumo | null } | null;
 export type AnimalMini = { id: string; nome: string; fotoCapa: string | null } | null;
 
+export type Sexo = "MACHO" | "FEMEA";
+
+// O que o painel mostra: a coordenada e o bairro/cidade (o BFF junta do endereço).
 export interface Localizacao {
   lat: number;
   lng: number;
@@ -51,14 +54,28 @@ export interface Localizacao {
   cidade: string;
 }
 
+export interface Endereco {
+  rua: string;
+  numero: string;
+  complemento?: string | null;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  cep: string; // 00000-000
+}
+
+// Corpo de POST/PUT /web/v1/animais (bff/web/src/animais.ts, corpoAnimal).
 export interface AnimalEntrada {
   nome: string;
   especie: Especie;
   porte: Porte;
+  sexo: Sexo;
   idadeMeses: number;
   temperamento?: string[];
+  descricao?: string | null;
   fotos: string[];
-  localizacao: Localizacao;
+  localizacao: { lat: number; lng: number };
+  endereco: Endereco;
 }
 
 export interface AnimalResumo {
@@ -81,6 +98,7 @@ export interface Pagina<T> {
 export interface SolicitacaoDoAnimal {
   id: string;
   estado: EstadoSolicitacao;
+  decisao?: unknown;
   desfecho: string | null;
   expiraEm: string | null;
   criadoEm: string;
@@ -88,10 +106,19 @@ export interface SolicitacaoDoAnimal {
   _links: LinksSolicitacao;
 }
 
-export interface AnimalPainel extends AnimalEntrada {
+export interface AnimalPainel {
   id: string;
+  nome: string;
+  especie: Especie;
+  porte: Porte;
+  sexo: Sexo;
+  idadeMeses: number;
   temperamento: string[];
+  descricao: string | null;
+  fotos: string[];
   fotoCapa: string | null;
+  localizacao: Localizacao;
+  endereco: Endereco;
   status: StatusAnimal;
   historicoStatus: { status: StatusAnimal; em: string; por: "RESPONSAVEL" | "SAGA" }[];
   atualizadoEm: string;
