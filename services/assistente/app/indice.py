@@ -64,7 +64,9 @@ class Indice:
             try:
                 await self.qdrant.create_collection(
                     self.colecao,
-                    vectors_config=models.VectorParams(size=self.embeddings.dimensao, distance=models.Distance.COSINE),
+                    vectors_config=models.VectorParams(
+                        size=self.embeddings.dimensao, distance=models.Distance.COSINE
+                    ),
                 )
             except Exception:
                 # outra réplica criou no meio do caminho: segue para o upsert idempotente
@@ -76,7 +78,9 @@ class Indice:
         await self.qdrant.upsert(
             self.colecao,
             points=[
-                models.PointStruct(id=str(uuid.uuid5(NAMESPACE, t.id)), vector=v, payload=t.__dict__)
+                models.PointStruct(
+                    id=str(uuid.uuid5(NAMESPACE, t.id)), vector=v, payload=t.__dict__
+                )
                 for t, v in zip(trechos, vetores, strict=True)
             ],
         )
@@ -85,5 +89,7 @@ class Indice:
 
     async def buscar(self, pergunta: str, k: int) -> list[Resultado]:
         vetor = await self.embeddings.aembed_query(pergunta)
-        achados = await self.qdrant.search(self.colecao, query_vector=vetor, limit=k, with_payload=True)
+        achados = await self.qdrant.search(
+            self.colecao, query_vector=vetor, limit=k, with_payload=True
+        )
         return [Resultado(Trecho(**p.payload), float(p.score)) for p in achados]

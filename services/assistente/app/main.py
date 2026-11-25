@@ -32,7 +32,13 @@ def criar_llms(settings) -> list:
 
     # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
     return [
-        ChatGroq(model=modelo, api_key=chave, temperature=0.2, max_retries=0, timeout=settings.timeout_llm_s)
+        ChatGroq(
+            model=modelo,
+            api_key=chave,
+            temperature=0.2,
+            max_retries=0,
+            timeout=settings.timeout_llm_s,
+        )
         for modelo in dict.fromkeys([settings.modelo, settings.modelo_reserva])
     ]
 
@@ -43,10 +49,16 @@ async def indexar(app: FastAPI, trechos) -> None:
         try:
             novos = await app.state.rag.indice.garantir(trechos)
             app.state.indice_pronto = True
-            logger.info("índice pronto", extra={"trechosNovos": novos, "versao": app.state.rag.indice.versao})
+            logger.info(
+                "índice pronto",
+                extra={"trechosNovos": novos, "versao": app.state.rag.indice.versao},
+            )
             return
         except Exception as erro:  # noqa: BLE001
-            logger.warning("Qdrant indisponível para indexar", extra={"tentativa": tentativa + 1, "erro": str(erro)})
+            logger.warning(
+                "Qdrant indisponível para indexar",
+                extra={"tentativa": tentativa + 1, "erro": str(erro)},
+            )
             await asyncio.sleep(min(2 * (tentativa + 1), 10))
 
 
@@ -78,9 +90,17 @@ async def lifespan(app: FastAPI):
 
         # LLM e resiliência (#67, #69): uma resiliência (com circuito) por modelo
         app.state.llms = criar_llms(settings)
-        app.state.resiliencias = [Resiliencia(settings.timeout_llm_s) for _ in app.state.llms] or [Resiliencia(settings.timeout_llm_s)]
+        app.state.resiliencias = [Resiliencia(settings.timeout_llm_s) for _ in app.state.llms] or [
+            Resiliencia(settings.timeout_llm_s)
+        ]
         app.state.resiliencias_estado = app.state.resiliencias[0].estado
-        app.state.rag = Rag(indice, app.state.llms, app.state.resiliencias, Cache(redis, settings.cache_ttl_s), settings)
+        app.state.rag = Rag(
+            indice,
+            app.state.llms,
+            app.state.resiliencias,
+            Cache(redis, settings.cache_ttl_s),
+            settings,
+        )
         app.state.indice_pronto = False
         tarefa = asyncio.create_task(indexar(app, trechos))
         stack.callback(tarefa.cancel)
@@ -110,7 +130,12 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def _http(_: Request, erro: HTTPException):
-        titulos = {401: "Não autenticado", 404: "Não encontrado", 429: "Limite excedido", 503: "Serviço indisponível"}
+        titulos = {
+            401: "Não autenticado",
+            404: "Não encontrado",
+            429: "Limite excedido",
+            503: "Serviço indisponível",
+        }
         return problema(erro.status_code, titulos.get(erro.status_code, "Erro"), str(erro.detail))
 
     return app

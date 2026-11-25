@@ -71,25 +71,52 @@ class Circuito:
         # meio-aberto e falhou de novo, ou chegou ao limite: (re)abre
         if self.aberto_ate is not None or self.falhas_consecutivas >= self.limite_falhas:
             self.aberto_ate = self._agora() + self.tempo_aberto_s
-            logger.warning("circuito do LLM aberto", extra={"falhasConsecutivas": self.falhas_consecutivas})
+            logger.warning(
+                "circuito do LLM aberto", extra={"falhasConsecutivas": self.falhas_consecutivas}
+            )
+
+
+# erros de rede do SDK da Groq (e do httpx por baixo dele) que não têm status HTTP
+ERROS_DE_REDE = {
+    "APIConnectionError",
+    "APITimeoutError",
+    "ConnectError",
+    "ReadTimeout",
+    "RemoteProtocolError",
+}
 
 
 def transitorio(erro: BaseException) -> bool:
-    """Vale tentar de novo: tempo esgotado, rede, limite de taxa ou erro 5xx do provedor."""
+    """Vale tentar de novo: tempo esgotado, rede, limite de taxa (429) ou erro 5xx do provedor.
+
+    Pedido inválido (4xx) ou bug no código não melhoram com outra tentativa.
+    """
     if isinstance(erro, TimeoutError | asyncio.TimeoutError | ConnectionError):
         return True
-    status = getattr(erro, "status_code", None) or getattr(getattr(erro, "response", None), "status_code", None)
-    return status is None or status == 429 or status >= 500
+    if type(erro).__name__ in ERROS_DE_REDE:
+        return True
+    status = getattr(erro, "status_code", None) or getattr(
+        getattr(erro, "response", None), "status_code", None
+    )
+    return status is not None and (status == 429 or status >= 500)
 
 
 class Resiliencia:
-    def __init__(self, timeout_s: float, tentativas: int = 3, base_backoff_s: float = 0.4, circuito: Circuito | None = None):
+    def __init__(
+        self,
+        timeout_s: float,
+        tentativas: int = 3,
+        base_backoff_s: float = 0.4,
+        circuito: Circuito | None = None,
+    ):
         self.timeout_s, self.tentativas, self.base_backoff_s = timeout_s, tentativas, base_backoff_s
         self.circuito = circuito or Circuito()
         self.metricas = Metricas()
 
-    async def chamar(self, operacao: Callable[[], Awaitable], repassar: tuple[type[BaseException], ...] = ()):
-        """`repassar`: erros que não são do LLM (ex.: Animais fora); sobem direto, sem contar falha."""
+    async def chamar(
+        self, operacao: Callable[[], Awaitable], repassar: tuple[type[BaseException], ...] = ()
+    ):
+        """`repassar`: erros que não são do LLM (ex.: Animais fora) sobem sem contar falha."""
         self.circuito.permitir()
         ultimo: BaseException | None = None
         for tentativa in range(self.tentativas):
@@ -101,7 +128,9 @@ class Resiliencia:
             except Exception as erro:
                 ultimo = erro
                 self.metricas.falhas += 1
-                logger.warning("falha no LLM", extra={"tentativa": tentativa + 1, "erro": type(erro).__name__})
+                logger.warning(
+                    "falha no LLM", extra={"tentativa": tentativa + 1, "erro": type(erro).__name__}
+                )
                 if not transitorio(erro) or tentativa == self.tentativas - 1:
                     break
                 # backoff exponencial com jitter "cheio": espera aleatória até 0,4 s, 0,8 s…
@@ -146,6 +175,9 @@ class Cache:
 
     async def gravar(self, chave: str, valor: dict) -> None:
         try:
-            await asyncio.wait_for(self.redis.set(chave, json.dumps(valor, ensure_ascii=False), ex=self.ttl_s), timeout=0.5)
+            await asyncio.wait_for(
+                self.redis.set(chave, json.dumps(valor, ensure_ascii=False), ex=self.ttl_s),
+                timeout=0.5,
+            )
         except Exception:
             logger.warning("cache indisponível na escrita")

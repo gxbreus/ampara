@@ -31,12 +31,14 @@ MAX_ITERACOES = 3
 CAMPOS_PUBLICOS = ("id", "nome", "especie", "porte", "sexo", "idadeMeses", "bairro", "fotoThumb")
 
 SISTEMA = (
-    "Você é o assistente de recomendação da Ampara (adoção responsável). Leia a rotina da pessoa, "
-    "decida filtros razoáveis e chame a ferramenta buscar_animais_disponiveis (pode chamar de novo com "
-    "filtros mais amplos se vier vazio). A localização já é aplicada pelo sistema. Depois, responda SÓ com "
-    'um JSON: {"sugestoes": [{"animalId": "...", "motivo": "..."}], "explicacao": "..."} com no máximo 3 '
-    "sugestões, usando apenas ids devolvidos pela ferramenta. O motivo (1 frase) liga o animal à rotina e "
-    "lembra de confirmar com a ONG. A explicação (até 2 frases) resume o critério. Português do Brasil."
+    "Você é o assistente de recomendação da Ampara (adoção responsável). Leia a rotina "
+    "da pessoa, decida filtros razoáveis e chame a ferramenta buscar_animais_disponiveis "
+    "(pode chamar de novo com filtros mais amplos se vier vazio). A localização já é "
+    "aplicada pelo sistema. Depois, responda SÓ com um JSON: "
+    '{"sugestoes": [{"animalId": "...", "motivo": "..."}], "explicacao": "..."} '
+    "com no máximo 3 sugestões, usando apenas ids devolvidos pela ferramenta. O motivo "
+    "(1 frase) liga o animal à rotina e lembra de confirmar com a ONG. A explicação "
+    "(até 2 frases) resume o critério. Português do Brasil."
 )
 
 
@@ -52,7 +54,12 @@ class Busca:
         self.filtros_usados: dict = {"lat": lat, "lng": lng, "raioKm": raio_km}
         self.vistos: dict[str, dict] = {}
 
-    async def __call__(self, especie: str | None = None, porte: str | None = None, idade_max_meses: int | None = None) -> list[dict]:
+    async def __call__(
+        self,
+        especie: str | None = None,
+        porte: str | None = None,
+        idade_max_meses: int | None = None,
+    ) -> list[dict]:
         params = {"lat": self.lat, "lng": self.lng, "raioKm": self.raio_km, "limite": 12}
         filtros = {"especie": especie, "porte": porte, "idadeMaxMeses": idade_max_meses}
         params.update({k: v for k, v in filtros.items() if v is not None})
@@ -62,7 +69,9 @@ class Busca:
         except httpx.HTTPError as erro:
             raise AnimaisIndisponivel(str(erro)) from erro
         self.filtros_usados = {k: v for k, v in params.items() if k != "limite"}
-        publicos = [{k: a[k] for k in CAMPOS_PUBLICOS if k in a} for a in resposta.json().get("itens", [])]
+        publicos = [
+            {k: a[k] for k in CAMPOS_PUBLICOS if k in a} for a in resposta.json().get("itens", [])
+        ]
         self.vistos.update({a["id"]: a for a in publicos})
         return publicos
 
@@ -102,7 +111,9 @@ async def agente(llm, busca: Busca, rotina: str) -> dict:
             resultado = await ferramenta.ainvoke(chamada["args"])
             mensagens.append(ToolMessage(content=resultado, tool_call_id=chamada["id"]))
     # esgotou as iterações sem resposta final: pede a conclusão sem mais tools
-    final = await llm.ainvoke(mensagens + [HumanMessage("Conclua agora com o JSON pedido, sem chamar ferramentas.")])
+    final = await llm.ainvoke(
+        mensagens + [HumanMessage("Conclua agora com o JSON pedido, sem chamar ferramentas.")]
+    )
     return ler_json(str(final.content))
 
 
@@ -135,14 +146,31 @@ async def recomendar_sem_llm(busca: Busca, rotina: str) -> dict:
     if filtros.get("idade_min"):
         animais = [a for a in animais if a.get("idadeMeses", 0) >= filtros["idade_min"]]
     sugestoes = [
-        {"animalId": a["id"], "motivo": f"{a['nome']} ({a.get('porte', '').lower()}) combina com {criterio}; confirme a rotina de cuidados com a ONG."}
+        {
+            "animalId": a["id"],
+            "motivo": (
+                f"{a['nome']} ({a.get('porte', '').lower()}) combina com {criterio}; "
+                "confirme a rotina de cuidados com a ONG."
+            ),
+        }
         for a in animais[:3]
     ]
-    explicacao = f"Sugestões por regras simples (o assistente de IA está indisponível agora), considerando {criterio}."
+    explicacao = (
+        "Sugestões por regras simples (o assistente de IA está indisponível agora), "
+        f"considerando {criterio}."
+    )
     return {"sugestoes": sugestoes, "explicacao": explicacao}
 
 
-async def recomendar(llms: list, resiliencias: list[Resiliencia], cliente: httpx.AsyncClient, rotina: str, lat: float, lng: float, raio_km: float) -> dict:
+async def recomendar(
+    llms: list,
+    resiliencias: list[Resiliencia],
+    cliente: httpx.AsyncClient,
+    rotina: str,
+    lat: float,
+    lng: float,
+    raio_km: float,
+) -> dict:
     inicio = time.perf_counter()
     busca = Busca(cliente, lat, lng, raio_km)
     degradado = False
@@ -150,7 +178,9 @@ async def recomendar(llms: list, resiliencias: list[Resiliencia], cliente: httpx
         bruto = None
         for llm, resiliencia in zip(llms, resiliencias, strict=False):
             try:
-                bruto = await resiliencia.chamar(lambda m=llm: agente(m, busca, rotina), repassar=(AnimaisIndisponivel,))
+                bruto = await resiliencia.chamar(
+                    lambda m=llm: agente(m, busca, rotina), repassar=(AnimaisIndisponivel,)
+                )
                 break
             except AnimaisIndisponivel:
                 raise
@@ -164,7 +194,9 @@ async def recomendar(llms: list, resiliencias: list[Resiliencia], cliente: httpx
     except AnimaisIndisponivel:
         return {
             "sugestoes": [],
-            "explicacao": "Não consegui consultar os animais disponíveis agora. Tente de novo em instantes.",
+            "explicacao": (
+                "Não consegui consultar os animais disponíveis agora. Tente de novo em instantes."
+            ),
             "filtrosUsados": busca.filtros_usados,
             "fontes": [],
             "degradado": True,
@@ -178,13 +210,20 @@ async def recomendar(llms: list, resiliencias: list[Resiliencia], cliente: httpx
         if not animal:
             logger.warning("sugestão com id que a busca não devolveu foi descartada")
             continue
-        item = {"animalId": animal["id"], "nome": animal["nome"], "motivo": str(s.get("motivo", "")).strip()}
+        item = {
+            "animalId": animal["id"],
+            "nome": animal["nome"],
+            "motivo": str(s.get("motivo", "")).strip(),
+        }
         if animal.get("fotoThumb"):
             item["fotoThumb"] = animal["fotoThumb"]
         sugestoes.append(item)
     explicacao = str(bruto.get("explicacao", "")).strip()
     if not sugestoes:
-        explicacao = explicacao or "Não encontrei animais disponíveis que combinem com essa rotina no raio informado."
+        explicacao = (
+            explicacao
+            or "Não encontrei animais disponíveis que combinem com essa rotina no raio informado."
+        )
     return {
         "sugestoes": sugestoes,
         "explicacao": explicacao,

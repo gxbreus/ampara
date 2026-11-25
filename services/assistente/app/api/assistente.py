@@ -21,7 +21,9 @@ def autenticar(settings: ConfigDep, authorization: Annotated[str | None, Header(
         raise HTTPException(401, "É necessário um JWT válido.")
     chave = settings.jwt_public_key.replace("\\n", "\n")
     try:
-        return jwt.decode(authorization[7:], chave, algorithms=["RS256"], issuer="ampara-identidade")
+        return jwt.decode(
+            authorization[7:], chave, algorithms=["RS256"], issuer="ampara-identidade"
+        )
     except jwt.PyJWTError as erro:
         raise HTTPException(401, "É necessário um JWT válido.") from erro
 
@@ -62,7 +64,13 @@ async def perguntas(entrada: PerguntaEntrada, request: Request, _: Usuario):
 async def recomendacoes(entrada: RecomendacaoEntrada, request: Request, _: Usuario):
     estado = request.app.state
     return await recomendar(
-        estado.llms, estado.resiliencias, estado.animais, entrada.rotina, entrada.lat, entrada.lng, entrada.raioKm
+        estado.llms,
+        estado.resiliencias,
+        estado.animais,
+        entrada.rotina,
+        entrada.lat,
+        entrada.lng,
+        entrada.raioKm,
     )
 
 
