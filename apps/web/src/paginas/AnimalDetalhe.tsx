@@ -14,8 +14,9 @@ export function AnimalDetalhe() {
   const q = useQuery({ queryKey: ["animal", id], queryFn: () => obterAnimal(id), refetchInterval: 6_000 });
   const mudar = useMutation({
     mutationFn: (s: (typeof MANUAIS)[number]) => alterarStatus(id, s),
-    onSuccess: (a) => {
-      consultas.setQueryData(["animal", id], a);
+    // a resposta é o resumo do animal: a ficha (com o histórico novo) é buscada de novo
+    onSuccess: () => {
+      consultas.invalidateQueries({ queryKey: ["animal", id] });
       consultas.invalidateQueries({ queryKey: ["animais"] });
       consultas.invalidateQueries({ queryKey: ["painel"] });
     },
@@ -54,10 +55,19 @@ export function AnimalDetalhe() {
             <h2>Ficha</h2>
             <dl className="dados">
               <div><dt>Espécie</dt><dd>{ESPECIES[a.especie]}</dd></div>
+              <div><dt>Sexo</dt><dd>{a.sexo === "MACHO" ? "Macho" : "Fêmea"}</dd></div>
               <div><dt>Porte</dt><dd>{PORTES[a.porte]}</dd></div>
               <div><dt>Idade</dt><dd>{idade(a.idadeMeses)}</dd></div>
               <div><dt>Onde está</dt><dd>{a.localizacao.bairro}, {a.localizacao.cidade}</dd></div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <dt>Endereço do abrigo (só o painel vê)</dt>
+                <dd style={{ fontFamily: "var(--texto)", fontSize: "0.95rem", fontWeight: 500 }}>
+                  {a.endereco.rua}, {a.endereco.numero}
+                  {a.endereco.complemento ? ` · ${a.endereco.complemento}` : ""} · {a.endereco.bairro}, {a.endereco.cidade}/{a.endereco.uf} · {a.endereco.cep}
+                </dd>
+              </div>
             </dl>
+            {a.descricao && <p style={{ margin: 0 }}>{a.descricao}</p>}
             {a.temperamento.length > 0 && (
               <div className="etiquetas">{a.temperamento.map((t) => <span className="etiqueta" key={t}>{t}</span>)}</div>
             )}
