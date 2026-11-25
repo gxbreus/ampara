@@ -62,8 +62,8 @@ jobs:
             services/assistente: services/assistente/**
             bff/web: bff/web/**
             bff/mobile: bff/mobile/**
-            apps/web: apps/web/**
-            apps/mobile: apps/mobile/**
+            # os dois apps são um npm workspace: um package-lock e um typecheck em apps/
+            apps: apps/**
             gateway: gateway/**
             infra/rabbitmq: infra/rabbitmq/**
             infra/mongo: infra/mongo/**

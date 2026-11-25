@@ -1,4 +1,9 @@
+import asyncio
+
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from app.dependencias import QdrantDep, RedisDep
 
 router = APIRouter(tags=["saúde"])
 
@@ -9,6 +14,13 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# TODO(#42): GET /ready, com o Qdrant (get_collections) e o Redis (PING), e 503 quando
-# um dos dois não responde. Nunca chame o provedor de LLM aqui: ele fora do ar é tratado
-# com fallback (#69) e não pode tirar o serviço do ar.
+@router.get("/ready")
+async def ready(qdrant: QdrantDep, redis: RedisDep):
+    """A prontidão não depende do LLM, da sua chave ou de Animais."""
+    try:
+        async with asyncio.timeout(2):
+            await qdrant.get_collections()
+            await redis.ping()
+    except Exception:
+        return JSONResponse({"status": "indisponivel"}, status_code=503)
+    return {"status": "ok"}

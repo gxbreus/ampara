@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 64" role="img" aria-label="Ampara">
+  <path d="M6 58V30C6 16 17 5 31 5s25 11 25 25v28z" fill="#ff6a3d"/>
+  <g fill="#fff9f1"><ellipse cx="31" cy="44" rx="9.4" ry="7.6"/><circle cx="18.7" cy="33.3" r="3.9"/><circle cx="25.5" cy="25.5" r="4.2"/><circle cx="36.5" cy="25.5" r="4.2"/><circle cx="43.3" cy="33.3" r="3.9"/></g>
+  <text x="68" y="47" font-family="Bricolage Grotesque, Arial Rounded MT Bold, sans-serif" font-weight="800" font-size="46" letter-spacing="-2" fill="#1e1b2e">ampara</text>
+</svg>
