@@ -10,5 +10,6 @@ data:
   # groq, ou openai para APIs compatíveis com a da OpenAI (Gemini: LLM_BASE_URL vazio)
   LLM_PROVIDER: openai
   LLM_BASE_URL: ""
-  LLM_MODEL: ""
-  LLM_FALLBACK_MODEL: ""
+  # modelos com versão fixa: flash-lite é o de menor custo; a reserva só entra se ele falhar
+  LLM_MODEL: gemini-2.5-flash-lite
+  LLM_FALLBACK_MODEL: gemini-2.5-flash

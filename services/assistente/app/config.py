@@ -57,13 +57,16 @@ class Settings(BaseSettings):
     def modelo(self) -> str:
         if self.llm_model:
             return self.llm_model
-        return "gemini-2.5-flash" if self.llm_provider == "openai" else "openai/gpt-oss-120b"
+        # flash-lite: o Gemini mais barato e o mais rápido nos testes (resposta ~1 s, tool
+        # calling ok); as perguntas são simples e curtas
+        return "gemini-2.5-flash-lite" if self.llm_provider == "openai" else "openai/gpt-oss-120b"
 
     @property
     def modelo_reserva(self) -> str:
         if self.llm_fallback_model:
             return self.llm_fallback_model
-        return "gemini-2.5-flash-lite" if self.llm_provider == "openai" else "llama-3.1-8b-instant"
+        # reserva estável (versão fixa, nunca "-latest"); só entra quando o principal falha
+        return "gemini-2.5-flash" if self.llm_provider == "openai" else "llama-3.1-8b-instant"
 
 
 @lru_cache
