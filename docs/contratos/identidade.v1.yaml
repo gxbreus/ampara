@@ -132,6 +132,10 @@ paths:
     get:
       tags: [Conta atual]
       summary: Consulta o perfil de adoção da conta autenticada
+      description: >-
+        Exclusiva de ADOTANTE. Enquanto o perfil não estiver completo,
+        completo é false e camposFaltando lista o que falta preencher; sem
+        perfil gravado, os campos vêm null e faltam todos os obrigatórios.
       operationId: obterMeuPerfilAdocao
       security:
         - bearerAuth: []
@@ -149,8 +153,11 @@ paths:
                 horasForaDeCasa: 4
                 aceiteTermo: true
                 completo: true
+                camposFaltando: []
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
     put:
       tags: [Conta atual]
       summary: Atualiza o perfil de adoção da conta autenticada
@@ -183,8 +190,11 @@ paths:
                 horasForaDeCasa: 6
                 aceiteTermo: true
                 completo: true
+                camposFaltando: []
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
   /v1/contas:
@@ -194,7 +204,7 @@ paths:
       description: >-
         Rota interna, com dois modos. Com ids (PROTETOR, ONG ou ADMIN), retorna
         os resumos das contas encontradas, até 100; ids inexistentes são
-        omitidos, e mais de 100 ids responde 422. Com incluir=perfil, cada
+        omitidos; mais de 100 ids, ou um id que não é UUID, responde 422. Com incluir=perfil, cada
         resumo traz também o perfil de adoção, sem e-mail nem aceite do termo
         (null quando a conta não tem perfil). Com statusVerificacao e role
         (só ADMIN), retorna a fila de verificação.
@@ -250,6 +260,7 @@ paths:
     get:
       tags: [Contas internas]
       summary: Consulta o resumo público de uma conta
+      description: Um id que não é UUID não identifica conta nenhuma e responde 404.
       operationId: obterContaPorId
       security:
         - bearerAuth: []
@@ -278,7 +289,8 @@ paths:
       summary: Verifica uma conta de protetor ou ONG
       description: >-
         Operação idempotente para ADMIN. Ao verificar, registra o evento
-        conta.verificada no outbox.
+        conta.verificada no outbox. Conta ADOTANTE ou ADMIN responde 409; um id
+        que não é UUID responde 404.
       operationId: verificarConta
       security:
         - bearerAuth: []
@@ -311,6 +323,8 @@ paths:
           $ref: '#/components/responses/SemPermissao'
         '404':
           $ref: '#/components/responses/ContaNaoEncontrada'
+        '409':
+          $ref: '#/components/responses/ContaNaoVerificavel'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
 components:
@@ -425,6 +439,17 @@ components:
             title: Conta não encontrada
             status: 404
             detail: Não existe conta com este identificador.
+    ContaNaoVerificavel:
+      description: Só contas PROTETOR ou ONG passam por verificação.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://ampara.dev/problemas/conta-nao-verificavel
+            title: Conta não verificável
+            status: 409
+            detail: Só contas PROTETOR ou ONG passam por verificação.
   schemas:
     NovaConta:
       type: object
@@ -580,18 +605,21 @@ components:
           type: boolean
     PerfilAdocao:
       type: object
+      description: >-
+        Perfil de adoção da própria conta. Campos ainda não preenchidos vêm
+        null; completo e camposFaltando são calculados pela Identidade.
       additionalProperties: false
-      required: [tipoMoradia, aceiteTermo, completo]
+      required: [tipoMoradia, temQuintal, outrosAnimais, horasForaDeCasa, aceiteTermo, completo, camposFaltando]
       properties:
         tipoMoradia:
-          type: string
-          enum: [CASA, APARTAMENTO, SITIO]
+          type: [string, 'null']
+          enum: [CASA, APARTAMENTO, SITIO, null]
         temQuintal:
-          type: boolean
+          type: [boolean, 'null']
         outrosAnimais:
-          type: boolean
+          type: [boolean, 'null']
         horasForaDeCasa:
-          type: integer
+          type: [integer, 'null']
           minimum: 0
           maximum: 24
         aceiteTermo:
@@ -599,6 +627,16 @@ components:
         completo:
           type: boolean
           readOnly: true
+        camposFaltando:
+          type: array
+          readOnly: true
+          description: >-
+            Campos obrigatórios ainda não preenchidos, na ordem abaixo; vazio
+            quando completo é true. outrosAnimais é opcional.
+          items:
+            type: string
+            enum: [tipoMoradia, temQuintal, horasForaDeCasa, aceiteTermo]
+          uniqueItems: true
     TokenSessao:
       type: object
       additionalProperties: false

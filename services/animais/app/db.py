@@ -18,10 +18,10 @@ async def criar_indices(
     # 1. Banco de escrita (animais):
     # - coleção animais: índices em status e responsavel_id
     await banco_escrita.animais.create_index([("status", ASCENDING)])
-    await banco_escrita.animais.create_index([("responsavel_id", ASCENDING)])
+    await banco_escrita.animais.create_index([("responsavelId", ASCENDING)])
 
     # - coleção outbox (publicação de eventos sem dual write)
-    await banco_escrita.outbox.create_index([("publicado", ASCENDING), ("created_at", ASCENDING)])
+    await banco_escrita.outbox.create_index([("publicadoEm", ASCENDING), ("criadoEm", ASCENDING)])
 
     # - coleção inbox (garantia de idempotência dos comandos da SAGA, TTL de 7 dias)
     await banco_escrita.inbox.create_index(
@@ -31,8 +31,10 @@ async def criar_indices(
 
     # 2. Banco de leitura (animais_leitura - projeção CQRS):
     # - coleção animais_busca: índice geoespacial 2dsphere no campo localizacao
-    await banco_leitura.animais_busca.create_index([("localizacao", GEOSPHERE)])
-    await banco_leitura.animais_busca.create_index([("status", ASCENDING)])
+    await banco_leitura.animais_busca.create_index([("pontoAproximado", GEOSPHERE)])
+    await banco_leitura.animais_busca.create_index(
+        [("status", ASCENDING), ("especie", ASCENDING), ("porte", ASCENDING)]
+    )
 
 
 async def verificar_mongo(cliente: AsyncMongoClient) -> bool:
