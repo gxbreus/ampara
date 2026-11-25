@@ -12,6 +12,8 @@ if [ -f "$env_file" ]; then
 fi
 
 senha() { openssl rand -hex 16; }
+# a senha das contas da demo é digitada no login, então é curta e legível
+senha_demo="ampara-$(openssl rand -hex 3)"
 
 IDENTIDADE_DB_PASSWORD="$(senha)"
 ANIMAIS_DB_PASSWORD="$(senha)"
@@ -45,6 +47,8 @@ declare -A valores=(
   [RABBITMQ_IDENTIDADE_PASSWORD]="$RABBITMQ_IDENTIDADE_PASSWORD"
   [RABBITMQ_NOTIFICACOES_PASSWORD]="$RABBITMQ_NOTIFICACOES_PASSWORD"
   [RABBITMQ_ORQUESTRADOR_PASSWORD]="$(senha)"
+  [RABBITMQ_BFF_WEB_PASSWORD]="$(senha)"
+  [SEED_SENHA_DEMO]="$senha_demo"
   [ANIMAIS_AMQP_URL]="amqp://animais:${RABBITMQ_ANIMAIS_PASSWORD}@rabbitmq:5672/"
   [IDENTIDADE_AMQP_URL]="amqp://identidade:${RABBITMQ_IDENTIDADE_PASSWORD}@rabbitmq:5672/"
   [NOTIFICACOES_AMQP_URL]="amqp://notificacoes:${RABBITMQ_NOTIFICACOES_PASSWORD}@rabbitmq:5672/"
@@ -63,3 +67,4 @@ chmod 600 "$env_file"
 
 "$raiz/scripts/gerar-chaves-jwt.sh"
 echo ".env de demonstração criado (LLM_API_KEY vazia: o Assistente sobe em modo degradado)"
+echo "senha das contas da demo (SEED_SENHA_DEMO): $senha_demo"

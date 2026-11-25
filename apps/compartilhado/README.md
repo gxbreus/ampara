@@ -51,7 +51,7 @@ Enquanto a Identidade não tem as rotas de autenticação (#149), este plugin do
 | `admin@ampara.dev` | ADMIN | libera a tela de verificação de contas |
 | `adotante@ampara.dev` | ADOTANTE | para o App Mobile |
 
-Quando a #149 entrar na `develop`, rode com `VITE_AUTH_REAL=true`: o plugin sai do caminho e o proxy manda `/auth/v1` para o gateway. Depois disso, o plugin pode ser apagado.
+A Identidade já tem login (#149) e o `scripts/seed.sh` cria essas mesmas quatro contas nela, com os mesmos ids e e-mails. Para usar o login real, rode com `VITE_AUTH_REAL=true`: o plugin sai do caminho e o proxy manda `/auth/v1` para o gateway. A senha passa a ser a `SEED_SENHA_DEMO` do `.env` (o plugin aceitava qualquer uma).
 
 ## Proxy
 
