@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.retomada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "pedidaPor"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pedidaPor": {
+      "type": "string",
+      "format": "uuid",
+      "description": "sub do ADMIN"
+    }
+  }
+}

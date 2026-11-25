@@ -370,9 +370,42 @@ test("assistente offline devolve fallback e recebe prazo de 20 segundos", async 
       method: "POST",
       url: `/mobile/v1/assistente/${acao}`,
       headers,
-      payload: { pergunta: "oi" },
+      payload: acao === "perguntas"
+        ? { pergunta: "Como adotar?" }
+        : { descricaoRotina: "Moro em apartamento", lat: -21.2, lng: -45 },
     });
     assert.equal(r.statusCode, 200);
     assert.equal(r.json<{ degradado: boolean }>().degradado, true);
   }
+});
+
+test("assistente adapta fontes e recomendações sem expor metadados internos", async (t) => {
+  const app = servidor(async (url, _req, init) => {
+    assert.equal(typeof init?.body, "string");
+    const corpo = JSON.parse(init?.body as string) as unknown;
+    if (url.endsWith("perguntas")) {
+      assert.deepEqual(corpo, { pergunta: "Como adotar?" });
+      return Response.json({ resposta: "Prepare a casa", fontes: [{ titulo: "Guia", origem: "Seção 1", trecho: "interno" }], degradado: false, cache: true, latenciaMs: 12 });
+    }
+    assert.deepEqual(corpo, { rotina: "Moro em apartamento", lat: -21.2, lng: -45, raioKm: 10 });
+    return Response.json({ sugestoes: [{ animalId: ID, nome: "Thor", motivo: "Compatível", fotoThumb: "https://a.dev/t.webp" }], explicacao: "Perto de você", filtrosUsados: { lat: -21.2, lng: -45 }, fontes: [], degradado: false, latenciaMs: 20 });
+  });
+  t.after(() => app.close());
+  const pergunta = await app.inject({ method: "POST", url: "/mobile/v1/assistente/perguntas", headers, payload: { pergunta: "Como adotar?" } });
+  assert.equal(pergunta.statusCode, 200);
+  assert.deepEqual(pergunta.json(), { resposta: "Prepare a casa", fontes: [{ titulo: "Guia", paginaOuSecao: "Seção 1" }], degradado: false });
+  const recomendacao = await app.inject({ method: "POST", url: "/mobile/v1/assistente/recomendacoes", headers, payload: { descricaoRotina: "Moro em apartamento", lat: -21.2, lng: -45 } });
+  assert.equal(recomendacao.statusCode, 200);
+  assert.deepEqual(recomendacao.json(), { animais: [{ animalId: ID, nome: "Thor", motivoRecomendacao: "Compatível", fotoThumb: "https://a.dev/t.webp" }], explicacao: "Perto de você", degradado: false });
+});
+
+test("recomendação exige localização válida sem chamar o Assistente", async (t) => {
+  let chamadas = 0;
+  const app = servidor(async () => { chamadas++; throw new Error("não deve chamar"); });
+  t.after(() => app.close());
+  for (const extra of [{}, { lat: 91, lng: -45 }, { lat: -21, lng: -181 }, { lat: -21, lng: -45, raioKm: 0 }]) {
+    const r = await app.inject({ method: "POST", url: "/mobile/v1/assistente/recomendacoes", headers, payload: { descricaoRotina: "Moro em apartamento", ...extra } });
+    assert.equal(r.statusCode, 400);
+  }
+  assert.equal(chamadas, 0);
 });

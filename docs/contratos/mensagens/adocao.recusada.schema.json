@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "adocao.recusada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "animalId",
+    "animalNome",
+    "adotanteId",
+    "responsavelId",
+    "motivo"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    },
+    "animalNome": {
+      "type": "string"
+    },
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "responsavelId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500
+    }
+  }
+}

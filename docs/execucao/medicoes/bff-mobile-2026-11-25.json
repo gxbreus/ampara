@@ -1,0 +1,534 @@
+{
+  "data": "2026-11-25T14:35:21.703862-03:00",
+  "busca_anonima": {
+    "status": 200,
+    "duracao_ms": 96.92210000002888,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "5168",
+      "Connection": "keep-alive",
+      "X-RateLimit-Limit-Minute": "600",
+      "RateLimit-Remaining": "599",
+      "RateLimit-Reset": "39",
+      "RateLimit-Limit": "600",
+      "X-RateLimit-Remaining-Minute": "599",
+      "x-animais-served-by": "da74290d23f4",
+      "x-served-by": "3c8a870311fe",
+      "x-correlation-id": "0002ad42-1e16-4f55-8258-8ac2d7927ab2",
+      "Date": "Wed, 25 Nov 2026 17:35:21 GMT",
+      "Server": "kong/3.8.0",
+      "vary": "Origin",
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Expose-Headers": "X-Correlation-Id",
+      "X-Kong-Upstream-Latency": "40",
+      "X-Kong-Proxy-Latency": "1",
+      "Via": "1.1 kong/3.8.0",
+      "X-Kong-Request-Id": "69827d2127409904c33449790ded3136"
+    },
+    "corpo": {
+      "itens": [
+        {
+          "id": "6b071b9b5fdeee988cc962f6",
+          "nome": "Carga CQRS 1795627931518621510 0",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.566+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962f8",
+          "nome": "Carga CQRS 1795627931593102213 1",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.598+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fa",
+          "nome": "Carga CQRS 1795627931608874434 2",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.625+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fc",
+          "nome": "Carga CQRS 1795627931634369784 3",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.638+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fe",
+          "nome": "Carga CQRS 1795627931646415470 4",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.651+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96300",
+          "nome": "Carga CQRS 1795627931661138666 5",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.666+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96302",
+          "nome": "Carga CQRS 1795627931675618208 6",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.680+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96304",
+          "nome": "Carga CQRS 1795627931690655078 7",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.695+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96306",
+          "nome": "Carga CQRS 1795627931702959254 8",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.707+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96308",
+          "nome": "Carga CQRS 1795627931714254162 9",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.719+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630a",
+          "nome": "Carga CQRS 1795627931728584974 10",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.733+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630c",
+          "nome": "Carga CQRS 1795627931741423801 11",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.746+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630e",
+          "nome": "Carga CQRS 1795627931756738123 12",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.761+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96310",
+          "nome": "Carga CQRS 1795627931768856788 13",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.773+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96312",
+          "nome": "Carga CQRS 1795627931780284767 14",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.785+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96314",
+          "nome": "Carga CQRS 1795627931794569108 15",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.799+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96316",
+          "nome": "Carga CQRS 1795627931809006785 16",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.813+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96318",
+          "nome": "Carga CQRS 1795627931825194270 17",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.830+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9631a",
+          "nome": "Carga CQRS 1795627931838027256 18",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.842+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9631c",
+          "nome": "Carga CQRS 1795627931851077677 19",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.857+00:00",
+          "minhaSolicitacao": null
+        }
+      ],
+      "proximoCursor": "eyJkIjogMjAxLjQ0NTUxMzc3OTA1MDIzLCAiaWQiOiAiNmIwNzFiOWI1ZmRlZWU5ODhjYzk2MzFjIiwgInEiOiAiZjYwYmExMzQ0MmM3ZmZhMWM0ZGRhOWZkNDc3NDBmOGMzNWQ2ZThjZTY1MWFhYWM1MmRlMjcxZGJjYzIxZTE4ZCJ9",
+      "avisos": []
+    },
+    "curl_i": "HTTP/1.1 200 OK\nContent-Type: application/json; charset=utf-8\nContent-Length: 5168\nConnection: keep-alive\nX-RateLimit-Limit-Minute: 600\nRateLimit-Remaining: 599\nRateLimit-Reset: 39\nRateLimit-Limit: 600\nX-RateLimit-Remaining-Minute: 599\nx-animais-served-by: da74290d23f4\nx-served-by: 3c8a870311fe\nx-correlation-id: 0002ad42-1e16-4f55-8258-8ac2d7927ab2\nDate: Wed, 25 Nov 2026 17:35:21 GMT\nServer: kong/3.8.0\nvary: Origin\nAccess-Control-Allow-Origin: http://localhost:5173\nAccess-Control-Expose-Headers: X-Correlation-Id\nX-Kong-Upstream-Latency: 40\nX-Kong-Proxy-Latency: 1\nVia: 1.1 kong/3.8.0\nX-Kong-Request-Id: 69827d2127409904c33449790ded3136\n\n{\"itens\":[{\"id\":\"6b071b9b5fdeee988cc962f6\",\"nome\":\"Carga CQRS 1795627931518621510 0\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.566+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962f8\",\"nome\":\"Carga CQRS 1795627931593102213 1\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.598+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fa\",\"nome\":\"Carga CQRS 1795627931608874434 2\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.625+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fc\",\"nome\":\"Carga CQRS 1795627931634369784 3\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.638+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fe\",\"nome\":\"Carga CQRS 1795627931646415470 4\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.651+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96300\",\"nome\":\"Carga CQRS 1795627931661138666 5\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.666+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96302\",\"nome\":\"Carga CQRS 1795627931675618208 6\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.680+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96304\",\"nome\":\"Carga CQRS 1795627931690655078 7\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.695+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96306\",\"nome\":\"Carga CQRS 1795627931702959254 8\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.707+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96308\",\"nome\":\"Carga CQRS 1795627931714254162 9\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.719+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630a\",\"nome\":\"Carga CQRS 1795627931728584974 10\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.733+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630c\",\"nome\":\"Carga CQRS 1795627931741423801 11\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.746+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630e\",\"nome\":\"Carga CQRS 1795627931756738123 12\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.761+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96310\",\"nome\":\"Carga CQRS 1795627931768856788 13\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.773+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96312\",\"nome\":\"Carga CQRS 1795627931780284767 14\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.785+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96314\",\"nome\":\"Carga CQRS 1795627931794569108 15\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.799+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96316\",\"nome\":\"Carga CQRS 1795627931809006785 16\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.813+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96318\",\"nome\":\"Carga CQRS 1795627931825194270 17\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.830+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9631a\",\"nome\":\"Carga CQRS 1795627931838027256 18\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.842+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9631c\",\"nome\":\"Carga CQRS 1795627931851077677 19\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.857+00:00\",\"minhaSolicitacao\":null}],\"proximoCursor\":\"eyJkIjogMjAxLjQ0NTUxMzc3OTA1MDIzLCAiaWQiOiAiNmIwNzFiOWI1ZmRlZWU5ODhjYzk2MzFjIiwgInEiOiAiZjYwYmExMzQ0MmM3ZmZhMWM0ZGRhOWZkNDc3NDBmOGMzNWQ2ZThjZTY1MWFhYWM1MmRlMjcxZGJjYzIxZTE4ZCJ9\",\"avisos\":[]}"
+  },
+  "health_sem_token": {
+    "status": 401,
+    "duracao_ms": 51.9881999999825,
+    "headers": {
+      "Date": "Wed, 25 Nov 2026 17:35:21 GMT",
+      "Content-Type": "application/json; charset=utf-8",
+      "Connection": "keep-alive",
+      "WWW-Authenticate": "Bearer",
+      "Content-Length": "26",
+      "vary": "Origin",
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Expose-Headers": "X-Correlation-Id",
+      "X-Correlation-Id": "7ee0fc02-cd05-495e-aa6f-fab20de6af2c",
+      "X-Kong-Response-Latency": "0",
+      "Server": "kong/3.8.0",
+      "X-Kong-Request-Id": "5fb495042958d24a6fe97963569ead46"
+    },
+    "corpo": {
+      "message": "Unauthorized"
+    },
+    "curl_i": "HTTP/1.1 401 Unauthorized\nDate: Wed, 25 Nov 2026 17:35:21 GMT\nContent-Type: application/json; charset=utf-8\nConnection: keep-alive\nWWW-Authenticate: Bearer\nContent-Length: 26\nvary: Origin\nAccess-Control-Allow-Origin: http://localhost:5173\nAccess-Control-Expose-Headers: X-Correlation-Id\nX-Correlation-Id: 7ee0fc02-cd05-495e-aa6f-fab20de6af2c\nX-Kong-Response-Latency: 0\nServer: kong/3.8.0\nX-Kong-Request-Id: 5fb495042958d24a6fe97963569ead46\n\n{\"message\":\"Unauthorized\"}"
+  },
+  "animais_pausado": {
+    "status": 504,
+    "duracao_ms": 2039.2795999999862,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "96",
+      "Connection": "keep-alive",
+      "X-RateLimit-Limit-Minute": "600",
+      "RateLimit-Remaining": "598",
+      "RateLimit-Reset": "38",
+      "RateLimit-Limit": "600",
+      "X-RateLimit-Remaining-Minute": "598",
+      "x-served-by": "3c8a870311fe",
+      "x-correlation-id": "cd792041-ac79-411e-904b-8b21a14885ad",
+      "Date": "Wed, 25 Nov 2026 17:35:24 GMT",
+      "Server": "kong/3.8.0",
+      "vary": "Origin",
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Expose-Headers": "X-Correlation-Id",
+      "X-Kong-Upstream-Latency": "2002",
+      "X-Kong-Proxy-Latency": "2",
+      "Via": "1.1 kong/3.8.0",
+      "X-Kong-Request-Id": "c4cbd72b93f9647c84c6fb6e2fe4e666"
+    },
+    "corpo": {
+      "codigo": "servico-lento",
+      "mensagem": "ServiÃ§o temporariamente indisponÃ­vel. Tente novamente."
+    },
+    "curl_i": "HTTP/1.1 504 Gateway Timeout\nContent-Type: application/json; charset=utf-8\nContent-Length: 96\nConnection: keep-alive\nX-RateLimit-Limit-Minute: 600\nRateLimit-Remaining: 598\nRateLimit-Reset: 38\nRateLimit-Limit: 600\nX-RateLimit-Remaining-Minute: 598\nx-served-by: 3c8a870311fe\nx-correlation-id: cd792041-ac79-411e-904b-8b21a14885ad\nDate: Wed, 25 Nov 2026 17:35:24 GMT\nServer: kong/3.8.0\nvary: Origin\nAccess-Control-Allow-Origin: http://localhost:5173\nAccess-Control-Expose-Headers: X-Correlation-Id\nX-Kong-Upstream-Latency: 2002\nX-Kong-Proxy-Latency: 2\nVia: 1.1 kong/3.8.0\nX-Kong-Request-Id: c4cbd72b93f9647c84c6fb6e2fe4e666\n\n{\"codigo\":\"servico-lento\",\"mensagem\":\"ServiÃ§o temporariamente indisponÃ­vel. Tente novamente.\"}"
+  },
+  "busca_apos_restauracao": {
+    "status": 200,
+    "duracao_ms": 45.80190000001494,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "5168",
+      "Connection": "keep-alive",
+      "X-RateLimit-Limit-Minute": "600",
+      "RateLimit-Remaining": "597",
+      "RateLimit-Reset": "36",
+      "RateLimit-Limit": "600",
+      "X-RateLimit-Remaining-Minute": "597",
+      "x-animais-served-by": "da74290d23f4",
+      "x-served-by": "3c8a870311fe",
+      "x-correlation-id": "f95a0178-80b2-4ba7-9286-e17ecc5d754a",
+      "Date": "Wed, 25 Nov 2026 17:35:24 GMT",
+      "Server": "kong/3.8.0",
+      "vary": "Origin",
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Expose-Headers": "X-Correlation-Id",
+      "X-Kong-Upstream-Latency": "16",
+      "X-Kong-Proxy-Latency": "0",
+      "Via": "1.1 kong/3.8.0",
+      "X-Kong-Request-Id": "0d6e0c4610f7b417b192a53ad3ef9448"
+    },
+    "corpo": {
+      "itens": [
+        {
+          "id": "6b071b9b5fdeee988cc962f6",
+          "nome": "Carga CQRS 1795627931518621510 0",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.566+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962f8",
+          "nome": "Carga CQRS 1795627931593102213 1",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.598+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fa",
+          "nome": "Carga CQRS 1795627931608874434 2",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.625+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fc",
+          "nome": "Carga CQRS 1795627931634369784 3",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.638+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc962fe",
+          "nome": "Carga CQRS 1795627931646415470 4",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.651+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96300",
+          "nome": "Carga CQRS 1795627931661138666 5",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.666+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96302",
+          "nome": "Carga CQRS 1795627931675618208 6",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.680+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96304",
+          "nome": "Carga CQRS 1795627931690655078 7",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.695+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96306",
+          "nome": "Carga CQRS 1795627931702959254 8",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.707+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96308",
+          "nome": "Carga CQRS 1795627931714254162 9",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.719+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630a",
+          "nome": "Carga CQRS 1795627931728584974 10",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.733+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630c",
+          "nome": "Carga CQRS 1795627931741423801 11",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.746+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9630e",
+          "nome": "Carga CQRS 1795627931756738123 12",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.761+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96310",
+          "nome": "Carga CQRS 1795627931768856788 13",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.773+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96312",
+          "nome": "Carga CQRS 1795627931780284767 14",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.785+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96314",
+          "nome": "Carga CQRS 1795627931794569108 15",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.799+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96316",
+          "nome": "Carga CQRS 1795627931809006785 16",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.813+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc96318",
+          "nome": "Carga CQRS 1795627931825194270 17",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.830+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9631a",
+          "nome": "Carga CQRS 1795627931838027256 18",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.842+00:00",
+          "minhaSolicitacao": null
+        },
+        {
+          "id": "6b071b9b5fdeee988cc9631c",
+          "nome": "Carga CQRS 1795627931851077677 19",
+          "fotoThumb": "https://example.org/animal.webp",
+          "porte": "MEDIO",
+          "distanciaKm": 0.201,
+          "cidade": "Lavras",
+          "atualizadoEm": "2026-11-25T17:32:11.857+00:00",
+          "minhaSolicitacao": null
+        }
+      ],
+      "proximoCursor": "eyJkIjogMjAxLjQ0NTUxMzc3OTA1MDIzLCAiaWQiOiAiNmIwNzFiOWI1ZmRlZWU5ODhjYzk2MzFjIiwgInEiOiAiZjYwYmExMzQ0MmM3ZmZhMWM0ZGRhOWZkNDc3NDBmOGMzNWQ2ZThjZTY1MWFhYWM1MmRlMjcxZGJjYzIxZTE4ZCJ9",
+      "avisos": []
+    },
+    "curl_i": "HTTP/1.1 200 OK\nContent-Type: application/json; charset=utf-8\nContent-Length: 5168\nConnection: keep-alive\nX-RateLimit-Limit-Minute: 600\nRateLimit-Remaining: 597\nRateLimit-Reset: 36\nRateLimit-Limit: 600\nX-RateLimit-Remaining-Minute: 597\nx-animais-served-by: da74290d23f4\nx-served-by: 3c8a870311fe\nx-correlation-id: f95a0178-80b2-4ba7-9286-e17ecc5d754a\nDate: Wed, 25 Nov 2026 17:35:24 GMT\nServer: kong/3.8.0\nvary: Origin\nAccess-Control-Allow-Origin: http://localhost:5173\nAccess-Control-Expose-Headers: X-Correlation-Id\nX-Kong-Upstream-Latency: 16\nX-Kong-Proxy-Latency: 0\nVia: 1.1 kong/3.8.0\nX-Kong-Request-Id: 0d6e0c4610f7b417b192a53ad3ef9448\n\n{\"itens\":[{\"id\":\"6b071b9b5fdeee988cc962f6\",\"nome\":\"Carga CQRS 1795627931518621510 0\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.566+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962f8\",\"nome\":\"Carga CQRS 1795627931593102213 1\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.598+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fa\",\"nome\":\"Carga CQRS 1795627931608874434 2\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.625+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fc\",\"nome\":\"Carga CQRS 1795627931634369784 3\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.638+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc962fe\",\"nome\":\"Carga CQRS 1795627931646415470 4\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.651+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96300\",\"nome\":\"Carga CQRS 1795627931661138666 5\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.666+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96302\",\"nome\":\"Carga CQRS 1795627931675618208 6\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.680+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96304\",\"nome\":\"Carga CQRS 1795627931690655078 7\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.695+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96306\",\"nome\":\"Carga CQRS 1795627931702959254 8\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.707+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96308\",\"nome\":\"Carga CQRS 1795627931714254162 9\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.719+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630a\",\"nome\":\"Carga CQRS 1795627931728584974 10\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.733+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630c\",\"nome\":\"Carga CQRS 1795627931741423801 11\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.746+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9630e\",\"nome\":\"Carga CQRS 1795627931756738123 12\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.761+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96310\",\"nome\":\"Carga CQRS 1795627931768856788 13\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.773+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96312\",\"nome\":\"Carga CQRS 1795627931780284767 14\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.785+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96314\",\"nome\":\"Carga CQRS 1795627931794569108 15\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.799+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96316\",\"nome\":\"Carga CQRS 1795627931809006785 16\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.813+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc96318\",\"nome\":\"Carga CQRS 1795627931825194270 17\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.830+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9631a\",\"nome\":\"Carga CQRS 1795627931838027256 18\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.842+00:00\",\"minhaSolicitacao\":null},{\"id\":\"6b071b9b5fdeee988cc9631c\",\"nome\":\"Carga CQRS 1795627931851077677 19\",\"fotoThumb\":\"https://example.org/animal.webp\",\"porte\":\"MEDIO\",\"distanciaKm\":0.201,\"cidade\":\"Lavras\",\"atualizadoEm\":\"2026-11-25T17:32:11.857+00:00\",\"minhaSolicitacao\":null}],\"proximoCursor\":\"eyJkIjogMjAxLjQ0NTUxMzc3OTA1MDIzLCAiaWQiOiAiNmIwNzFiOWI1ZmRlZWU5ODhjYzk2MzFjIiwgInEiOiAiZjYwYmExMzQ0MmM3ZmZhMWM0ZGRhOWZkNDc3NDBmOGMzNWQ2ZThjZTY1MWFhYWM1MmRlMjcxZGJjYzIxZTE4ZCJ9\",\"avisos\":[]}"
+  },
+  "imagens": [
+    {
+      "tag": "ampara/bff-mobile:dev",
+      "id": "sha256:da407f8de47f15eb3a30185e70b8ed7e419ce087adc8ac36371a9c8926ef78e2",
+      "bytes": 263697655
+    },
+    {
+      "tag": "ampara/bff-mobile:medicao-build",
+      "id": "sha256:ab6cd7d29711aa4d21f8d8b657cb1c647a69515c1d452a5e11c51502270ab827",
+      "bytes": 380852604
+    }
+  ],
+  "git_head": "a2ee1c1b46e3c258902a97699f84f36c0f1a5f11"
+}

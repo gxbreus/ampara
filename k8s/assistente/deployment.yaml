@@ -1,12 +1,13 @@
 # O Assistente não guarda estado no pod: os vetores ficam no Qdrant e o cache no Redis, então
-# as 2 réplicas atendem qualquer pergunta.
+# qualquer réplica atende qualquer pergunta. Fica com 1 réplica porque cada pod carrega o
+# modelo de embeddings na memória (~800 MB); para escalar: kubectl scale deploy/assistente.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: assistente
   labels: { app: assistente }
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels: { app: assistente }
   template:
@@ -36,19 +37,27 @@ spec:
               valueFrom: { secretKeyRef: { name: assistente-secret, key: ASSISTENTE_REDIS_URL } }
             - name: LLM_API_KEY
               valueFrom: { secretKeyRef: { name: assistente-secret, key: LLM_API_KEY } }
-          # TODO(#42): trocar a readiness para /ready (Qdrant e Redis) quando ele existir. O
-          # provedor de LLM nunca entra em probe: fora do ar, o serviço usa o fallback (#69).
+            - name: JWT_PUBLIC_KEY
+              valueFrom: { configMapKeyRef: { name: assistente-jwt, key: JWT_PUBLIC_KEY } }
+          # readiness: Qdrant e Redis no ar. O provedor de LLM nunca entra em probe: fora do
+          # ar, o serviço usa o fallback (#69). A subida carrega o modelo de embeddings (~20 s).
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /ready, port: http }
+            initialDelaySeconds: 10
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /health, port: http }
-            initialDelaySeconds: 10
+            initialDelaySeconds: 60
             periodSeconds: 10
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
+          # o onnxruntime precisa de um /tmp gravável; o resto do disco continua só leitura
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
           resources:
-            requests: { cpu: 50m, memory: 128Mi }
-            limits: { memory: 256Mi }
+            requests: { cpu: 100m, memory: 768Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        - { name: tmp, emptyDir: { sizeLimit: 64Mi } }

@@ -69,10 +69,10 @@ export function PedidoDetalhe() {
       </section>
 
       <Link to={`/animais/${p.animal.id}`} className="cartao pedido">
-        <Retrato className="foto" nome={p.animal.nome} especie={p.animal.especie} src={p.animal.fotoThumb} />
+        <Retrato className="foto" nome={p.animal.nome ?? "Animal"} especie={p.animal.especie} src={p.animal.fotoThumb} />
         <div>
           <strong>{p.animal.nome}</strong>
-          <small>{p.animal.responsavel.nome}</small>
+          <small>{p.animal.responsavel?.nome ?? "Ficha do animal indisponível"}</small>
         </div>
       </Link>
 

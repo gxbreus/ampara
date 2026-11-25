@@ -17,18 +17,17 @@ import type {
   SolicitacaoResumo,
 } from "./tipos";
 
-// Situação em 25/11 na develop:
-// - auth: o Vite assina o token (apps/compartilhado/dev-auth.ts) até a Identidade ter login (#149);
-// - busca: GET /mobile/v1/animais já passa pelo BFF Mobile até a projeção de Animais;
-// - o resto do BFF Mobile está no PR #158; notificações na #60; assistente na #67/#68.
+// #158 e #149 integrados: as jornadas do adotante usam os serviços reais.
+// Notificações continuam simuladas até a implementação de #60.
 export type Grupo = "auth" | "busca" | "detalhe" | "solicitacoes" | "notificacoes" | "conta" | "assistente";
-const PADRAO_REAIS: Grupo[] = ["auth", "busca"];
+const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "conta", "assistente"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
 
 const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não existe ${o} com este identificador.`);
 
 // Os cartões da última busca, para o detalhe simulado mostrar o animal real que a pessoa tocou.
 const cartoesVistos = new Map<string, AnimalCard>();
+let contextoBusca: Pick<FiltroBusca, "lat" | "lng" | "raioKm"> | undefined;
 
 // ---------- autenticação ----------
 
@@ -64,7 +63,7 @@ export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
     if (f.idadeMaxMeses != null) q.set("idadeMaxMeses", String(f.idadeMaxMeses));
     if (f.cursor) q.set("cursor", f.cursor);
     const bruta = await http<PaginaBusca>(`/mobile/v1/animais?${q}`, { publico: true });
-    // A busca real de hoje repassa a projeção de Animais; o BFF da #158 completa o cartão.
+    // Normaliza miniatura ausente para os componentes de apresentação.
     pagina = { ...bruta, itens: bruta.itens.map((c) => ({ ...c, fotoThumb: c.fotoThumb ?? "", minhaSolicitacao: c.minhaSolicitacao ?? null })) };
   } else {
     pagina = await simular(() => ({
@@ -81,6 +80,7 @@ export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
     }));
   }
   for (const c of pagina.itens) cartoesVistos.set(c.id, c);
+  contextoBusca = { lat: f.lat, lng: f.lng, raioKm: f.raioKm };
   return pagina;
 }
 
@@ -136,7 +136,10 @@ export async function minhasSolicitacoes(): Promise<{ itens: SolicitacaoResumo[]
 }
 
 export async function obterSolicitacao(id: string): Promise<SolicitacaoDetalhe> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}`);
+  if (rotas.real("solicitacoes")) {
+    const s = await http<SolicitacaoDetalhe>(`/mobile/v1/solicitacoes/${id}`);
+    return { ...s, podeCancelar: !!s._links?.cancelar };
+  }
   const animal = await (async () => {
     const s = m.solicitacoes.find((x) => x.id === id);
     if (!s) throw naoEncontrado("solicitação");
@@ -158,7 +161,12 @@ export async function linhaDoTempo(id: string): Promise<LinhaDoTempo> {
 }
 
 export async function cancelar(id: string, motivo?: string): Promise<{ id: string; estado: string }> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}/cancelamento`, { method: "POST", corpo: motivo ? { motivo } : {} });
+  if (rotas.real("solicitacoes")) {
+    const s = await obterSolicitacao(id);
+    const acao = s._links?.cancelar;
+    if (!acao) throw new ErroApi(409, "Ação indisponível", "Este pedido não pode mais ser cancelado.");
+    return http(acao.href, { method: acao.method ?? "POST", corpo: motivo ? { motivo } : {} });
+  }
   return simular(() => {
     const s = m.cancelar(id);
     if (!s) throw naoEncontrado("solicitação");
@@ -216,6 +224,9 @@ export async function perguntar(pergunta: string): Promise<RespostaPergunta> {
 }
 
 export async function recomendar(descricaoRotina: string): Promise<RespostaRecomendacao> {
-  if (rotas.real("assistente")) return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina } });
+  if (rotas.real("assistente")) {
+    if (!contextoBusca) throw new ErroApi(400, "Localização necessária", "Faça uma busca por animais para escolher a localização e o raio antes de pedir recomendações.");
+    return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina, ...contextoBusca } });
+  }
   return simular(() => m.recomendar(descricaoRotina), 1200 + Math.random() * 800);
 }

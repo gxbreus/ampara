@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PerfilRecusado v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adotanteId",
+    "motivo"
+  ],
+  "properties": {
+    "adotanteId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "motivo": {
+      "type": "string",
+      "enum": [
+        "PERFIL_INCOMPLETO",
+        "LIMITE_SOLICITACOES",
+        "CONTA_INEXISTENTE",
+        "SAGA_ENCERRADA"
+      ]
+    },
+    "camposFaltando": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
