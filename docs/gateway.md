@@ -66,14 +66,24 @@ nem infere a role a partir de uma rota.
 | Regras de adoção, animais ou contas | Serviços de domínio | A regra permanece perto dos dados e do domínio responsável. |
 | Decidir propriedade de um recurso | Serviço de domínio | Depende do recurso persistido, não apenas do token. |
 
-## Como isso vira Ingress na Parte 3
+## Compose × Kubernetes
 
-As quatro rotas serão representadas por objetos `Ingress` com
-`ingressClassName: kong`, preservando caminhos, métodos e destinos desta tabela.
-As políticas de JWT, rate limit, correlation ID e CORS serão associadas por
-`KongPlugin`; o consumidor `ampara-identidade` e sua credencial RS256 serão um
-`KongConsumer`, conforme as issues #46 e #50. Assim o roteamento de Kubernetes
-repete, em vez de reinterpretar, a decisão registrada aqui.
+| Rota do Compose (`gateway/kong.template.yml`) | Ingress Kubernetes | Backend |
+| --- | --- | --- |
+| `/auth/v1` | `auth` | `identidade:3001` |
+| `GET /mobile/v1/animais` | `mobile-publico` | `bff-mobile:3020` |
+| `/mobile/v1` | `mobile` | `bff-mobile:3020` |
+| `/web/v1` | `web` | `bff-web:3010` |
+
+No Compose, o Kong lê a configuração declarativa `kong.yml` gerada na inicialização.
+No cluster, o Kong Ingress Controller lê os objetos `Ingress` de
+`k8s/gateway/ingress.yaml`; os plugins `jwt`, `rate-limit-*`, `correlation-id` e
+`cors` são objetos próprios da instalação do controlador (#46). Os dois ambientes
+mantêm os mesmos caminhos, métodos, limites e `strip-path`.
+
+Depois de subir um dos ambientes na porta `8000`, execute
+`./scripts/teste-rotas.sh`. O script faz as chamadas sem token e o teste de limite
+de autenticação para comparar os códigos de resposta.
 
 ## Arquivo declarativo
 

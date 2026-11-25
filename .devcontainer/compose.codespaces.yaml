@@ -1,0 +1,5 @@
+# Só no Codespace (COMPOSE_FILE no devcontainer.json): o gateway do compose sai na 8080,
+# porque a 8000 fica com o Ingress do kind.
+services:
+  gateway:
+    ports: !override ["8080:8000"]
