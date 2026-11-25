@@ -6,6 +6,7 @@ import { HealthController } from './health.controller';
 import { AuthModule } from './auth/auth.module';
 import { ContasModule } from './contas/contas.module';
 import { OutboxModule } from './outbox/outbox.module';
+import { SagaModule } from './saga/saga.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { OutboxModule } from './outbox/outbox.module';
     AuthModule,
     ContasModule,
     OutboxModule,
+    SagaModule,
   ],
   controllers: [HealthController],
 })

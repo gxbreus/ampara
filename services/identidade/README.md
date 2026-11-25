@@ -47,6 +47,22 @@ IDENTIDADE_TEST_AMQP_ADMIN_URL=amqp://admin:senha@localhost:5672/ \
 npm test
 ```
 
+Os testes de idempotência da SAGA (mesmo `messageId` duas vezes) e de falha entre
+o commit e a publicação da resposta rodam na CI com um dublê do banco
+(`test/support/banco-saga-falso.ts`); com as variáveis acima, `test/e2e/saga.e2e-spec.ts`
+repete os casos contra o PostgreSQL real e confere, no RabbitMQ, a resposta em
+`orquestrador.respostas` e a ida direta para `identidade.comandos.dlq` de um comando
+inválido. A parte do broker consome `identidade.comandos`: use um broker descartável.
+
+## SAGA
+
+O consumidor lê `identidade.comandos` (`ValidarPerfil`, `LiberarVaga`, `RegistrarAdocao`)
+e responde em `ampara.respostas` com a routing key `orquestrador`, na ordem commit
+(efeito + inbox) → publica com confirm → `ack`. Comando que não confere com o catálogo
+(JSON quebrado, UUID inválido, `version` desconhecida) recebe `nack` sem requeue e vai
+direto para a DLQ; erro temporário volta para a fila até o `x-delivery-limit`. Se a
+conexão com o broker cair, o consumidor tenta de novo a cada 5 s.
+
 Pelo Compose, na raiz do repositório:
 
 ```bash

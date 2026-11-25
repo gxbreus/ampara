@@ -5,6 +5,7 @@ import { AppModule } from '../../src/app.module';
 import { configurarApp } from '../../src/app.setup';
 import { DATABASE_POOL } from '../../src/database/database.module';
 import { OutboxRelay } from '../../src/outbox/outbox.relay';
+import { SagaConsumer } from '../../src/saga/saga.consumer';
 import { BancoDeTeste, criarBanco } from './banco';
 
 export interface AppDeTeste {
@@ -13,7 +14,7 @@ export interface AppDeTeste {
   encerrar(): Promise<void>;
 }
 
-/** Sobe o AppModule com o banco de teste, um par de chaves RS256 descartável e sem o relay da outbox. */
+/** Sobe o AppModule com o banco de teste, um par de chaves RS256 descartável, sem o relay da outbox e sem o consumidor da SAGA. */
 export async function criarApp(): Promise<AppDeTeste> {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -28,6 +29,7 @@ export async function criarApp(): Promise<AppDeTeste> {
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DATABASE_POOL).useValue(banco.pool)
     .overrideProvider(OutboxRelay).useValue({})
+    .overrideProvider(SagaConsumer).useValue({})
     .compile();
   const app = modulo.createNestApplication({ logger: false });
   configurarApp(app);
