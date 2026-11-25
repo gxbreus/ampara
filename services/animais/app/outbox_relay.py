@@ -42,7 +42,9 @@ class OutboxRelay:
         while not self._parar.is_set():
             conexao = None
             try:
-                conexao = await aio_pika.connect_robust(self.rabbitmq_url)
+                # conexão comum: se cair, o publish lança erro e este laço reconecta
+                # (com connect_robust o objeto de exchange podia ficar preso à conexão antiga)
+                conexao = await aio_pika.connect(self.rabbitmq_url, heartbeat=10)
                 canal = await conexao.channel(publisher_confirms=True)
                 exchange = await canal.get_exchange("ampara.eventos", ensure=False)
 
