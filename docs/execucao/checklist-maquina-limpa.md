@@ -20,10 +20,10 @@ verbal. O teste local do gerador de `.env` não substitui esse ensaio.
 - [ ] Depois da #71: seed termina com exit 0; usuários de demonstração autenticam.
 - [ ] Depois da #43/#45: busca pública retorna resposta pelo gateway em `:8000`.
 - [ ] Login de adotante e ONG funciona; rotas privadas rejeitam ausência de JWT.
-- [ ] App Web lista os animais da ONG; Expo no telefone encontra o gateway pelo IP local.
+- [ ] App Web lista os animais da ONG; App Mobile abre no navegador do telefone pelo IP local (porta 5174).
 - [ ] Os cinco cenários da #71 alcançam os estados esperados sem alteração manual de banco.
 - [ ] Uma escrita aparece no read model; registrar tempo medido.
-- [ ] Assistente sem chave faz fallback conforme sua entrega, sem interromper busca/adoção.
+- [ ] Assistente sem chave responde em contingência, com fontes, sem interromper busca/adoção.
 - [ ] Mensagem de teste na DLQ identificada, causa corrigida, reprocessada e fluxo conferido.
 - [ ] Reiniciar os containers preserva os dados dos bancos.
 

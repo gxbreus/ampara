@@ -23,8 +23,10 @@ def openssl_disponivel():
 def gerar(template: str) -> str:
     valores = dict(re.findall(r"^([A-Z][A-Z0-9_]*)=(.*)$", template, re.M))
     for nome in valores:
-        if nome.endswith(("_PASSWORD", "_SENHA")) or nome in {"SEED_SENHA_PADRAO", "SEED_SENHA_DEMO"}:
+        if nome.endswith(("_PASSWORD", "_SENHA")):
             valores[nome] = secrets.token_hex(24)
+    # a senha das contas da demo é digitada no login: curta e legível, como no preparar-env-demo.sh
+    valores["SEED_SENHA_DEMO"] = f"ampara-{secrets.token_hex(3)}"
     for nome, valor in {
         "IDENTIDADE_DB_USER": "identidade", "ANIMAIS_DB_USER": "animais",
         "ADOCAO_DB_USER": "adocao", "ORQUESTRADOR_DB_USER": "orquestrador",
