@@ -29,11 +29,15 @@ spec:
                   --eval "try { if (rs.status().ok !== 1) quit(1); } catch(e) {
                   const r = rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo-animais:27017'}]});
                   if (r.ok !== 1) quit(1); }"
+            # o mongosh leva cerca de 1,5 s só para subir: com o timeout padrão de 1 s, a probe
+            # sempre estoura e o pod nunca fica pronto depois de reiniciar
+            timeoutSeconds: 10
             periodSeconds: 5
             failureThreshold: 60
           readinessProbe:
             exec:
               command: [sh, -ec, 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --eval "if (!db.hello().isWritablePrimary) quit(1)"']
+            timeoutSeconds: 10
             periodSeconds: 5
           livenessProbe:
             tcpSocket: { port: mongo }
