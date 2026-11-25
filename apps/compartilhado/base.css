@@ -417,6 +417,7 @@ kbd {
 
 .foto {
   width: 100%;
+  height: auto; /* a <img> tem width/height só para reservar espaço; quem manda é o aspect-ratio */
   aspect-ratio: 4 / 3;
   object-fit: cover;
   background: var(--papel-2);

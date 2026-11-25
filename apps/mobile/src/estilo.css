@@ -118,7 +118,7 @@
   min-height: var(--toque);
 }
 .topo-marca { text-decoration: none; }
-.topo h1 { font-size: 2.05rem; }
+.topo h1 { font-size: clamp(1.7rem, 7.6vw, 2.05rem); }
 .topo h1 em {
   font-style: normal;
   color: var(--laranja-escuro);
@@ -173,7 +173,7 @@
   z-index: 1;
 }
 .hero h1 {
-  font-size: 2.15rem;
+  font-size: clamp(1.75rem, 8.4vw, 2.15rem);
   font-weight: 800;
   letter-spacing: -0.045em;
   line-height: 0.95;
@@ -231,6 +231,8 @@
   padding: 0.15rem 1.1rem 0.35rem;
   scrollbar-width: none;
   scroll-snap-type: x proximity;
+  /* sem isso o snap encaixa o 1º chip colado na borda, desalinhado do resto da tela */
+  scroll-padding-inline: 1.1rem;
 }
 .filtros::-webkit-scrollbar { display: none; }
 .chip {
@@ -337,7 +339,7 @@
   display: grid;
   gap: 1rem;
 }
-.ficha-corpo h1 { font-size: 2.5rem; letter-spacing: -0.04em; }
+.ficha-corpo h1 { font-size: clamp(2rem, 9.5vw, 2.5rem); letter-spacing: -0.04em; }
 .ficha-corpo .local {
   color: var(--tinta-2);
   font-size: 0.86rem;
