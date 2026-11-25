@@ -14,19 +14,20 @@ Regras:
 
 from functools import lru_cache
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # TODO(#42), com os nomes do .env.example:
-    #     llm_provider: str = "groq"
-    #     llm_model: str = ""
-    #     llm_api_key: SecretStr = SecretStr("")   # vazia = modo degradado
-    #     llm_fallback_model: str = ""
-    #     qdrant_url: str
-    #     redis_url: SecretStr = Field(validation_alias="ASSISTENTE_REDIS_URL")
-    #     animais_url: str = "http://animais:8001"
-    pass
+    llm_provider: str = "groq"
+    llm_model: str = ""
+    llm_api_key: SecretStr = SecretStr("")
+    llm_fallback_model: str = ""
+    embeddings_provider: str = "ollama"
+    embeddings_model: str = "bge-m3"
+    qdrant_url: str
+    redis_url: SecretStr = Field(validation_alias="ASSISTENTE_REDIS_URL")
+    animais_url: str = "http://animais:8001"
 
 
 @lru_cache

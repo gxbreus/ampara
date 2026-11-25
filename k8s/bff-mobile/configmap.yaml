@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bff-mobile-config }
+data:
+  PORT: "3020"
+  IDENTIDADE_URL: http://identidade:3001
+  ANIMAIS_URL: http://animais:8001
+  ADOCAO_URL: http://adocao:8080
+  NOTIFICACOES_URL: http://notificacoes:8002
+  ASSISTENTE_URL: http://assistente:8003
