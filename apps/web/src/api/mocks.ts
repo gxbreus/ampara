@@ -5,6 +5,7 @@ import { FOTOS_DEMO } from "@c/fotos-demo";
 import type {
   AnimalEntrada,
   AnimalPainel,
+  AnimalResumo,
   ContaResumo,
   EstadoSolicitacao,
   Painel,
@@ -18,6 +19,8 @@ const daqui = (h: number) => new Date(agora + h * 3600_000).toISOString();
 const oid = () => [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 const lavras = (lat: number, lng: number, bairro = "Centro") => ({ lat, lng, bairro, cidade: "Lavras" });
+// o mesmo endereço do seed (scripts/seed/seed_animais.py)
+const ENDERECO = { rua: "Rua Doutor Francisco Sales", numero: "100", complemento: null, bairro: "Centro", cidade: "Lavras", uf: "MG", cep: "37200-000" };
 
 const base: [string, AnimalPainel["especie"], AnimalPainel["porte"], number, string[], StatusAnimal, number, number][] = [
   ["Paçoca", "CAO", "MEDIO", 24, ["dócil", "brincalhona"], "RESERVADO", -21.2449, -45.0003],
@@ -35,7 +38,10 @@ export const animais: AnimalPainel[] = base.map(([nome, especie, porte, idadeMes
   nome,
   especie,
   porte,
+  sexo: i % 2 ? "MACHO" : "FEMEA",
   idadeMeses,
+  descricao: `${nome} está sob os cuidados da ONG Patinhas de Lavras.`,
+  endereco: { ...ENDERECO, bairro: ["Centro", "Jardim Floresta", "Vila Esperança", "Aquenta Sol"][i % 4] },
   temperamento,
   fotos: FOTOS_DEMO[nome] ? [FOTOS_DEMO[nome]] : [],
   fotoCapa: FOTOS_DEMO[nome] ?? null,
@@ -132,9 +138,33 @@ export function solicitacoesDoAnimal(animalId: string) {
     });
 }
 
+export function resumo(a: AnimalPainel): AnimalResumo {
+  const ativas = solicitacoes.filter((s) => s.animal?.id === a.id && ["SOLICITADA", "ANIMAL_RESERVADO", "AGUARDANDO_APROVACAO", "APROVADA"].includes(s.estado)).length;
+  return { id: a.id, nome: a.nome, especie: a.especie, porte: a.porte, status: a.status, fotoCapa: a.fotoCapa, solicitacoesAtivas: ativas, atualizadoEm: a.atualizadoEm };
+}
+
+export function atualizar(a: AnimalPainel, d: AnimalEntrada) {
+  Object.assign(a, {
+    nome: d.nome,
+    especie: d.especie,
+    porte: d.porte,
+    sexo: d.sexo,
+    idadeMeses: d.idadeMeses,
+    temperamento: d.temperamento ?? [],
+    descricao: d.descricao ?? null,
+    fotos: d.fotos,
+    fotoCapa: d.fotos[0] ?? null,
+    localizacao: { ...d.localizacao, bairro: d.endereco.bairro, cidade: d.endereco.cidade },
+    endereco: d.endereco,
+    atualizadoEm: new Date().toISOString(),
+  });
+}
+
 export function novoAnimal(dados: AnimalEntrada): AnimalPainel {
   const a: AnimalPainel = {
     ...dados,
+    descricao: dados.descricao ?? null,
+    localizacao: { ...dados.localizacao, bairro: dados.endereco.bairro, cidade: dados.endereco.cidade },
     id: oid(),
     temperamento: dados.temperamento ?? [],
     fotoCapa: dados.fotos[0] ?? null,
