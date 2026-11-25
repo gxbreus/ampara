@@ -235,7 +235,7 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 | Orquestrador | [`services/orquestrador`](services/orquestrador) | implementado: SAGA extraída da Adoção (#140), outbox, inbox, prazos, DLQ, Dockerfile, compose e manifests do k8s |
 | Gateway | [`gateway`](gateway) | implementado: Kong DB-less no compose com rotas, JWT e rate limit (#43); no k8s, Kong Ingress Controller com as mesmas rotas (#46, #50) |
 | BFF Mobile | [`bff/mobile`](bff/mobile) | base com busca pública, Dockerfile e manifests do k8s (#45, #47); a agregação das telas do adotante na #62 |
-| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e app Expo |
+| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e App Mobile como web responsiva, consumindo o BFF Mobile |
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
