@@ -8,7 +8,9 @@ import { useSessao } from "@c/sessao";
 import { entrar, rotas } from "../api/servicos";
 import type { MinhaConta } from "../api/tipos";
 
-// Contas do login de desenvolvimento (apps/compartilhado/dev-auth.ts); qualquer senha.
+// Contas do seed e do login simulado (apps/compartilhado/dev-auth.ts), com os mesmos e-mails.
+// Com o login simulado qualquer senha serve; com a Identidade real, a senha é a SEED_SENHA_DEMO.
+const LOGIN_SIMULADO = import.meta.env.VITE_LOGIN_SIMULADO === true;
 const CONTAS_DEV = [
   ["ong@ampara.dev", "ONG"],
   ["protetor@ampara.dev", "Protetor"],
@@ -84,10 +86,14 @@ export function Entrar() {
           </p>
           {import.meta.env.DEV && (
             <div className="contas-dev">
-              <span>Contas de desenvolvimento (qualquer senha):</span>
+              <span>
+                {LOGIN_SIMULADO
+                  ? "Contas de desenvolvimento (qualquer senha):"
+                  : "Contas do seed (senha: SEED_SENHA_DEMO do .env):"}
+              </span>
               <div>
                 {CONTAS_DEV.map(([e, rotulo]) => (
-                  <button key={e} type="button" className="chip" onClick={() => { setEmail(e); setSenha("demo1234"); }}>
+                  <button key={e} type="button" className="chip" onClick={() => { setEmail(e); setSenha(LOGIN_SIMULADO ? "demo1234" : ""); }}>
                     {rotulo}
                   </button>
                 ))}
