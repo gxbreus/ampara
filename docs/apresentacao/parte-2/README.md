@@ -1,6 +1,7 @@
 # Apresentação da Parte 2
 
 - **PDF:** [`ampara-parte2.pdf`](ampara-parte2.pdf), com 15 slides.
+- **Falas, arguição e registro de ensaios:** [ensaio-e-arguicao.md](ensaio-e-arguicao.md).
 - **Original no Canva:** https://www.canva.com/d/az_pANzb4NIxwIr. Para editar, peça acesso ao Mateus.
 
 | # | Slide | Tópico do enunciado | Quem apresenta | Documento de referência |
