@@ -9,7 +9,8 @@ privada do JWT em JWT_PRIVATE_KEY só durante a execução, para assinar o token
 3. o relay publica no RabbitMQ e o projetor atualiza o modelo de leitura (CQRS), que a
    busca pública do gateway consulta.
 
-Rodar de novo não duplica: animais que a ONG já tem com o mesmo nome são pulados.
+Rodar de novo não duplica: animais que a ONG já tem com o mesmo nome são pulados. Se um
+deles ainda está sem foto, o seed completa as fotos com PUT /v1/animais/{id}.
 """
 
 import json
@@ -43,6 +44,20 @@ ANIMAIS = [
     ("Nina", "CAO", "PEQUENO", "FEMEA", 120, ["idosa", "carinhosa"], -21.2420, -45.0080),
     ("Frajola", "GATO", "MEDIO", "MACHO", 60, ["tranquilo"], -21.2350, -45.0150),
 ]
+
+
+# Fotos do Wikimedia Commons com licença livre; créditos em docs/assets/creditos-fotos.md.
+# A mesma lista está em apps/compartilhado/fotos-demo.ts, usada pelos dados simulados dos apps.
+FOTOS = {
+    "Paçoca": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Cachorro_esperando_na_ado%C3%A7%C3%A3o_2_20240623-DSC03735_01.jpg/960px-Cachorro_esperando_na_ado%C3%A7%C3%A3o_2_20240623-DSC03735_01.jpg",
+    "Thor": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Young_mixed-breed_dog_%28aka%29.jpg/960px-Young_mixed-breed_dog_%28aka%29.jpg",
+    "Mel": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Golden_tabby_and_white_kitten_n01.jpg/960px-Golden_tabby_and_white_kitten_n01.jpg",
+    "Biscoito": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Brown-white_mixed-breed_puppy_2.JPG/960px-Brown-white_mixed-breed_puppy_2.JPG",
+    "Luna": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Grey_and_white_cat.jpg/960px-Grey_and_white_cat.jpg",
+    "Bolt": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2f/Rottweiler_and_other_dog%2C_running.jpg/960px-Rottweiler_and_other_dog%2C_running.jpg",
+    "Nina": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/47/Elderly_irish_setter.png/500px-Elderly_irish_setter.png",
+    "Frajola": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Tuxedo-patterned_black_and_white_cat_on_gravel_path_2011_%28cropped%29.jpg/960px-Tuxedo-patterned_black_and_white_cat_on_gravel_path_2011_%28cropped%29.jpg",
+}
 
 
 def token() -> str:
@@ -82,6 +97,14 @@ def main() -> None:
     itens = existentes.get("itens", existentes) if isinstance(existentes, dict) else existentes
     nomes = {a["nome"] for a in itens or []}
 
+    # animais que já existiam sem foto ganham as fotos (o PUT aceita atualização parcial)
+    completados = 0
+    for animal in itens or []:
+        foto = FOTOS.get(animal["nome"])
+        if foto and not animal.get("fotos") and not animal.get("fotoCapa"):
+            chamar("PUT", f"{BASE}/{animal['id']}", autorizacao, {"fotos": [foto]})
+            completados += 1
+
     criados = 0
     for nome, especie, porte, sexo, idade, temperamento, lat, lng in ANIMAIS:
         if nome in nomes:
@@ -97,13 +120,14 @@ def main() -> None:
                 "sexo": sexo,
                 "idadeMeses": idade,
                 "temperamento": temperamento,
+                "fotos": [FOTOS[nome]] if nome in FOTOS else [],
                 "descricao": f"{nome} está sob os cuidados da {ONG_NOME}.",
                 "localizacao": {"type": "Point", "coordinates": [lng, lat]},
                 "endereco": ENDERECO,
             },
         )
         criados += 1
-    print(f"seed: {criados} animais criados, {len(nomes)} já existiam")
+    print(f"seed: {criados} animais criados, {len(nomes)} já existiam, {completados} ganharam fotos")
 
 
 if __name__ == "__main__":
