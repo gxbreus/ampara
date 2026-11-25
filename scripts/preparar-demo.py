@@ -23,7 +23,7 @@ def openssl_disponivel():
 def gerar(template: str) -> str:
     valores = dict(re.findall(r"^([A-Z][A-Z0-9_]*)=(.*)$", template, re.M))
     for nome in valores:
-        if nome.endswith(("_PASSWORD", "_SENHA")) or nome == "SEED_SENHA_PADRAO":
+        if nome.endswith(("_PASSWORD", "_SENHA")) or nome in {"SEED_SENHA_PADRAO", "SEED_SENHA_DEMO"}:
             valores[nome] = secrets.token_hex(24)
     for nome, valor in {
         "IDENTIDADE_DB_USER": "identidade", "ANIMAIS_DB_USER": "animais",

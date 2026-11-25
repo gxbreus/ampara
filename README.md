@@ -293,8 +293,9 @@ cria contas com IDs fixos na Identidade e animais via API:
 ```
 
 As contas atuais são `ong@ampara.dev`, `protetor@ampara.dev`, `admin@ampara.dev`
-e `adotante@ampara.dev`; o administrador usa `ADMIN_SENHA`, os demais usam
-`SEED_SENHA_PADRAO`. Defina essas variáveis localmente antes de executar o seed.
+e `adotante@ampara.dev`; todas usam `SEED_SENHA_DEMO`, gerada localmente pelo
+bootstrap. O seed não imprime a senha. Não confunda essa variável com as
+credenciais previstas dos cenários completos da #71.
 A #71 prevê ainda os cenários abaixo, que não devem ser confundidos com o seed
 atual de quatro contas:
 
