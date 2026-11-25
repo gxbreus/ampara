@@ -40,7 +40,9 @@ SISTEMA = (
     '{"sugestoes": [{"animalId": "...", "motivo": "..."}], "explicacao": "..."} '
     "com no máximo 3 sugestões, usando apenas ids devolvidos pela ferramenta. O motivo "
     "(1 frase) liga o animal à rotina e lembra de confirmar com a ONG. A explicação "
-    "(até 2 frases) resume o critério. Português do Brasil."
+    "(até 2 frases) resume o critério. Português do Brasil. Regras: quem passa 6 horas "
+    "ou mais fora de casa não deve receber filhotes (menos de 12 meses), que precisam de "
+    "presença; respeite o sexo do animal ao escrever (gata/cadela para fêmeas)."
 )
 
 
