@@ -118,3 +118,65 @@ test("respostas reais do BFF seguem os schemas OpenAPI de busca e solicitações
     validar(schema, resposta.json());
   }
 });
+
+test("respostas do assistente seguem os schemas mobile (sem metadados internos)", async (t) => {
+  let fora = false;
+  const app = criarApp({
+    config,
+    logger: false,
+    verificar: async () => ({ sub: "eu", role: "ADOTANTE" }),
+    chamar: async (url) => {
+      if (fora) return Response.json({}, { status: 503 });
+      if (url.endsWith("/v1/perguntas"))
+        return Response.json({
+          resposta: "Prepare um canto tranquilo.",
+          fontes: [{ titulo: "Guia", trecho: "Nos primeiros dias...", origem: "base/guia-adocao.md, seção Adaptação" }],
+          degradado: false,
+          cache: false,
+          latenciaMs: 900,
+        });
+      return Response.json({
+        sugestoes: [
+          { animalId: ID, nome: "Thor", motivo: "Porte compatível.", fotoThumb: "https://assets.ampara.dev/thor-thumb.webp" },
+          { animalId: "6706e21b7a2d4b8e2194cf02", nome: "Mia", motivo: "Calma.", fotoThumb: null },
+        ],
+        explicacao: "Sugestões a partir da busca.",
+        filtrosUsados: { lat: -21.2453, lng: -44.9998, raioKm: 10 },
+        fontes: [{ titulo: "Guia", trecho: "t", origem: "o" }],
+        degradado: false,
+        latenciaMs: 1800,
+      });
+    },
+  });
+  t.after(() => app.close());
+  const casos = [
+    ["perguntas", { pergunta: "Como adaptar um filhote?" }, "RespostaAssistentePerguntaMobile"],
+    [
+      "recomendacoes",
+      { descricaoRotina: "Moro em apartamento e trabalho fora.", lat: -21.2453, lng: -44.9998 },
+      "RespostaAssistenteRecomendacaoMobile",
+    ],
+  ] as const;
+  for (const degradado of [false, true]) {
+    fora = degradado;
+    for (const [acao, payload, schema] of casos) {
+      const resposta = await app.inject({
+        method: "POST",
+        url: `/mobile/v1/assistente/${acao}`,
+        headers: { authorization: "Bearer valido" },
+        payload,
+      });
+      assert.equal(resposta.statusCode, 200, resposta.body);
+      assert.equal(resposta.json<{ degradado: boolean }>().degradado, degradado);
+      validar(schema, resposta.json());
+    }
+  }
+  const semPonto = await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/recomendacoes",
+    headers: { authorization: "Bearer valido" },
+    payload: { descricaoRotina: "Moro em apartamento e trabalho fora." },
+  });
+  assert.equal(semPonto.statusCode, 400);
+  validar("Problema", semPonto.json());
+});

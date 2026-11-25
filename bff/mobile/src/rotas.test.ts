@@ -359,20 +359,215 @@ test("sem link cancelar recebe 409 sem POST upstream", async (t) => {
     409,
   );
 });
+const corpos = {
+  perguntas: { pergunta: "Como adaptar um filhote?" },
+  recomendacoes: {
+    descricaoRotina: "Moro em apartamento e trabalho seis horas fora.",
+    lat: -21.2453,
+    lng: -44.9998,
+  },
+};
 test("assistente offline devolve fallback e recebe prazo de 20 segundos", async (t) => {
   const app = servidor(async (_url, _req, init) => {
     assert.ok(init?.signal);
     throw new DOMException("offline", "TimeoutError");
   });
   t.after(() => app.close());
-  for (const acao of ["perguntas", "recomendacoes"]) {
+  for (const acao of ["perguntas", "recomendacoes"] as const) {
     const r = await app.inject({
       method: "POST",
       url: `/mobile/v1/assistente/${acao}`,
       headers,
-      payload: { pergunta: "oi" },
+      payload: corpos[acao],
     });
     assert.equal(r.statusCode, 200);
     assert.equal(r.json<{ degradado: boolean }>().degradado, true);
+  }
+});
+test("assistente com 5xx devolve fallback degradado no formato mobile", async (t) => {
+  const app = servidor(async () =>
+    Response.json({ type: "x/sem-fallback", detail: "falhou" }, { status: 503 }),
+  );
+  t.after(() => app.close());
+  const p = await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/perguntas",
+    headers,
+    payload: corpos.perguntas,
+  });
+  assert.equal(p.statusCode, 200);
+  assert.deepEqual(Object.keys(p.json()).sort(), ["degradado", "fontes", "resposta"]);
+  assert.equal(p.json<{ degradado: boolean }>().degradado, true);
+  const r = await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/recomendacoes",
+    headers,
+    payload: corpos.recomendacoes,
+  });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json(), {
+    animais: [],
+    explicacao: r.json<{ explicacao: string }>().explicacao,
+    degradado: true,
+  });
+});
+test("pergunta repassa só o texto e projeta fontes como paginaOuSecao", async (t) => {
+  const app = servidor(async (url, req, init) => {
+    assert.equal(url, "http://assistente/v1/perguntas");
+    assert.equal(init?.method, "POST");
+    assert.equal(req.headers.authorization, "Bearer adotante");
+    assert.deepEqual(JSON.parse(init?.body as string), {
+      pergunta: "Como adaptar um filhote?",
+    });
+    return Response.json({
+      resposta: "Prepare um canto tranquilo.",
+      fontes: [
+        {
+          titulo: "Guia de adoção",
+          trecho: "Nos primeiros dias...",
+          origem: "base/guia-adocao.md, seção Adaptação",
+        },
+      ],
+      degradado: false,
+      cache: true,
+      latenciaMs: 120,
+    });
+  });
+  t.after(() => app.close());
+  const r = await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/perguntas",
+    headers,
+    payload: { ...corpos.perguntas, extra: "ignorado" },
+  });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json(), {
+    resposta: "Prepare um canto tranquilo.",
+    fontes: [
+      {
+        titulo: "Guia de adoção",
+        paginaOuSecao: "base/guia-adocao.md, seção Adaptação",
+      },
+    ],
+    degradado: false,
+  });
+});
+test("recomendação envia rotina com o ponto e projeta sugestões como animais", async (t) => {
+  const enviados: unknown[] = [];
+  const app = servidor(async (url, req, init) => {
+    assert.equal(url, "http://assistente/v1/recomendacoes");
+    assert.equal(req.headers.authorization, "Bearer adotante");
+    enviados.push(JSON.parse(init?.body as string));
+    return Response.json({
+      sugestoes: [
+        { animalId: ID, nome: "Thor", motivo: "Porte compatível.", fotoThumb: "https://a.dev/t.webp" },
+        { animalId: "6706e21b7a2d4b8e2194cf02", nome: "Mia", motivo: "Calma.", fotoThumb: null },
+      ],
+      explicacao: "Sugestões a partir da busca.",
+      filtrosUsados: { lat: -21.2453, lng: -44.9998, raioKm: 10, porte: "MEDIO" },
+      fontes: [{ titulo: "Guia", trecho: "t", origem: "o" }],
+      degradado: false,
+      latenciaMs: 1800,
+    });
+  });
+  t.after(() => app.close());
+  const r = await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/recomendacoes",
+    headers,
+    payload: corpos.recomendacoes,
+  });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json(), {
+    animais: [
+      { animalId: ID, nome: "Thor", motivoRecomendacao: "Porte compatível.", fotoThumb: "https://a.dev/t.webp" },
+      { animalId: "6706e21b7a2d4b8e2194cf02", nome: "Mia", motivoRecomendacao: "Calma." },
+    ],
+    explicacao: "Sugestões a partir da busca.",
+    degradado: false,
+  });
+  // raioKm ausente vai com o padrão do contrato (10); informado, segue como veio.
+  await app.inject({
+    method: "POST",
+    url: "/mobile/v1/assistente/recomendacoes",
+    headers,
+    payload: { ...corpos.recomendacoes, raioKm: 25 },
+  });
+  assert.deepEqual(enviados, [
+    { rotina: corpos.recomendacoes.descricaoRotina, lat: -21.2453, lng: -44.9998, raioKm: 10 },
+    { rotina: corpos.recomendacoes.descricaoRotina, lat: -21.2453, lng: -44.9998, raioKm: 25 },
+  ]);
+});
+test("recomendação sem lat/lng ou fora dos limites é 400 sem chamar o Assistente", async (t) => {
+  let chamadas = 0;
+  const app = servidor(async () => {
+    chamadas++;
+    return Response.json({});
+  });
+  t.after(() => app.close());
+  const { descricaoRotina, lat, lng } = corpos.recomendacoes;
+  for (const payload of [
+    { descricaoRotina },
+    { descricaoRotina, lat },
+    { descricaoRotina, lng },
+    { descricaoRotina, lat: 91, lng },
+    { descricaoRotina, lat, lng: -181 },
+    { descricaoRotina, lat, lng, raioKm: 0 },
+    { descricaoRotina, lat, lng, raioKm: 101 },
+    { lat, lng },
+  ]) {
+    const r = await app.inject({
+      method: "POST",
+      url: "/mobile/v1/assistente/recomendacoes",
+      headers,
+      payload,
+    });
+    assert.equal(r.statusCode, 400, JSON.stringify(payload));
+    assert.equal(r.json<{ codigo: string }>().codigo, "parametros-invalidos");
+  }
+  assert.equal(chamadas, 0);
+});
+test("422 do Assistente é repassado nas duas rotas", async (t) => {
+  const app = servidor(async () =>
+    Response.json(
+      {
+        type: "https://ampara.dev/problemas/dados-invalidos",
+        title: "Dados inválidos",
+        status: 422,
+        detail: "O texto não pode ser vazio.",
+      },
+      { status: 422, headers: { "Content-Type": "application/problem+json" } },
+    ),
+  );
+  t.after(() => app.close());
+  for (const [acao, payload] of [
+    ["perguntas", { pergunta: "   " }],
+    ["recomendacoes", { ...corpos.recomendacoes, descricaoRotina: "   " }],
+  ] as const) {
+    const r = await app.inject({
+      method: "POST",
+      url: `/mobile/v1/assistente/${acao}`,
+      headers,
+      payload,
+    });
+    assert.equal(r.statusCode, 422);
+    assert.deepEqual(r.json(), {
+      codigo: "dados-invalidos",
+      mensagem: "O texto não pode ser vazio.",
+    });
+  }
+});
+test("assistente exige token de adotante", async (t) => {
+  const app = servidor(async () => {
+    throw new Error("não deveria chamar");
+  });
+  t.after(() => app.close());
+  for (const acao of ["perguntas", "recomendacoes"] as const) {
+    const r = await app.inject({
+      method: "POST",
+      url: `/mobile/v1/assistente/${acao}`,
+      payload: corpos[acao],
+    });
+    assert.equal(r.statusCode, 401);
   }
 });
