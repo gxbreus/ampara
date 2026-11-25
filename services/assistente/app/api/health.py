@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.dependencias import QdrantDep, RedisDep
@@ -15,8 +15,10 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/ready")
-async def ready(qdrant: QdrantDep, redis: RedisDep):
-    """A prontidão não depende do LLM, da sua chave ou de Animais."""
+async def ready(request: Request, qdrant: QdrantDep, redis: RedisDep):
+    """Qdrant e Redis no ar e a base já indexada. Não depende do LLM, da chave nem de Animais."""
+    if not getattr(request.app.state, "indice_pronto", True):
+        return JSONResponse({"status": "indexando"}, status_code=503)
     try:
         async with asyncio.timeout(2):
             await qdrant.get_collections()

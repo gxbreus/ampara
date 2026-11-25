@@ -7,6 +7,10 @@ metadata:
 data:
   QDRANT_URL: http://qdrant-assistente:6333
   ANIMAIS_URL: http://animais:8001
-  LLM_PROVIDER: groq
-  LLM_MODEL: ""
-  LLM_FALLBACK_MODEL: ""
+  # groq, ou openai para APIs compatíveis com a da OpenAI (Gemini: LLM_BASE_URL vazio)
+  LLM_PROVIDER: openai
+  LLM_BASE_URL: ""
+  # flash-lite é o de menor custo. No plano gratuito a cota é de 20 requisições por dia POR
+  # MODELO, então as reservas (em ordem) multiplicam a cota; cota esgotada pula para a próxima
+  LLM_MODEL: gemini-2.5-flash-lite
+  LLM_FALLBACK_MODEL: gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash,gemini-2.5-flash
