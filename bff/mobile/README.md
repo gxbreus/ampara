@@ -19,7 +19,8 @@ URLs `IDENTIDADE_URL`, `ANIMAIS_URL`, `ADOCAO_URL`, `NOTIFICACOES_URL` e
 `ASSISTENTE_URL`. `BFF_TIMEOUT_MS` vale 3000 por padrão.
 
 `/health` é liveness; `/ready` verifica os cinco serviços em paralelo. As versões
-sob `/mobile/v1` exigem JWT de ADOTANTE. Só GET `/mobile/v1/animais` é público.
+sob `/mobile/v1` exigem JWT de ADOTANTE. Só GET `/mobile/v1/animais` (busca e
+detalhe) é público.
 O gateway encaminha o prefixo completo. A implantação do Kong está na #43.
 
 Verificação: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
@@ -30,8 +31,27 @@ não há medição local registrada nesta entrega.
 ## Rotas do adotante
 
 Busca e detalhe aceitam acesso anônimo. Um token fornecido é validado, inclusive
-emissor, assinatura e expiração. A busca serializa somente os oito campos do card
-e consulta solicitações ativas em lote. Falha na Adoção gera aviso sem derrubar a busca.
+emissor, assinatura e expiração. Se o token for válido e de ADOTANTE, a resposta traz
+`minhaSolicitacao`; se estiver vencido, malformado ou for de outro role, a requisição
+segue como anônima (200, sem consultar a Adoção e sem repassar o token) em vez de
+401/403. A busca serializa somente os oito campos do card e consulta solicitações
+ativas em lote. Falha na Adoção gera aviso sem derrubar a busca.
+
+`Idempotency-Key` no `POST /mobile/v1/solicitacoes` é opcional. Quando vem, precisa ter
+de 8 a 128 caracteres (os limites da Adoção) e é repassada como está. Quando não vem,
+o BFF não gera uma: um UUID novo a cada tentativa não deduplicaria nada. A Adoção aceita
+o POST sem a chave e continua barrando uma segunda solicitação ativa para o mesmo animal
+(409).
+
+A lista de solicitações usa o mesmo cartão da busca: `fotoThumb` é a miniatura da
+projeção quando o Animais a entrega e, no modelo de escrita devolvido por
+`GET /v1/animais?ids=`, a primeira foto (a mesma regra com que o Animais monta
+`fotoThumb` na projeção); `cidade` vem de `endereco.cidade`. O resto do endereço não sai
+do BFF.
+
+Erros de validação de path, query, header ou corpo saem como 400
+`parametros-invalidos`, como em `ParametrosInvalidos` no contrato. O 422 que o Animais
+devolve para filtros de busca inválidos também vira 400.
 
 Solicitações são filtradas pelo dono do JWT. As ações vêm dos links da Adoção,
 e os links externos são reescritos para `/mobile/v1`. Perfil e avisos repassam o

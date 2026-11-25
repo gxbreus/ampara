@@ -69,7 +69,9 @@ paths:
       summary: Busca geográfica de animais disponíveis
       description: |
         Retorna a lista paginada de animais disponíveis próximos ao adotante.
-        Esta rota é pública e pode ser acessada sem token JWT.
+        Esta rota é pública e pode ser acessada sem token JWT. Um token vencido,
+        malformado ou de role diferente de ADOTANTE não gera 401/403: a requisição
+        segue como anônima (`minhaSolicitacao: null`) e o token não é repassado.
         
         **Agregação interna:**
         1. Chama Animais `GET /v1/animais/busca?lat=&lng=&raioKm=&...` (serviço essencial).
@@ -182,6 +184,8 @@ paths:
       summary: Detalhe público enxuto de um animal
       description: |
         Retorna a ficha pública do animal formatada para o aplicativo móvel.
+        Rota pública: token vencido, malformado ou de outro role degrada para anônimo,
+        como na busca.
         
         **Agregação interna:**
         1. Chama Animais `GET /v1/animais/busca/{id}` (essencial).
@@ -251,6 +255,8 @@ paths:
         **Agregação interna:**
         Repassa a requisição para o serviço de Adoção (`POST /v1/solicitacoes`),
         enviando `Idempotency-Key` (se fornecido pelo app) e o token JWT.
+        Sem a chave, o BFF não gera uma e a Adoção trata o POST como não idempotente,
+        mas continua barrando uma segunda solicitação ativa para o mesmo animal (409).
         A SAGA processa assincronamente a reserva e validação de perfil.
       operationId: criarSolicitacaoMobile
       security:
@@ -259,10 +265,15 @@ paths:
         - name: Idempotency-Key
           in: header
           required: false
-          description: Chave de idempotência UUID gerada pelo app para evitar duplicidade em reconexões.
+          description: >-
+            Chave de idempotência gerada pelo app (recomenda-se um UUID) para evitar
+            duplicidade em reconexões. Segue os limites da Adoção: de 8 a 128 caracteres;
+            fora disso o BFF responde 400.
           schema:
             type: string
-            format: uuid
+            minLength: 8
+            maxLength: 128
+          example: 3d9b1f2e-0a6c-4f7e-8b15-c2e4a9d07f63
       requestBody:
         required: true
         content:
@@ -498,7 +509,8 @@ paths:
       summary: Caixa de entrada de notificações do adotante
       description: |
         Lista as notificações do usuário logado (mudanças de status da SAGA, lembretes).
-        Chama Notificações `GET /v1/notificacoes?usuarioId={sub}` (armazenadas em Redis).
+        Chama Notificações `GET /v1/notificacoes` (armazenadas em Redis). O usuário vem
+        do `sub` do JWT repassado; nenhum `usuarioId` é enviado.
       operationId: listarNotificacoesMobile
       security:
         - bearerAuth: []
@@ -543,7 +555,9 @@ paths:
     post:
       tags: [Notificações]
       summary: Marca todas as notificações do usuário como lidas
-      description: Chama Notificações `POST /v1/notificacoes/leitura-todas?usuarioId={sub}`.
+      description: >-
+        Chama Notificações `POST /v1/notificacoes/leitura-todas`. O usuário vem do `sub`
+        do JWT repassado; nenhum `usuarioId` é enviado.
       operationId: marcarTodasNotificacoesLidasMobile
       security:
         - bearerAuth: []
