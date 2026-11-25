@@ -102,6 +102,22 @@ function ficha(a: Animal) {
     atualizadoEm,
   };
 }
+// Respostas do Assistente (docs/contratos/assistente.v1.yaml), só os campos que o BFF usa.
+interface RespostaPergunta {
+  resposta: string;
+  fontes?: { titulo: string; trecho?: string; origem: string }[];
+  degradado?: boolean;
+}
+interface RespostaRecomendacao {
+  sugestoes?: {
+    animalId: string;
+    nome: string;
+    motivo: string;
+    fotoThumb?: string | null;
+  }[];
+  explicacao: string;
+  degradado?: boolean;
+}
 export class ErroServico extends Error {
   constructor(
     public status: number,
@@ -573,31 +589,89 @@ export function rotas(
       },
     );
   }
-  for (const acao of ["perguntas", "recomendacoes"]) {
-    app.post(
-      `/mobile/v1/assistente/${acao}`,
-      { onRequest: privado },
-      async (req) => {
-        try {
-          return await json<unknown>(
-            `${config.servicos.assistente}/v1/${acao}`,
-            req,
-            {
-              method: "POST",
-              body: JSON.stringify(req.body),
-              headers: { "Content-Type": "application/json" },
-              signal: AbortSignal.timeout(20000),
-            },
-          );
-        } catch (erro) {
-          if (erro instanceof ErroServico && erro.status < 500) throw erro;
-          const mensagem =
-            "O assistente está indisponível. Você pode continuar buscando animais e acompanhando suas solicitações.";
-          return acao === "perguntas"
-            ? { resposta: mensagem, fontes: [], degradado: true }
-            : { animais: [], explicacao: mensagem, degradado: true };
-        }
-      },
-    );
+  // Assistente (docs/contratos/assistente.v1.yaml): o BFF projeta a resposta para os
+  // schemas mobile (additionalProperties: false). Não repassa metadados internos
+  // (cache, latenciaMs, filtrosUsados, trecho, fontes da recomendação).
+  // Assistente fora do ar, lento ou com 5xx: 200 com degradado=true. 4xx (ex.: 422 de
+  // texto inválido) segue como erro, como nas outras rotas.
+  const indisponivel =
+    "O assistente está indisponível. Você pode continuar buscando animais e acompanhando suas solicitações.";
+  async function assistente<T>(
+    acao: "perguntas" | "recomendacoes",
+    req: FastifyRequest,
+    corpo: unknown,
+  ): Promise<T | undefined> {
+    try {
+      return await json<T>(`${config.servicos.assistente}/v1/${acao}`, req, {
+        method: "POST",
+        body: JSON.stringify(corpo),
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(20000),
+      });
+    } catch (erro) {
+      if (erro instanceof ErroServico && erro.status < 500) throw erro;
+      return undefined;
+    }
   }
+  app.post<{ Body: { pergunta?: unknown } | null }>(
+    "/mobile/v1/assistente/perguntas",
+    { onRequest: privado },
+    async (req) => {
+      const r = await assistente<RespostaPergunta>("perguntas", req, {
+        pergunta: req.body?.pergunta,
+      });
+      if (!r) return { resposta: indisponivel, fontes: [], degradado: true };
+      return {
+        resposta: r.resposta,
+        fontes: (r.fontes ?? []).map((f) => ({
+          titulo: f.titulo,
+          paginaOuSecao: f.origem,
+        })),
+        degradado: r.degradado === true,
+      };
+    },
+  );
+  app.post<{
+    Body: { descricaoRotina: string; lat: number; lng: number; raioKm: number };
+  }>(
+    "/mobile/v1/assistente/recomendacoes",
+    {
+      onRequest: privado,
+      // Sem lat/lng (ou fora dos limites da busca) responde 400 parametros-invalidos
+      // pelo errorHandler, sem chamar o Assistente. As coordenadas vêm do último ponto
+      // de busca do app; o BFF nunca as inventa.
+      schema: {
+        body: {
+          type: "object",
+          required: ["descricaoRotina", "lat", "lng"],
+          properties: {
+            descricaoRotina: { type: "string" },
+            lat: { type: "number", minimum: -90, maximum: 90 },
+            lng: { type: "number", minimum: -180, maximum: 180 },
+            raioKm: { type: "number", minimum: 1, maximum: 100, default: 10 },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { descricaoRotina, lat, lng, raioKm } = req.body;
+      const r = await assistente<RespostaRecomendacao>("recomendacoes", req, {
+        rotina: descricaoRotina,
+        lat,
+        lng,
+        raioKm,
+      });
+      if (!r) return { animais: [], explicacao: indisponivel, degradado: true };
+      return {
+        animais: (r.sugestoes ?? []).map((s) => ({
+          animalId: s.animalId,
+          nome: s.nome,
+          motivoRecomendacao: s.motivo,
+          ...(s.fotoThumb ? { fotoThumb: s.fotoThumb } : {}),
+        })),
+        explicacao: r.explicacao,
+        degradado: r.degradado === true,
+      };
+    },
+  );
 }
