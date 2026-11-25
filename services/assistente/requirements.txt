@@ -9,4 +9,12 @@ langchain-groq==1.2.0
 qdrant-client==1.12.2
 redis==5.2.1
 httpx==0.28.1
+# divide a base em trechos citáveis (#66)
+langchain-text-splitters==1.2.0
+# embeddings locais em CPU (ONNX); o modelo vem na imagem (#66)
+fastembed==0.9.1
+# confere o JWT RS256 da Identidade
+PyJWT[crypto]==2.15.1
+# lê as perguntas da avaliação (#70)
+PyYAML==6.0.4
 python-json-logger==3.2.1
