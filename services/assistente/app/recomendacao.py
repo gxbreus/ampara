@@ -87,8 +87,18 @@ class AnimaisIndisponivel(Exception):
 class Busca:
     """A busca de Animais com a localização fixada pelo servidor."""
 
-    def __init__(self, cliente: httpx.AsyncClient, lat: float, lng: float, raio_km: float):
+    def __init__(
+        self,
+        cliente: httpx.AsyncClient,
+        lat: float,
+        lng: float,
+        raio_km: float,
+        restricoes: dict | None = None,
+    ):
         self.cliente, self.lat, self.lng, self.raio_km = cliente, lat, lng, raio_km
+        # regras de bem-estar tiradas da rotina (ver regras()), aplicadas pelo servidor: o LLM
+        # nem chega a ver um filhote para quem passa muitas horas fora, por mais que erre
+        self.restricoes = restricoes or {}
         self.filtros_usados: dict = {"lat": lat, "lng": lng, "raioKm": raio_km}
         self.vistos: dict[str, dict] = {}
 
@@ -110,6 +120,11 @@ class Busca:
         publicos = [
             {k: a[k] for k in CAMPOS_PUBLICOS if k in a} for a in resposta.json().get("itens", [])
         ]
+        if self.restricoes.get("porte_max") == "MEDIO":
+            publicos = [a for a in publicos if a.get("porte") != "GRANDE"]
+        if self.restricoes.get("idade_min"):
+            minimo = self.restricoes["idade_min"]
+            publicos = [a for a in publicos if a.get("idadeMeses", minimo) >= minimo]
         self.vistos.update({a["id"]: a for a in publicos})
         return publicos
 
@@ -170,7 +185,7 @@ def regras(rotina: str) -> tuple[dict, str]:
         filtros["especie"] = "CAO"
         criterios.append("preferência por cães")
     horas = re.search(r"(\d{1,2})\s*(h|horas)", t)
-    if horas and int(horas.group(1)) >= 8:
+    if horas and int(horas.group(1)) >= 6:
         filtros["idade_min"] = 12
         criterios.append(f"{horas.group(1)} h fora de casa (filhotes precisam de mais presença)")
     return filtros, "; ".join(criterios) or "os animais disponíveis mais próximos"
@@ -178,11 +193,8 @@ def regras(rotina: str) -> tuple[dict, str]:
 
 async def recomendar_sem_llm(busca: Busca, rotina: str) -> dict:
     filtros, criterio = regras(rotina)
+    # porte e idade já são filtrados pela Busca (restrições do servidor)
     animais = await busca(especie=filtros.get("especie"))
-    if filtros.get("porte_max"):
-        animais = [a for a in animais if a.get("porte") != "GRANDE"]
-    if filtros.get("idade_min"):
-        animais = [a for a in animais if a.get("idadeMeses", 0) >= filtros["idade_min"]]
     sugestoes = [
         {
             "animalId": a["id"],
@@ -213,7 +225,14 @@ async def recomendar(
     limiar_rotina: float = 0.45,
 ) -> dict:
     inicio = time.perf_counter()
-    busca = Busca(cliente, lat, lng, raio_km)
+    restricoes, _ = regras(rotina)
+    busca = Busca(
+        cliente,
+        lat,
+        lng,
+        raio_km,
+        {k: v for k, v in restricoes.items() if k in ("porte_max", "idade_min")},
+    )
     # texto que não é rotina ("quem é o Neymar?"): orienta, sem buscar animais nem chamar o LLM
     if embeddings is not None and not await asyncio.to_thread(
         parece_rotina, embeddings, rotina, limiar_rotina

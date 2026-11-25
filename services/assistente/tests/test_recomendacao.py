@@ -234,3 +234,39 @@ async def test_rotina_curta_passa_pelo_filtro():
         limiar_rotina=0.45,
     )
     assert r["sugestoes"]  # seguiu para a busca (fallback por regras, sem LLM)
+
+
+async def test_restricoes_de_bem_estar_sao_aplicadas_pelo_servidor_mesmo_se_o_llm_errar():
+    animais = [
+        {"id": "d" * 24, "nome": "Pipoca", "especie": "GATO", "porte": "PEQUENO", "idadeMeses": 3},
+        {"id": "e" * 24, "nome": "Duquesa", "especie": "GATO", "porte": "MEDIO", "idadeMeses": 156},
+        {"id": "f" * 24, "nome": "Sol", "especie": "CAO", "porte": "GRANDE", "idadeMeses": 36},
+    ]
+
+    def responder(pedido):
+        return httpx.Response(200, json={"itens": animais})
+
+    cliente = httpx.AsyncClient(transport=httpx.MockTransport(responder), base_url="http://a")
+    # o "LLM" tenta sugerir a filhote e o cão grande
+    final = {
+        "sugestoes": [
+            {"animalId": "d" * 24, "motivo": "filhote"},
+            {"animalId": "f" * 24, "motivo": "grande"},
+            {"animalId": "e" * 24, "motivo": "adulta e calma"},
+        ],
+        "explicacao": "x",
+    }
+    llm = AgenteFake({}, final)
+    r = await recomendar(
+        [llm],
+        resiliencias(),
+        cliente,
+        "Moro em apartamento e trabalho 8 horas fora",
+        -21.2,
+        -45.0,
+        10,
+    )
+    assert [s["nome"] for s in r["sugestoes"]] == ["Duquesa"]
+    # e o modelo nem viu a filhote nem o cão grande no resultado da tool
+    visto = next(m for m in llm.mensagens_vistas[-1] if getattr(m, "type", "") == "tool").content
+    assert "Pipoca" not in visto and "Sol" not in visto
