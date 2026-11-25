@@ -8,9 +8,11 @@
 
 A Ampara é uma plataforma que organiza o caminho entre o registro de um animal perdido, achado ou disponível para adoção e o encontro de alguém disposto a cuidar dele. O projeto reúne protetores independentes, ONGs e adotantes em um fluxo único, com localização, acompanhamento e notificações.
 
-> Projeto acadêmico desenvolvido para a disciplina de Sistemas Distribuídos. A Parte 1 (concepção e pitch) foi apresentada; agora o repositório concentra o projeto arquitetural da Parte 2 e o planejamento da implementação.
+> Projeto acadêmico desenvolvido para a disciplina de Sistemas Distribuídos. As Partes 1 (concepção e pitch) e 2 (arquitetura) foram apresentadas, e a Parte 3 (containerização e orquestração) está entregue. O próximo passo é a Parte 4, com o sistema em funcionamento.
 
 [Problema](#o-problema) · [Solução](#como-a-ampara-funciona) · [Arquitetura](#arquitetura) · [SAGA](#saga-de-adoção) · [Impacto](#impacto-social) · [Andamento](#andamento) · [Documentação](#documentação)
+
+**Demonstração da Parte 3:** [Abrir o Codespace da apresentação](https://github.com/codespaces/ampara-parte3-pj5qg67544wwh94x7) (só abre na conta `mateus-vitor-ferreira-dev`) · [Roteiro de apresentação](docs/apresentacao/parte-3/comandos.md) · [Criar um Codespace novo](https://codespaces.new/gxbreus/ampara?quickstart=1) · [Como rodar no Codespace](#no-github-codespaces-sem-instalar-nada)
 
 ## O problema
 
@@ -214,8 +216,8 @@ O impacto será acompanhado por quatro indicadores:
 | Etapa | Data | Situação |
 | --- | --- | --- |
 | Parte 1 — Concepção e pitch | 17/09 | apresentada |
-| Parte 2 — Arquitetura | 22/10 ou 27/10 (repositório congela em 21/10 às 23h59) | em andamento |
-| Parte 3 — Containerização e orquestração | 17/11 | planejada |
+| Parte 2 — Arquitetura | 22/10 | apresentada |
+| Parte 3 — Containerização e orquestração | 24/11 | entregue ([detalhes](#containerização-e-orquestração-parte-3)) |
 | Parte 4 — Sistema em funcionamento | 10/12 ou 15/12 (repositório congela em 09/12 às 23h59) | planejada |
 
 As tarefas de cada etapa, com responsável e semana, estão no [board do projeto](https://github.com/users/mateus-vitor-ferreira-dev/projects/7).
@@ -226,12 +228,14 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 | --- | --- | --- |
 | Adoção | [`services/adocao`](services/adocao) | implementado: solicitações, decisões e linha do tempo (espelho da SAGA via `saga.transicao`), outbox, DLQ, Dockerfile e manifests do k8s |
 | BFF Web | [`bff/web`](bff/web) | implementado: Dockerfile e manifests do k8s |
-| Animais | [`services/animais`](services/animais) | esqueleto (#39) e escrita com transições de status e outbox (#55); o projetor do CQRS na #56 |
-| Notificações | [`services/notificacoes`](services/notificacoes) | base pronta (`/health`, testes, regras); o resto na #41 |
-| Assistente | [`services/assistente`](services/assistente) | base pronta (`/health`, testes, regras); o resto na #42 |
-| Identidade | [`services/identidade`](services/identidade) | esqueleto pronto (#98) |
+| Animais | [`services/animais`](services/animais) | implementado: escrita com transições de status e outbox (#55), projeção CQRS e busca pública (#56), participante da SAGA com inbox e compensação (#57), Dockerfile e manifests do k8s |
+| Notificações | [`services/notificacoes`](services/notificacoes) | base (`/health`, testes), Redis com AOF, Dockerfile, compose e manifests do k8s; o consumo de eventos na #41 |
+| Assistente | [`services/assistente`](services/assistente) | base (`/health`, testes), Qdrant e Redis de cache, Dockerfile, compose e manifests do k8s; o RAG com LangChain na #42 (Parte 4) |
+| Identidade | [`services/identidade`](services/identidade) | esqueleto NestJS (#38), Dockerfile e manifests do k8s; contas e sessão na #53 e comandos da SAGA na #54 |
 | Orquestrador | [`services/orquestrador`](services/orquestrador) | implementado: SAGA extraída da Adoção (#140), outbox, inbox, prazos, DLQ, Dockerfile, compose e manifests do k8s |
-| Gateway, BFF Mobile e apps | [`gateway`](gateway), [`bff/mobile`](bff/mobile), [`apps`](apps) | planejados; o README de cada pasta descreve o escopo |
+| Gateway | [`gateway`](gateway) | implementado: Kong DB-less no compose com rotas, JWT e rate limit (#43); no k8s, Kong Ingress Controller com as mesmas rotas (#46, #50) |
+| BFF Mobile | [`bff/mobile`](bff/mobile) | base com busca pública, Dockerfile e manifests do k8s (#45, #47); a agregação das telas do adotante na #62 |
+| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e app Expo |
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
@@ -246,9 +250,235 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Hoje o `compose.yaml` sobe os bancos, o RabbitMQ, a Adoção, o Orquestrador, Animais, a Identidade, Notificações, o Assistente e o BFF Web. Cada serviço entra no compose na própria issue de esqueleto. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+O `compose.yaml` sobe o sistema inteiro: os bancos, o RabbitMQ, o gateway Kong, os dois BFFs e os seis serviços (Adoção, Orquestrador, Animais, Identidade, Notificações e Assistente). A entrada é `http://localhost:8000`. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
 
 A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
+
+### No GitHub Codespaces (sem instalar nada)
+
+> **Atalhos**
+> - [Abrir o Codespace da apresentação](https://github.com/codespaces/ampara-parte3-pj5qg67544wwh94x7), já com o sistema de pé e o seed aplicado. Só abre na conta de quem o criou (`mateus-vitor-ferreira-dev`).
+> - [Criar um Codespace novo](https://codespaces.new/gxbreus/ampara?quickstart=1), para qualquer integrante. Depois, siga os passos abaixo.
+> - [Roteiro de apresentação](docs/apresentacao/parte-3/comandos.md): os comandos da demonstração, comentados e na ordem da apresentação.
+
+O Codespace é uma máquina na nuvem do GitHub, aberta pelo navegador, com terminal e VS Code. O [`.devcontainer`](.devcontainer/devcontainer.json) deixa tudo pronto: Docker, kind, kubectl, helm, `hey` e um `.env` de demonstração com senhas aleatórias e as chaves do JWT ([`scripts/preparar-env-demo.sh`](scripts/preparar-env-demo.sh)). Nenhuma senha vai para o Git.
+
+**1. Criar o Codespace.** No GitHub, **Code → Codespaces → ⋯ → New with options**, escolha a branch e a máquina de **4 núcleos e 16 GB** (o compose e o kind juntos não cabem em 8 GB). Pela linha de comando:
+
+```bash
+gh codespace create -R gxbreus/ampara -b develop -m standardLinux32gb --idle-timeout 240m
+```
+
+**2. Subir o sistema.** No terminal do Codespace:
+
+```bash
+docker compose up -d --build --wait   # compose: gateway em localhost:8080 (uns 6 min na 1ª vez)
+./scripts/subir-k8s.sh                # kind: Ingress em localhost:8000 (uns 8 min na 1ª vez)
+```
+
+No Codespace, os dois ambientes rodam juntos: o compose publica o gateway na porta 8080 ([`compose.codespaces.yaml`](.devcontainer/compose.codespaces.yaml)) e o kind fica com a 8000. O [`subir-k8s.sh`](scripts/subir-k8s.sh) faz os passos do [`k8s/README.md`](k8s/README.md): cria o cluster, instala o Kong Ingress Controller, gera os `secret.env`, carrega as imagens e aplica os manifests.
+
+**3. Popular com dados de demonstração.** O [`seed.sh`](scripts/seed.sh) cria uma ONG e oito animais em Lavras (MG) pelo caminho real do sistema: assina um token de ONG com a chave do `.env`, cadastra cada animal em `POST /v1/animais` (o animal e o evento vão para o outbox), o RabbitMQ entrega o evento ao projetor do CQRS e o modelo de leitura passa a responder a busca. Rodar de novo não duplica nada.
+
+```bash
+./scripts/seed.sh        # no compose
+./scripts/seed.sh k8s    # no cluster
+./scripts/buscar-animais.sh   # busca pública pelo Ingress, em tabela (8080 para o compose)
+```
+
+**4. Demonstrar.**
+
+```bash
+kubectl get pods -n ampara -o wide                 # réplicas espalhadas pelos dois workers
+./scripts/teste-rotas.sh                           # 401 sem token, busca pública, 429 no rate limit
+./scripts/rate-limit-demo.sh elevar                # libera a carga em /mobile/v1
+DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh   # 1 × 3 réplicas do Animais
+./scripts/rate-limit-demo.sh restaurar             # volta aos 600/min
+```
+
+Para mostrar a API fora do Codespace, abra a aba **Ports** e mude a visibilidade da porta 8000 (ou 8080) para *Public*: o GitHub dá uma URL https.
+
+**Parar e voltar.** Um Codespace parado guarda os containers, as imagens, os volumes e os dados do seed. Ao reabrir, nada precisa de build: o compose volta sozinho (`restart: unless-stopped`) em cerca de 2 minutos, e o kind em cerca de 4. Até o controlador do Kong reconfigurar as rotas, o Ingress pode responder `502`. Espere `kubectl get pods -A` mostrar tudo `1/1` e a busca devolver `200`. Por isso, numa apresentação, abra o Codespace uns 10 minutos antes. Para apagar tudo: `gh codespace delete`.
+
+## Containerização e orquestração (Parte 3)
+
+O sistema roda de duas formas, com as **mesmas imagens**:
+
+- **Docker Compose:** o ambiente de desenvolvimento. O `compose.yaml` sobe tudo com um comando.
+- **Kubernetes (kind):** o ambiente orquestrado, com réplicas, Ingress, ConfigMaps, Secrets e escala. Os manifests ficam em [`k8s/`](k8s/README.md) e são organizados com kustomize.
+
+**Qual a diferença?** O Docker empacota a aplicação numa imagem e roda containers. Com o Compose, ele sobe vários containers juntos, mas **numa máquina só**: se um container cai, no máximo ele reinicia ali mesmo, e não há várias máquinas, distribuição de carga entre cópias nem atualização sem parada. O Kubernetes é um **orquestrador**: a gente declara o estado desejado ("Animais com 2 réplicas") e ele trabalha o tempo todo para mantê-lo, distribuindo os containers por **vários nós**. Ele recria o pod que morreu, balanceia a carga entre as réplicas pelo Service, escala com um comando (`kubectl scale`), atualiza versões sem derrubar o serviço (*rolling update*), só manda tráfego para o pod pronto (*readiness*) e entrega configuração e credenciais por ConfigMaps e Secrets. Em uma frase: o Docker roda os containers; o Kubernetes decide onde e quantos rodar e os mantém de pé.
+
+Cada conceito do Compose tem um equivalente no Kubernetes:
+
+| No Compose | No Kubernetes | Para que serve |
+| --- | --- | --- |
+| um bloco em `services:` | um `Deployment` (serviço sem estado) ou um `StatefulSet` (banco ou broker) | rodar o container com um número definido de réplicas |
+| o nome do serviço numa rede | um `Service` ClusterIP | dar um endereço interno estável, como `http://adocao:8080` |
+| o container do Kong com `kong.template.yml` | o Kong Ingress Controller e os recursos `Ingress` | a única entrada externa, com as mesmas rotas da Parte 2 |
+| um `volume` nomeado | um `PersistentVolumeClaim` (`volumeClaimTemplates`) | guardar os dados do banco quando o pod morre |
+| as variáveis `environment:` lidas do `.env` | um `ConfigMap` (configuração) e um `Secret` (credenciais) | tirar toda a configuração do código e da imagem |
+| `healthcheck` e `depends_on` | `readinessProbe` e `livenessProbe` | só mandar tráfego para quem está pronto e reiniciar quem travou |
+
+### Imagens: Dockerfile próprio e multi-stage
+
+Cada serviço tem o próprio Dockerfile. Nos serviços que compilam código ou instalam dependências de build, o Dockerfile usa **multi-stage**: uma etapa tem compilador, TypeScript e dependências de desenvolvimento, e a etapa final recebe só o que roda em produção.
+
+| Imagem | Etapas | Single-stage | Multi-stage | Ganho |
+| --- | --- | ---: | ---: | ---: |
+| `ampara/adocao` (Go) | `golang:1.23-alpine` → `distroless/static:nonroot` | 628 MB | 20,5 MB | −96,7% |
+| `ampara/orquestrador` (Go) | `golang:1.23-alpine` → `distroless/static:nonroot` | 645 MB | 21,2 MB | −96,7% |
+| `ampara/identidade` (NestJS) | `deps` → `build` → `runtime` em `node:22-alpine` | 511 MB | 325 MB | −36,4% |
+| `ampara/bff-web` (Node/TS) | `deps` → `build` → `runtime` em `node:22-alpine` | 336 MB | 261 MB | −22,3% |
+| `ampara/bff-mobile` (Node/TS) | `deps` → `build` → `runtime` em `node:22-alpine` | 384 MB | 270 MB | −29,7% |
+| `ampara/animais` (FastAPI) | `builder` com virtualenv → `runtime` em `python:3.12-slim` | 215 MB | 185 MB | −14,0% |
+| `ampara/notificacoes` e `ampara/assistente` (FastAPI) | `builder` com virtualenv → `runtime` em `python:3.12-slim` | 233 MB | 233 MB | 0% (hoje só wheels prontos; ver [`docs/imagens.md`](docs/imagens.md)) |
+
+O ganho vai além do tamanho:
+
+- **Menos superfície de ataque.** A imagem final não tem compilador, `npm` de desenvolvimento nem código-fonte TypeScript. Nos serviços em Go, a imagem distroless não tem nem shell: o próprio binário faz o healthcheck (`/adocao healthcheck`).
+- **Deploy mais rápido.** Uma imagem menor sobe mais rápido para o cluster (`kind load`) e para um registry.
+- **Cache de build.** As dependências (`go.mod`, `package*.json`, `requirements.txt`) são copiadas antes do código, então mudar uma linha de código não reinstala tudo.
+- **Usuário sem root.** Todas as imagens finais rodam como usuário comum (`nonroot`, `node` ou `appuser`).
+
+O ganho é menor em Node e Python porque o runtime da linguagem fica na imagem final: só o binário do `node` tem 123 MB. O `services/animais/Dockerfile.single` está no repositório para conferir a comparação. O método e as observações de cada imagem estão em [`docs/imagens.md`](docs/imagens.md).
+
+As imagens de infraestrutura também são próprias, mas **não usam multi-stage, porque não têm etapa de build**. Elas só acrescentam configuração à imagem oficial:
+
+- `ampara/rabbitmq` traz exchanges, filas e DLQs (`definitions.json`) e cria um usuário por serviço a partir das senhas recebidas;
+- `ampara/mongo` sobe o MongoDB como replica set, que o outbox de Animais precisa para usar transações;
+- `ampara/gateway` gera o `kong.yml` a partir de um template, colocando a chave pública do JWT na hora de subir.
+
+### Compose: redes, volumes e um comando
+
+```bash
+cp .env.example .env && ./scripts/gerar-chaves-jwt.sh   # uma vez: senhas e chaves
+docker compose up -d --build                            # o sistema inteiro
+```
+
+**Redes com isolamento entre camadas.** Cada camada só alcança a camada vizinha:
+
+```mermaid
+flowchart TB
+    cliente([Cliente]) -->|":8000"| gateway
+    subgraph edge [rede edge]
+        gateway[Kong]
+    end
+    subgraph ponte ["redes edge + services"]
+        bffweb[BFF Web]
+        identidade[Identidade]
+    end
+    subgraph services [rede services]
+        adocao[Adoção]
+        animais[Animais]
+        orquestrador[Orquestrador]
+        rabbit[(RabbitMQ)]
+    end
+    subgraph dados ["redes data-* (internal: true), uma por serviço"]
+        pgi[(Postgres Identidade)]
+        pga[(Postgres Adoção)]
+        mongo[(Mongo Animais)]
+        pgo[(Postgres Orquestrador)]
+    end
+    gateway --> bffweb
+    gateway --> identidade
+    bffweb --> adocao
+    bffweb --> animais
+    adocao <--> rabbit
+    animais <--> rabbit
+    orquestrador <--> rabbit
+    identidade --> pgi
+    adocao --> pga
+    animais --> mongo
+    orquestrador --> pgo
+```
+
+| Rede | Quem está nela | Por quê |
+| --- | --- | --- |
+| `edge` | gateway, BFF Web e Identidade | o gateway só encaminha para os BFFs e, no login, para a Identidade |
+| `services` | todos os serviços e o RabbitMQ | chamadas HTTP internas e mensageria |
+| `data-<serviço>` | um serviço e o banco dele | `internal: true`: sem saída para a internet, e nenhum outro serviço alcança esse banco (*database per service*) |
+
+O gateway não está na rede `services` e não enxerga nenhum banco. Só ele publica porta (`8000`). A única exceção é o painel do RabbitMQ, em `127.0.0.1:15672`, para desenvolvimento.
+
+**Volumes.** Cada banco tem um volume nomeado e não perde dados num `docker compose down`: `pg-identidade`, `mongo-animais`, `pg-adocao`, `pg-orquestrador`, `redis-notificacoes` (com AOF), `qdrant-assistente` e `rabbitmq-data`. O `redis-assistente` não tem volume de propósito, porque é só cache das respostas do LLM.
+
+**Ordem de subida.** Todo banco e o RabbitMQ têm `healthcheck`, e os serviços usam `depends_on: condition: service_healthy`. A Adoção só sobe com o Postgres pronto e o RabbitMQ já com os usuários criados. Cada container tem limite de memória.
+
+**Variáveis.** Cada serviço recebe em `environment:` só as próprias variáveis, nunca o `.env` inteiro. Assim, um serviço comprometido não lê a senha do banco dos outros.
+
+### Kubernetes: Deployments e Services
+
+O cluster local usa kind com 1 control-plane e 2 workers ([`k8s/kind-config.yaml`](k8s/kind-config.yaml)), para que as réplicas fiquem em nós diferentes. Tudo fica no namespace `ampara` e sobe com `kubectl apply -k k8s/`. O passo a passo está em [`k8s/README.md`](k8s/README.md).
+
+| Componente | Workload | Réplicas | Service | Banco |
+| --- | --- | ---: | --- | --- |
+| Adoção | Deployment | 2 | `adocao:8080` | StatefulSet `postgres-adocao` (PVC 1 Gi) |
+| Orquestrador | Deployment | 2 | `orquestrador:8081` (só probes) | StatefulSet `postgres-orquestrador` (PVC 1 Gi) |
+| BFF Web | Deployment | 2 | `bff-web:3010` | — |
+| Identidade | Deployment | 2 | `identidade:3001` | StatefulSet `postgres-identidade` |
+| Animais | Deployment | 2 | `animais:8001` | StatefulSet `mongo-animais` (replica set) |
+| BFF Mobile | Deployment | 2 | `bff-mobile:3020` | — |
+| Notificações | Deployment | 2 | `notificacoes:8002` | StatefulSet `redis-notificacoes` (AOF, PVC 1 Gi) |
+| Assistente | Deployment | 2 | `assistente:8003` | StatefulSet `qdrant-assistente` (PVC 1 Gi) e Deployment `redis-assistente` (cache, sem volume) |
+| RabbitMQ | StatefulSet | 1 | `rabbitmq:5672` | PVC 1 Gi |
+
+Padrões que todos os manifests seguem:
+
+- **Bancos como StatefulSet**, com `volumeClaimTemplates` e Service headless (`clusterIP: None`): o pod do banco mantém nome e volume quando é recriado.
+- **Readiness em `/ready` e liveness em `/health`.** A readiness tira o pod do balanceamento se o banco cair. A liveness nunca aponta para `/ready`: com o banco fora, isso faria o pod reiniciar em loop sem resolver nada.
+- **`topologySpreadConstraints`** espalha as réplicas pelos dois workers.
+- **Segurança no pod:** `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false` e `capabilities: drop [ALL]`.
+- **Recursos:** `requests` de CPU e memória para o scheduler e `limits` de memória.
+- **Réplicas seguras para o relay do outbox:** com 2 réplicas, as duas leem o outbox com `SELECT ... FOR UPDATE SKIP LOCKED`, então cada uma pega um lote diferente e nenhuma mensagem é publicada duas vezes ([`docs/dados.md`](docs/dados.md)).
+
+### Ingress: as rotas do gateway da Parte 2
+
+Na Parte 2, o gateway Kong (DB-less) era a única porta de entrada. No Kubernetes, o mesmo papel fica com o **Kong Ingress Controller**, e cada rota do `gateway/kong.template.yml` virou um recurso `Ingress`. Os plugins são os mesmos e são aplicados por anotação:
+
+| Rota externa | Destino (Service) | Plugins (`konghq.com/plugins`) |
+| --- | --- | --- |
+| `/auth/v1` | `identidade:3001` | rate limit de 20/min |
+| `GET /mobile/v1/animais` (busca pública) | `bff-mobile:3020` | rate limit de 600/min, sem JWT |
+| `/mobile/v1` | `bff-mobile:3020` | JWT e rate limit de 600/min |
+| `/web/v1` | `bff-web:3010` | JWT e rate limit de 300/min |
+
+Os plugins globais `correlation-id` e `cors` também continuam. O JWT é validado com a **chave pública** da Identidade, guardada num Secret com o label `konghq.com/credential: jwt`. O proxy do Kong é um NodePort (`30080`), que o kind publica em `localhost:8000`, a mesma porta do Compose. Com isso, o cliente não percebe diferença entre os dois ambientes.
+
+### ConfigMaps e Secrets
+
+Nenhuma credencial fica no código, na imagem ou no Git:
+
+- **ConfigMap** guarda a configuração que não é segredo: URLs internas, prazos da SAGA (`ORQUESTRADOR_TIMEOUT_PASSO`, `ORQUESTRADOR_PRAZO_EXPIRACAO`) e a chave pública do JWT.
+- **Secret** guarda URLs de banco com senha e credenciais do RabbitMQ. Ele é gerado pelo `secretGenerator` do kustomize a partir de um `secret.env` local, nunca de um YAML com a senha escrita.
+- O `secret.env` é montado pelo [`scripts/k8s-prep.sh`](scripts/k8s-prep.sh) a partir do `.env` da raiz e está no `.gitignore`. No Git fica só o `secret.env.example`, com os nomes das chaves e sem valores.
+- **Cada serviço recebe só a própria credencial.** O pod da Adoção vê `ADOCAO_DATABASE_URL` e `ADOCAO_AMQP_URL`. O usuário e a senha de superusuário do Postgres ficam só com o StatefulSet do banco. A chave **privada** do JWT vai só para a Identidade, que é quem assina os tokens.
+- A CI roda o **gitleaks** em todo PR, que falha se aparecer uma credencial versionada.
+
+### Demonstração de escalabilidade
+
+O serviço escalado é o **Animais**, porque a busca do app mobile é a rota de leitura mais acessada.
+
+```bash
+kubectl scale deployment/animais -n ampara --replicas=3
+kubectl get pods -n ampara -l app=animais -o wide       # pods espalhados pelos workers
+DEMO_RATE_LIMIT_ELEVATED=true ./scripts/escala-demo.sh  # carga com hey, entrando pelo Ingress
+```
+
+O script manda 300 requisições para `localhost:8000/mobile/v1/animais`, sempre pelo Ingress e nunca direto para um pod. Ele lê em cada resposta o header `X-Animais-Served-By`, que diz qual réplica atendeu, e compara 1 réplica com 3. A evidência de distribuição de carga é que **as três réplicas aparecem na contagem e nenhuma atende mais de 50% das requisições**. Num notebook, as réplicas dividem a mesma CPU, então a vazão não precisa triplicar. Ao terminar, o script volta o Deployment ao número original de réplicas. O roteiro e a tabela com os resultados ficam em [`docs/escalabilidade.md`](docs/escalabilidade.md).
+
+### Onde está cada critério da avaliação
+
+| Critério | Onde ver |
+| --- | --- |
+| Dockerfiles e qualidade das imagens | `services/*/Dockerfile`, `bff/*/Dockerfile`, `gateway/Dockerfile`, `infra/*/Dockerfile` e [`docs/imagens.md`](docs/imagens.md) |
+| Compose com volumes e redes | [`compose.yaml`](compose.yaml): blocos `networks:` e `volumes:` no fim do arquivo |
+| Deployments e Services | `k8s/<componente>/deployment.yaml`, `service.yaml` e `*-statefulset.yaml` |
+| Ingress e roteamento | [`k8s/gateway/ingress.yaml`](k8s/gateway/ingress.yaml) e [`k8s/kong/`](k8s/kong/), comparados com [`gateway/kong.template.yml`](gateway/kong.template.yml) |
+| ConfigMaps e Secrets | `k8s/<componente>/configmap.yaml`, `secret.env.example`, `kustomization.yaml` e [`scripts/k8s-prep.sh`](scripts/k8s-prep.sh) |
+| Escalabilidade | [`scripts/escala-demo.sh`](scripts/escala-demo.sh) e [`docs/escalabilidade.md`](docs/escalabilidade.md) |
+
+> **Pendências conhecidas:** Notificações e Assistente ainda não têm `/ready` (#41 e #42), então a readiness deles aponta para `/health`. O multi-stage desses dois ainda não reduz o tamanho da imagem, porque as dependências atuais são só wheels prontos ([`docs/imagens.md`](docs/imagens.md)).
 
 ## Documentação
 
