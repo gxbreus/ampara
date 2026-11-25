@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "saga.transicao v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "versao",
+    "de",
+    "estado",
+    "desfecho",
+    "motivo",
+    "camposFaltando",
+    "animalNome",
+    "responsavelId",
+    "expiraEm",
+    "requerIntervencao",
+    "evento",
+    "passo",
+    "transicao",
+    "em"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "versao": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "sobe 1 a cada transição da SAGA"
+    },
+    "de": {
+      "enum": [
+        "SOLICITADA",
+        "ANIMAL_RESERVADO",
+        "AGUARDANDO_APROVACAO",
+        "APROVADA",
+        "COMPENSANDO",
+        "CONCLUIDA",
+        "REJEITADA_INDISPONIVEL",
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU",
+        null
+      ],
+      "description": "null na transição 1"
+    },
+    "estado": {
+      "enum": [
+        "SOLICITADA",
+        "ANIMAL_RESERVADO",
+        "AGUARDANDO_APROVACAO",
+        "APROVADA",
+        "COMPENSANDO",
+        "CONCLUIDA",
+        "REJEITADA_INDISPONIVEL",
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU"
+      ]
+    },
+    "desfecho": {
+      "enum": [
+        "PERFIL_INVALIDO",
+        "RECUSADA",
+        "CANCELADA",
+        "EXPIRADA",
+        "FALHOU",
+        null
+      ],
+      "description": "o estado final que virá, em COMPENSANDO"
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "camposFaltando": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "animalNome": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "responsavelId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "expiraEm": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "requerIntervencao": {
+      "type": "boolean"
+    },
+    "evento": {
+      "type": "string",
+      "description": "o gatilho: SolicitacaoCriada, AnimalReservado, Aprovacao, Timeout, ..."
+    },
+    "passo": {
+      "enum": [
+        "T1",
+        "T2",
+        "T4",
+        "T5",
+        "C1",
+        "C2",
+        null
+      ]
+    },
+    "transicao": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18,
+      "description": "número em docs/saga.md; 0 quando só fecha um passo"
+    },
+    "em": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

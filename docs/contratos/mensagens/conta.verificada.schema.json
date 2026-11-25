@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "conta.verificada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contaId",
+    "nome",
+    "role",
+    "cidade"
+  ],
+  "properties": {
+    "contaId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "nome": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "PROTETOR",
+        "ONG"
+      ]
+    },
+    "cidade": {
+      "type": "string"
+    }
+  }
+}

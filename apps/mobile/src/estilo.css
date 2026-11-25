@@ -223,6 +223,52 @@
   height: 28px;
 }
 
+.filtros-bloco {
+  display: grid;
+  gap: 0.6rem;
+}
+.segmentado {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 4px;
+  border: var(--borda);
+  border-radius: 999px;
+  background: var(--cartao);
+}
+.segmentado button {
+  min-height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  font-weight: 650;
+  color: var(--tinta-2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.segmentado button[aria-pressed="true"] {
+  background: var(--tinta);
+  color: var(--papel);
+}
+.porte {
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+  align-items: center;
+}
+.porte > span {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--tinta-2);
+  padding-right: 0.2rem;
+}
+.porte .chip {
+  min-height: 36px;
+  padding: 0.3rem 0.2rem;
+  justify-content: center;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .filtros {
   display: flex;
   gap: 0.45rem;

@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "animal.status_alterado v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "animalId",
+    "nome",
+    "especie",
+    "porte",
+    "idadeMeses",
+    "fotos",
+    "fotoCapa",
+    "fotoThumb",
+    "pontoAproximado",
+    "bairro",
+    "cidade",
+    "status",
+    "responsavel",
+    "version",
+    "atualizadoEm",
+    "statusAnterior",
+    "sagaId"
+  ],
+  "properties": {
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    },
+    "nome": {
+      "type": "string",
+      "minLength": 1
+    },
+    "especie": {
+      "type": "string",
+      "enum": [
+        "CAO",
+        "GATO",
+        "OUTRO"
+      ]
+    },
+    "porte": {
+      "type": "string",
+      "enum": [
+        "PEQUENO",
+        "MEDIO",
+        "GRANDE"
+      ]
+    },
+    "idadeMeses": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "fotos": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "fotoCapa": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    },
+    "fotoThumb": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    },
+    "pontoAproximado": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "properties": {
+        "type": {
+          "const": "Point"
+        },
+        "coordinates": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 2
+        }
+      }
+    },
+    "bairro": {
+      "type": "string"
+    },
+    "cidade": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "DISPONIVEL",
+        "EM_TRATAMENTO",
+        "INDISPONIVEL",
+        "RESERVADO",
+        "ADOTADO"
+      ]
+    },
+    "responsavel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "nome",
+        "verificado"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "nome": {
+          "type": "string"
+        },
+        "verificado": {
+          "type": "boolean"
+        }
+      }
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "atualizadoEm": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "statusAnterior": {
+      "type": "string",
+      "enum": [
+        "DISPONIVEL",
+        "EM_TRATAMENTO",
+        "INDISPONIVEL",
+        "RESERVADO",
+        "ADOTADO"
+      ]
+    },
+    "sagaId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "sexo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "MACHO",
+        "FEMEA",
+        null
+      ]
+    },
+    "temperamento": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "descricao": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

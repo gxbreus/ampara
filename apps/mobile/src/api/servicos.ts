@@ -18,11 +18,12 @@ import type {
 } from "./tipos";
 
 // Situação em 25/11 na develop:
-// - auth: o Vite assina o token (apps/compartilhado/dev-auth.ts) até a Identidade ter login (#149);
-// - busca: GET /mobile/v1/animais já passa pelo BFF Mobile até a projeção de Animais;
-// - o resto do BFF Mobile está no PR #158; notificações na #60; assistente na #67/#68.
+// - auth: Identidade real (#149); com VITE_AUTH_REAL=true o login passa pelo gateway;
+// - busca, detalhe, solicitacoes e conta: BFF Mobile (#158) + Animais, Adoção e Identidade;
+// - assistente: RAG real (#66 a #69), projetado pelo BFF Mobile;
+// - notificacoes: o serviço ainda não tem as rotas (#60), então segue simulado.
 export type Grupo = "auth" | "busca" | "detalhe" | "solicitacoes" | "notificacoes" | "conta" | "assistente";
-const PADRAO_REAIS: Grupo[] = ["auth", "busca"];
+const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "conta", "assistente"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
 
 const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não existe ${o} com este identificador.`);
@@ -55,7 +56,35 @@ export async function cadastrar(dados: { nome: string; email: string; senha: str
 
 // ---------- busca e detalhe ----------
 
+// Ponto padrão quando não há GPS nem busca anterior: centro de Lavras (onde está o seed).
+export const LAVRAS = { lat: -21.2453, lng: -44.9998 };
+export type Ponto = { lat: number; lng: number; raioKm: number };
+
+// O último ponto de busca (GPS ou padrão, com o raio aplicado) fica na sessão: a
+// recomendação do assistente procura animais perto dele (lat/lng são obrigatórios no BFF).
+const CHAVE_PONTO = "ampara:mobile:ultimo-ponto";
+function guardarPonto({ lat, lng, raioKm }: Ponto) {
+  try {
+    sessionStorage.setItem(CHAVE_PONTO, JSON.stringify({ lat, lng, raioKm }));
+  } catch {
+    // armazenamento indisponível (modo privado): a recomendação usa o ponto padrão
+  }
+}
+export function ultimoPonto(): Ponto {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(CHAVE_PONTO) ?? "null") as Partial<Ponto> | null;
+    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) {
+      const raioKm = Math.min(100, Math.max(1, Number(p.raioKm) || 10));
+      return { lat: p.lat!, lng: p.lng!, raioKm };
+    }
+  } catch {
+    // valor corrompido ou armazenamento indisponível: cai no padrão
+  }
+  return { ...LAVRAS, raioKm: 10 };
+}
+
 export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
+  guardarPonto(f);
   let pagina: PaginaBusca;
   if (rotas.real("busca")) {
     const q = new URLSearchParams({ lat: String(f.lat), lng: String(f.lng), raioKm: String(f.raioKm), limite: "20" });
@@ -64,7 +93,7 @@ export async function buscar(f: FiltroBusca): Promise<PaginaBusca> {
     if (f.idadeMaxMeses != null) q.set("idadeMaxMeses", String(f.idadeMaxMeses));
     if (f.cursor) q.set("cursor", f.cursor);
     const bruta = await http<PaginaBusca>(`/mobile/v1/animais?${q}`, { publico: true });
-    // A busca real de hoje repassa a projeção de Animais; o BFF da #158 completa o cartão.
+    // Normaliza miniatura ausente para os componentes de apresentação.
     pagina = { ...bruta, itens: bruta.itens.map((c) => ({ ...c, fotoThumb: c.fotoThumb ?? "", minhaSolicitacao: c.minhaSolicitacao ?? null })) };
   } else {
     pagina = await simular(() => ({
@@ -136,7 +165,10 @@ export async function minhasSolicitacoes(): Promise<{ itens: SolicitacaoResumo[]
 }
 
 export async function obterSolicitacao(id: string): Promise<SolicitacaoDetalhe> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}`);
+  if (rotas.real("solicitacoes")) {
+    const s = await http<SolicitacaoDetalhe>(`/mobile/v1/solicitacoes/${id}`);
+    return { ...s, podeCancelar: !!s._links?.cancelar };
+  }
   const animal = await (async () => {
     const s = m.solicitacoes.find((x) => x.id === id);
     if (!s) throw naoEncontrado("solicitação");
@@ -158,7 +190,12 @@ export async function linhaDoTempo(id: string): Promise<LinhaDoTempo> {
 }
 
 export async function cancelar(id: string, motivo?: string): Promise<{ id: string; estado: string }> {
-  if (rotas.real("solicitacoes")) return http(`/mobile/v1/solicitacoes/${id}/cancelamento`, { method: "POST", corpo: motivo ? { motivo } : {} });
+  if (rotas.real("solicitacoes")) {
+    const s = await obterSolicitacao(id);
+    const acao = s._links?.cancelar;
+    if (!acao) throw new ErroApi(409, "Ação indisponível", "Este pedido não pode mais ser cancelado.");
+    return http(acao.href, { method: acao.method ?? "POST", corpo: motivo ? { motivo } : {} });
+  }
   return simular(() => {
     const s = m.cancelar(id);
     if (!s) throw naoEncontrado("solicitação");
@@ -215,7 +252,9 @@ export async function perguntar(pergunta: string): Promise<RespostaPergunta> {
   return simular(() => m.responder(pergunta), 900 + Math.random() * 700);
 }
 
-export async function recomendar(descricaoRotina: string): Promise<RespostaRecomendacao> {
-  if (rotas.real("assistente")) return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina } });
-  return simular(() => m.recomendar(descricaoRotina), 1200 + Math.random() * 800);
+// Envia o último ponto de busca; sem busca anterior, o centro de Lavras.
+export async function recomendar(descricaoRotina: string, ponto: Ponto = ultimoPonto()): Promise<RespostaRecomendacao> {
+  const { lat, lng, raioKm } = ponto;
+  if (rotas.real("assistente")) return http("/mobile/v1/assistente/recomendacoes", { method: "POST", corpo: { descricaoRotina, lat, lng, raioKm } });
+  return simular(() => m.recomendar(descricaoRotina, lat, lng, raioKm), 1200 + Math.random() * 800);
 }
