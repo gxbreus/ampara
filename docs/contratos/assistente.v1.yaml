@@ -210,6 +210,7 @@ paths:
                 falhas: 5
                 fallbacks: 8
                 cacheHits: 3
+                cacheSemanticoHits: 1
                 tentarNovamenteEm: '2026-11-17T15:01:00Z'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
@@ -289,7 +290,8 @@ components:
         chamadas: {type: integer, minimum: 0}
         falhas: {type: integer, minimum: 0}
         fallbacks: {type: integer, minimum: 0}
-        cacheHits: {type: integer, minimum: 0}
+        cacheHits: {type: integer, minimum: 0, description: 'Respostas do cache, exato ou semântico.'}
+        cacheSemanticoHits: {type: integer, minimum: 0, description: 'Parte de cacheHits que veio do cache semântico (pergunta equivalente, mesmos trechos).'}
         tentarNovamenteEm:
           type: [string, 'null']
           format: date-time

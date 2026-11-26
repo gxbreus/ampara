@@ -87,8 +87,15 @@ class Indice:
         logger.info("base indexada", extra={"colecao": self.colecao, "trechos": len(trechos)})
         return len(trechos)
 
-    async def buscar(self, pergunta: str, k: int) -> list[Resultado]:
-        vetor = await self.embeddings.aembed_query(pergunta)
+    async def vetor(self, pergunta: str) -> list[float]:
+        return await self.embeddings.aembed_query(pergunta)
+
+    async def buscar(
+        self, pergunta: str, k: int, vetor: list[float] | None = None
+    ) -> list[Resultado]:
+        """`vetor`: embedding já calculado da pergunta (o cache semântico reaproveita)."""
+        if vetor is None:
+            vetor = await self.vetor(pergunta)
         achados = await self.qdrant.search(
             self.colecao, query_vector=vetor, limit=k, with_payload=True
         )

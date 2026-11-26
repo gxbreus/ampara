@@ -4,7 +4,9 @@ Fluxo de POST /v1/perguntas:
 1. busca os trechos mais parecidos no Qdrant (embeddings locais);
 2. nada relevante (similaridade abaixo do limiar): é pergunta fora do domínio, responde
    com orientação, sem fontes e sem chamar o LLM;
-3. cache: mesma pergunta, mesma versão da base e mesmo modelo devolve a resposta salva;
+3. cache: mesma pergunta, mesma versão da base e mesmo modelo devolve a resposta salva
+   (Redis); se não houver, o cache semântico procura uma pergunta equivalente já
+   respondida, com os mesmos trechos recuperados (Qdrant, app/cache_semantico.py);
 4. chain do LangChain (prompt | LLM | texto) com os trechos como contexto, primeiro no
    modelo principal e, se ele falhar, no de reserva;
 5. checagem de citação: a resposta só é aceita se citar, pelo número, fontes que existem;
@@ -23,6 +25,7 @@ from dataclasses import dataclass
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
+from app.cache_semantico import CacheSemantico
 from app.indice import Indice, Resultado
 from app.resiliencia import Cache, CircuitoAberto, Resiliencia
 
@@ -134,18 +137,26 @@ def contingencia(resultados: list[Resultado]) -> str:
 
 class Rag:
     def __init__(
-        self, indice: Indice, llms: list, resiliencias: list[Resiliencia], cache: Cache, settings
+        self,
+        indice: Indice,
+        llms: list,
+        resiliencias: list[Resiliencia],
+        cache: Cache,
+        settings,
+        cache_semantico: CacheSemantico | None = None,
     ):
         # llms e resiliencias andam em pares: [principal, reserva]; lista vazia = sem chave
         self.indice, self.llms, self.resiliencias, self.cache = indice, llms, resiliencias, cache
-        self.settings = settings
+        self.settings, self.cache_semantico = settings, cache_semantico
 
     @property
     def resiliencia(self) -> Resiliencia:
         return self.resiliencias[0]
 
-    async def recuperar(self, pergunta: str) -> list[Resultado]:
-        achados = await self.indice.buscar(pergunta, self.settings.trechos_por_resposta)
+    async def recuperar(self, pergunta: str, vetor: list[float] | None = None) -> list[Resultado]:
+        achados = await self.indice.buscar(
+            pergunta, self.settings.trechos_por_resposta, vetor=vetor
+        )
         return [r for r in achados if r.score >= self.settings.limiar_relevancia]
 
     async def gerar(self, pergunta: str, resultados: list[Resultado]) -> Verificada:
@@ -179,7 +190,9 @@ class Rag:
         inicio = time.perf_counter()
         ms = lambda: int((time.perf_counter() - inicio) * 1000)  # noqa: E731
 
-        resultados = await self.recuperar(pergunta)
+        # o embedding da pergunta serve à busca e ao cache semântico: calcula uma vez
+        vetor = await self.indice.vetor(pergunta) if self.cache_semantico else None
+        resultados = await self.recuperar(pergunta, vetor)
         if not resultados:
             return {
                 "resposta": FORA_DO_DOMINIO,
@@ -195,6 +208,16 @@ class Rag:
         if salvo:
             self.resiliencia.metricas.cache_hits += 1
             return {**salvo, "cache": True, "latenciaMs": ms()}
+
+        trechos = [r.trecho.id for r in resultados]
+        if self.cache_semantico:
+            salvo = await self.cache_semantico.ler(
+                vetor, pergunta, self.indice.versao, modelo, trechos
+            )
+            if salvo:
+                self.resiliencia.metricas.cache_hits += 1
+                self.resiliencia.metricas.cache_semantico_hits += 1
+                return {**salvo, "cache": True, "latenciaMs": ms()}
 
         try:
             verificada = await self.gerar(pergunta, resultados)
@@ -217,4 +240,14 @@ class Rag:
             "degradado": False,
         }
         await self.cache.gravar(chave, resposta)
+        if self.cache_semantico:
+            await self.cache_semantico.gravar(
+                vetor,
+                pergunta,
+                self.indice.versao,
+                modelo,
+                trechos,
+                [r.trecho.id for r in verificada.usados],
+                resposta,
+            )
         return {**resposta, "cache": False, "latenciaMs": ms()}
