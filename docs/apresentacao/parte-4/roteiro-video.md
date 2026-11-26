@@ -104,8 +104,13 @@ traz as mesmas falas com os minutos do vídeo das telas.
    ```
 
    Sai `saida/ampara-video-final-<data>.mp4`. Em cada parte, a velocidade das telas é ajustada
-   para acompanhar o ritmo de quem fala (de 0,75× a 1,4×), então a tela não fica adiantada nem
-   atrasada em relação à fala; o volume das quatro vozes é igualado no fim.
+   para acompanhar o ritmo de quem fala (de 0,6× a 1,6×), então a tela não fica adiantada nem
+   atrasada em relação à fala; o volume das quatro vozes é igualado.
+
+   Para a tela acompanhar cada cena (e não só a parte inteira), ponha ao lado do vídeo um
+   arquivo com o mesmo nome e extensão `.cenas`, com o segundo em que a fala de cada cena
+   começa (`1b 49.6`, uma por linha). Os tempos saem de ouvir o vídeo ou de uma transcrição
+   com marcação de tempo; isso também absorve falas que mudaram em relação ao roteiro.
 
 ## 3. Roteiro
 
