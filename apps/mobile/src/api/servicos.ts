@@ -21,9 +21,9 @@ import type {
 // - auth: Identidade real (#149); com VITE_AUTH_REAL=true o login passa pelo gateway;
 // - busca, detalhe, solicitacoes e conta: BFF Mobile (#158) + Animais, Adoção e Identidade;
 // - assistente: RAG real (#66 a #69), projetado pelo BFF Mobile;
-// - notificacoes: o serviço ainda não tem as rotas (#60), então segue simulado.
+// - notificacoes: caixa real via BFF Mobile (#60).
 export type Grupo = "auth" | "busca" | "detalhe" | "solicitacoes" | "notificacoes" | "conta" | "assistente";
-const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "conta", "assistente"];
+const PADRAO_REAIS: Grupo[] = ["auth", "busca", "detalhe", "solicitacoes", "notificacoes", "conta", "assistente"];
 export const rotas = criarRotas<Grupo>(PADRAO_REAIS);
 
 const naoEncontrado = (o: string) => new ErroApi(404, "Não encontrado", `Não existe ${o} com este identificador.`);
@@ -211,7 +211,7 @@ export async function notificacoes(): Promise<{ itens: Notificacao[] }> {
 }
 
 export async function marcarLida(id: string) {
-  if (rotas.real("notificacoes")) return http<void>(`/mobile/v1/notificacoes/${id}/leitura`, { method: "POST" });
+  if (rotas.real("notificacoes")) return http<void>(`/mobile/v1/notificacoes/${encodeURIComponent(id)}/leitura`, { method: "POST" });
   return simular(() => {
     const n = m.notificacoes.find((x) => x.id === id);
     if (n) n.lida = true;

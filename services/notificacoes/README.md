@@ -24,10 +24,11 @@ ruff check . && ruff format --check .       # o mesmo lint da CI
 ```
 
 O `--reload` serve só para o desenvolvimento e não vai para o Dockerfile.
+Para rodar o serviço, forneça `NOTIFICACOES_REDIS_URL`, `NOTIFICACOES_AMQP_URL`
+e a chave `JWT_PUBLIC_KEY` do mesmo ambiente da Identidade. O Compose e os
+manifests Kubernetes já repassam a chave pública.
 
 ## Estrutura
-
-Hoje:
 
 ```text
 services/notificacoes/
@@ -35,60 +36,44 @@ services/notificacoes/
 │   ├── main.py          # create_app() e o lifespan, único lugar que abre conexões
 │   ├── config.py        # Settings: variáveis de ambiente com prefixo NOTIFICACOES_
 │   ├── dependencias.py  # o que as rotas recebem por Depends (config, Redis, usuário)
+│   ├── consumidor.py    # consumo de eventos e alerta operacional da DLQ
+│   ├── eventos.py       # validação do envelope, destinatários e textos
+│   ├── caixa.py         # persistência, paginação e marcação no Redis
 │   └── api/
-│       └── health.py    # GET /health (e o /ready da #41)
-├── tests/
-│   ├── conftest.py      # fixture `cliente`: o app sem abrir conexões
-│   └── test_health.py
+│       ├── health.py    # GET /health e GET /ready
+│       └── notificacoes.py  # listagem e marcações de leitura
+├── tests/               # testes unitários, HTTP e integração
 ├── pyproject.toml       # ruff e pytest
 ├── requirements.txt     # dependências da imagem, com versão fixada
 └── requirements-dev.txt # + pytest, pytest-asyncio, httpx e ruff
 ```
 
-O que chega depois, e em qual issue:
+## Consumo e caixa in-app
 
-```text
-app/
-├── redis.py             # #41: abre o Redis, nada de regra de negócio
-├── mensageria.py        # #41: abre a conexão com o RabbitMQ (connect_robust)
-├── api/notificacoes.py  # #60: /v1/notificacoes, leitura e leitura-todas
-├── dominio/textos.py    # #60: evento → destinatários e texto, funções puras
-├── caixa.py             # #60: caixa por usuário no Redis (ZADD, HSET, contador)
-└── consumidor.py        # #60 e #86: fila notificacoes.eventos e log da DLQ
-```
+O consumidor usa a fila `notificacoes.eventos` definida pelo RabbitMQ. A confirmação
+ocorre depois de gravar as notificações de todos os destinatários. A deduplicação por
+evento e destinatário dura sete dias. A caixa guarda os 200 itens mais recentes pelo
+`occurredAt` e mantém o contador de não lidas no Redis. O alerta registra as mensagens
+da DLQ e as devolve à própria DLQ para intervenção pelo `scripts/dlq.sh`.
 
-## Regras de ouro
-
-1. **Nada abre conexão no import.** Redis e RabbitMQ são abertos no `lifespan`, guardados em `app.state` e entregues às rotas por `Depends` (`app/dependencias.py`). O consumidor da #60 é uma tarefa iniciada no mesmo `lifespan`.
-2. **Tudo é async.** Use `redis.asyncio` e `aio_pika`. O ruff bloqueia `redis.Redis`, `pika`, `requests` e `time.sleep` dentro de `async def`.
-3. **`get_settings()` só no lifespan e em `Depends`.** URL com senha é `SecretStr` sem valor padrão.
-4. **O usuário vem do JWT, nunca de parâmetro.** Nenhuma rota recebe `usuarioId`.
-5. **A fila não é declarada no código.** Ela já existe no `definitions.json` do RabbitMQ; o consumidor só a usa.
-6. **Os textos não conhecem o Redis nem o RabbitMQ.** Assim a tabela evento → texto é testada sem subir nada.
+As três rotas autenticadas e os erros de resposta estão no
+[contrato de Notificações](../../docs/contratos/notificacoes.v1.yaml). Cada caixa é
+identificada pelo `sub` do JWT RS256 de Identidade.
 
 ## Testes
 
 | Tipo | Onde | Como |
 | --- | --- | --- |
-| Domínio | `tests/dominio/` | funções puras (textos, destinatários), sem app e sem Redis |
-| API | `tests/` | fixture `cliente`; o Redis e o usuário são trocados com `app.dependency_overrides` |
-| Integração | `tests/integracao/` | Redis de verdade; o teste é pulado (`pytest.skip`) quando `NOTIFICACOES_TEST_REDIS_URL` não está definida |
+| Domínio | `tests/test_eventos.py` | textos, destinatários e decisões de `nack` |
+| API | `tests/test_api.py` | JWT, parâmetros e falha temporária do Redis |
+| Integração | `tests/integracao/` | Redis e RabbitMQ reais, em um ambiente isolado de teste |
 
 Teste `async def` roda direto, sem decorator (`asyncio_mode = "auto"`).
 
-## O que já existe e o que falta na #41
-
-A base acima só tem o `GET /health` e a configuração. O resto da #41 fica com o responsável. Os pontos marcados com `TODO(#41)` no código mostram onde mexer:
-
-- [ ] `requirements.txt`: acrescentar `redis`, `aio-pika` e `python-json-logger`, com versão fixada.
-- [ ] `config.py`: `NOTIFICACOES_REDIS_URL` e `NOTIFICACOES_AMQP_URL` como `SecretStr`, sem valor padrão.
-- [ ] `lifespan` em `main.py`: Redis com `redis.asyncio` e RabbitMQ com `aio_pika.connect_robust`.
-- [ ] `GET /ready` em `api/health.py`: `PING` no Redis e conexão aberta com o RabbitMQ, 503 quando um deles cai, com teste.
-- [ ] Middleware de `X-Correlation-Id` e `X-Served-By` e logs em JSON.
-- [x] `Dockerfile` multi-stage e os tamanhos em `docs/imagens.md`.
-- [ ] Bloco `notificacoes` no `compose.yaml`, nas redes `services` e `data-notificacoes`, e a prova de persistência do Redis no PR.
-
-A CI instala o `requirements-dev.txt` e roda `ruff check`, `ruff format --check` e `pytest` neste serviço (depois do merge do #126). O `docker build` passa a rodar quando o `Dockerfile` existir.
+Defina `NOTIFICACOES_TEST_REDIS_URL` para executar os testes da caixa. Para incluir
+o teste do consumidor, forneça também `NOTIFICACOES_TEST_AMQP_URL` (conta do serviço)
+e `NOTIFICACOES_TEST_AMQP_ADMIN_URL` (conta que publica em `ampara.eventos`). O broker
+de teste precisa ter importado `infra/rabbitmq/definitions.json`.
 
 ## Issues
 

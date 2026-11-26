@@ -1,0 +1,9 @@
+{
+  "data": "2026-11-26T13:15:52.906240+00:00",
+  "modelo": "gemini-2.5-flash-lite",
+  "embeddings": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "baseVersao": "ae06f1c860d3",
+  "limiarRelevancia": 0.3,
+  "trechos": 4,
+  "temperatura": 0.2
+}

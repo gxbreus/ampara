@@ -23,7 +23,7 @@ export function Casca() {
   const { conta } = useSessao<MinhaConta>();
   const { pathname } = useLocation();
   useTituloPagina(tituloDaRota(pathname), "Ampara");
-  const avisos = useQuery({ queryKey: ["notificacoes"], queryFn: notificacoes, enabled: !!conta, refetchInterval: 4_000 });
+  const avisos = useQuery({ queryKey: ["notificacoes", conta?.id], queryFn: notificacoes, enabled: !!conta, refetchInterval: 4_000 });
   const naoLidas = avisos.data?.itens.filter((n) => !n.lida).length ?? 0;
 
   // cada tela nova começa do topo, e o foco vai para o conteúdo (leitor de tela anuncia a mudança)

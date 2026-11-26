@@ -17,7 +17,7 @@ para trocar, defina a variável de processo `AMPARA_GATEWAY` antes de iniciar.
 | Busca por raio | `/` | Real: `GET /mobile/v1/animais` |
 | Ficha pública | `/animais/:id` | Real: `GET /mobile/v1/animais/{id}` |
 | Pedidos e linha do tempo | `/pedidos`, `/pedidos/:id` | Real: `/mobile/v1/solicitacoes`; cancelamento segue `_links.cancelar` |
-| Avisos | `/avisos` | Simulado até #60 |
+| Avisos | `/avisos` | Real pelo BFF Mobile, com caixa e marcação de leitura no serviço Notificações |
 | Perfil de adoção | `/perfil` | Real: `/mobile/v1/eu` e `/mobile/v1/eu/perfil-adocao` |
 | Assistente | `/assistente` | Real pelo BFF; RAG e recomendações dependem de #67/#68 |
 | Entrar / Criar conta | `/entrar`, `/cadastro` | Real: `/auth/v1/*` na Identidade |

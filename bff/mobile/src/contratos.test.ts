@@ -180,3 +180,35 @@ test("respostas do assistente seguem os schemas mobile (sem metadados internos)"
   assert.equal(semPonto.statusCode, 400);
   validar("Problema", semPonto.json());
 });
+
+test("notificações projetam criadaEm para criadoEm conforme o contrato do app", async (t) => {
+  const item = {
+    id: `${SOL}:eu`, titulo: "Adoção aprovada", mensagem: "A adoção de Thor foi aprovada.",
+    lida: false, criadaEm: "2026-11-17T12:00:00Z", tipo: "adocao.aprovada", link: `/solicitacoes/${SOL}`,
+  };
+  const app = criarApp({
+    config,
+    logger: false,
+    verificar: async () => ({ sub: "eu", role: "ADOTANTE" }),
+    chamar: async (url, req, init) => {
+      assert.equal(req.headers.authorization, "Bearer valido");
+      if (init?.method === "POST") {
+        assert.equal(decodeURIComponent(url), `http://notificacoes/v1/notificacoes/${item.id}/leitura`);
+        return new Response(null, { status: 204 });
+      }
+      assert.equal(url, "http://notificacoes/v1/notificacoes");
+      return Response.json({ itens: [item], naoLidas: 1, proximoCursor: null });
+    },
+  });
+  t.after(() => app.close());
+  const headers = { authorization: "Bearer valido" };
+  const lista = await app.inject({ url: "/mobile/v1/notificacoes", headers });
+  assert.equal(lista.statusCode, 200);
+  const corpo = lista.json<{ itens: { criadoEm: string }[] }>();
+  validar("ListaNotificacoesMobile", corpo);
+  assert.equal(corpo.itens[0].criadoEm, item.criadaEm);
+  const leitura = await app.inject({
+    url: `/mobile/v1/notificacoes/${encodeURIComponent(item.id)}/leitura`, method: "POST", headers,
+  });
+  assert.equal(leitura.statusCode, 204);
+});

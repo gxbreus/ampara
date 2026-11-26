@@ -22,6 +22,13 @@ interface Pagina {
   _embedded: { solicitacoes: Solicitacao[] };
   _links: { next?: Link };
 }
+interface ItemNotificacao {
+  id: string;
+  titulo: string;
+  mensagem: string;
+  lida: boolean;
+  criadaEm: string;
+}
 interface Animal {
   id: string;
   nome: string;
@@ -544,19 +551,29 @@ export function rotas(
   for (const [externa, interna] of [
     ["eu", "contas/eu"],
     ["eu/perfil-adocao", "contas/eu/perfil-adocao"],
-    ["notificacoes", "notificacoes"],
   ]) {
-    const servico = externa === "notificacoes" ? "notificacoes" : "identidade";
     app.get(`/mobile/v1/${externa}`, { onRequest: privado }, async (req) => {
       const query = req.url.includes("?")
         ? req.url.slice(req.url.indexOf("?"))
         : "";
       return json<unknown>(
-        `${config.servicos[servico]}/v1/${interna}${query}`,
+        `${config.servicos.identidade}/v1/${interna}${query}`,
         req,
       );
     });
   }
+  app.get("/mobile/v1/notificacoes", { onRequest: privado }, async (req) => {
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const { itens } = await json<{ itens: ItemNotificacao[] }>(
+      `${config.servicos.notificacoes}/v1/notificacoes${query}`,
+      req,
+    );
+    return {
+      itens: itens.map(({ id, titulo, mensagem, lida, criadaEm }) => ({
+        id, titulo, mensagem, lida, criadoEm: criadaEm,
+      })),
+    };
+  });
   app.put("/mobile/v1/eu/perfil-adocao", { onRequest: privado }, async (req) =>
     json<unknown>(
       `${config.servicos.identidade}/v1/contas/eu/perfil-adocao`,
