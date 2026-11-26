@@ -22,28 +22,53 @@ from app.resiliencia import Cache, Resiliencia
 logger = logging.getLogger(__name__)
 
 
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
+
 def criar_llms(settings) -> list:
-    """Modelo principal e de reserva na Groq. Sem chave: lista vazia (modo degradado)."""
-    chave = settings.llm_api_key.get_secret_value()
-    if not chave:
-        logger.warning("LLM_API_KEY vazia: o assistente responde em modo degradado")
-        return []
-    modelos = list(dict.fromkeys([settings.modelo, *settings.modelos_reserva]))
+    """Modelos na ordem em que são tentados, cada um com o seu circuito (#69):
+
+    1. o provedor principal (LLM_PROVIDER, LLM_MODEL e LLM_FALLBACK_MODEL, com LLM_API_KEY);
+    2. a Groq (GROQ_API_KEY), se preenchida;
+    3. os modelos gratuitos do OpenRouter (OPENROUTER_API_KEY), se preenchida.
+
+    Quando um modelo estoura a cota ou cai, o próximo assume. Sem nenhuma chave: lista
+    vazia (modo degradado, com a resposta de contingência).
+    """
+    pedidos: list[tuple[str, str, str]] = []  # (url ou "groq", modelo, chave)
+    principal = settings.llm_api_key.get_secret_value()
+    if principal:
+        url = "groq" if settings.llm_provider == "groq" else settings.llm_base_url or GEMINI_URL
+        pedidos += [(url, m, principal) for m in [settings.modelo, *settings.modelos_reserva]]
+    if groq := settings.groq_api_key.get_secret_value():
+        pedidos += [("groq", m, groq) for m in settings.groq_modelos]
+    if openrouter := settings.openrouter_api_key.get_secret_value():
+        pedidos += [(OPENROUTER_URL, m, openrouter) for m in settings.openrouter_modelos]
+
+    # o mesmo modelo no mesmo provedor só entra uma vez (ex.: LLM_PROVIDER=groq + GROQ_API_KEY)
+    unicos = {(url, modelo): chave for url, modelo, chave in pedidos}
+    if not unicos:
+        logger.warning("sem chave de LLM: o assistente responde em modo degradado")
+    return [criar_chat(url, modelo, chave, settings) for (url, modelo), chave in unicos.items()]
+
+
+def criar_chat(url: str, modelo: str, chave: str, settings):
     # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
     comum = {
+        "model": modelo,
         "api_key": chave,
         "temperature": 0.2,
         "max_retries": 0,
         "timeout": settings.timeout_llm_s,
     }
-    if settings.llm_provider == "openai":
-        from langchain_openai import ChatOpenAI
+    if url == "groq":
+        from langchain_groq import ChatGroq
 
-        base = settings.llm_base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
-        return [ChatOpenAI(model=m, base_url=base, **comum) for m in modelos]
-    from langchain_groq import ChatGroq
+        return ChatGroq(**comum)
+    from langchain_openai import ChatOpenAI
 
-    return [ChatGroq(model=m, **comum) for m in modelos]
+    return ChatOpenAI(base_url=url, **comum)
 
 
 async def indexar(app: FastAPI, trechos) -> None:

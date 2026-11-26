@@ -6,7 +6,6 @@ import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.config import Settings
 from app.dependencias import ConfigDep
 from app.recomendacao import recomendar
 
@@ -78,11 +77,15 @@ async def recomendacoes(
     )
 
 
+def nome_do_modelo(llm) -> str | None:
+    return getattr(llm, "model_name", None) or getattr(llm, "model", None)
+
+
 @router.get("/estado", tags=["Operação"])
-async def estado(request: Request, settings: ConfigDep):
-    s: Settings = settings
+async def estado(request: Request):
     return {
         **request.app.state.resiliencias_estado(),
-        "modelo": s.modelo if request.app.state.llms else None,
+        # o primeiro da lista (principal ou, sem a chave dele, a primeira reserva)
+        "modelo": nome_do_modelo(request.app.state.llms[0]) if request.app.state.llms else None,
         "baseVersao": request.app.state.rag.indice.versao,
     }

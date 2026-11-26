@@ -140,3 +140,54 @@ def test_sem_chave_nao_cria_llm():
     from app.main import criar_llms
 
     assert criar_llms(Settings(qdrant_url="http://q", ASSISTENTE_REDIS_URL="redis://r")) == []
+
+
+def test_reservas_gratuitas_entram_depois_do_principal_na_ordem():
+    from langchain_groq import ChatGroq
+    from langchain_openai import ChatOpenAI
+
+    from app.main import criar_llms
+
+    s = Settings(
+        qdrant_url="http://q",
+        ASSISTENTE_REDIS_URL="redis://r",
+        llm_provider="openai",
+        llm_api_key="g",
+        groq_api_key="q",
+        openrouter_api_key="o",
+    )
+    llms = criar_llms(s)
+    nomes = [m.model_name for m in llms]
+    assert nomes[:5] == [
+        "gemini-2.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+    ]
+    assert nomes[5:7] == ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    assert all(isinstance(m, ChatGroq) for m in llms[5:7])
+    assert all(n.endswith(":free") for n in nomes[7:]) and len(nomes) == 10
+    assert all(isinstance(m, ChatOpenAI) for m in llms[7:])
+    assert "openrouter.ai" in str(llms[7].openai_api_base)
+
+
+def test_so_a_chave_da_groq_ainda_responde_com_llm():
+    from app.main import criar_llms
+
+    s = Settings(qdrant_url="http://q", ASSISTENTE_REDIS_URL="redis://r", groq_api_key="q")
+    assert [m.model_name for m in criar_llms(s)] == ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+
+
+def test_mesmo_modelo_da_groq_nao_entra_duas_vezes():
+    from app.main import criar_llms
+
+    s = Settings(
+        qdrant_url="http://q",
+        ASSISTENTE_REDIS_URL="redis://r",
+        llm_provider="groq",
+        llm_api_key="q",
+        groq_api_key="q",
+    )
+    nomes = [m.model_name for m in criar_llms(s)]
+    assert nomes == ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
