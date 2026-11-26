@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_fallback_model: str = ""
+    # reservas gratuitas de outros provedores, tentadas depois dos modelos acima, nesta
+    # ordem; cada uma só entra com a chave preenchida. Modelos escolhidos em 26/11 pelo teste
+    # com o prompt do RAG (docs/llm/provedores.md); vazio = esses padrões.
+    groq_api_key: SecretStr = SecretStr("")
+    groq_models: str = ""
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_models: str = ""
     # embeddings locais, multilíngues e leves (fastembed, ONNX em CPU): o modelo vem na
     # imagem, então funciona sem internet; o bge-m3 via Ollama não cabia na máquina da demo
     embeddings_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -80,11 +87,28 @@ class Settings(BaseSettings):
                 "gemini-3.5-flash",
                 "gemini-2.5-flash",
             ]
-        return ["llama-3.1-8b-instant"]
+        return ["qwen/qwen3.8-27b"]
+
+    @property
+    def groq_modelos(self) -> list[str]:
+        return separar(self.groq_models) or ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+
+    @property
+    def openrouter_modelos(self) -> list[str]:
+        # :free = gratuitos (20/min e 50/dia por conta); devagar (~8 s), por isso por último
+        return separar(self.openrouter_models) or [
+            "nvidia/nemotron-3.5-super-vl:free",
+            "nvidia/nemotron-3.5-lightning:free",
+            "google/gemma-4-31b-it:free",
+        ]
 
     @property
     def modelo_reserva(self) -> str:
         return self.modelos_reserva[0]
+
+
+def separar(lista: str) -> list[str]:
+    return [m.strip() for m in lista.split(",") if m.strip()]
 
 
 @lru_cache

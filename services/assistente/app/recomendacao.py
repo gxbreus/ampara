@@ -159,7 +159,8 @@ async def agente(llm, busca: Busca, rotina: str) -> dict:
         resposta = await modelo.ainvoke(mensagens)
         mensagens.append(resposta)
         if not resposta.tool_calls:
-            return ler_json(str(resposta.content))
+            # .text: o Claude devolve blocos (pensamento + texto), não uma string
+            return ler_json(resposta.text)
         for chamada in resposta.tool_calls:
             resultado = await ferramenta.ainvoke(chamada["args"])
             mensagens.append(ToolMessage(content=resultado, tool_call_id=chamada["id"]))
@@ -167,7 +168,7 @@ async def agente(llm, busca: Busca, rotina: str) -> dict:
     final = await llm.ainvoke(
         mensagens + [HumanMessage("Conclua agora com o JSON pedido, sem chamar ferramentas.")]
     )
-    return ler_json(str(final.content))
+    return ler_json(final.text)
 
 
 def regras(rotina: str) -> tuple[dict, str]:

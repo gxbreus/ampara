@@ -270,3 +270,33 @@ async def test_restricoes_de_bem_estar_sao_aplicadas_pelo_servidor_mesmo_se_o_ll
     # e o modelo nem viu a filhote nem o cão grande no resultado da tool
     visto = next(m for m in llm.mensagens_vistas[-1] if getattr(m, "type", "") == "tool").content
     assert "Pipoca" not in visto and "Sol" not in visto
+
+
+async def test_resposta_em_blocos_como_a_do_claude_tambem_e_lida():
+    class AgenteEmBlocos(AgenteFake):
+        async def ainvoke(self, mensagens, **_):
+            resposta = await super().ainvoke(mensagens)
+            if resposta.tool_calls:
+                return resposta
+            # pensamento (vazio por padrão) + texto, como a API da Anthropic devolve
+            return AIMessage(
+                content=[
+                    {"type": "thinking", "thinking": "", "signature": "s"},
+                    {"type": "text", "text": resposta.content},
+                ]
+            )
+
+    final = {
+        "sugestoes": [{"animalId": "a" * 24, "motivo": "Pequena."}],
+        "explicacao": "Porte pequeno.",
+    }
+    r = await recomendar(
+        [AgenteEmBlocos({"porte": "PEQUENO"}, final)],
+        resiliencias(),
+        animais_falsos(),
+        "Moro em apartamento",
+        -21.2,
+        -45.0,
+        5,
+    )
+    assert not r["degradado"] and [s["animalId"] for s in r["sugestoes"]] == ["a" * 24]
