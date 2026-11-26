@@ -38,6 +38,14 @@ O abandono também está ligado a problemas comportamentais, mudanças na rotina
 6. A plataforma notifica os envolvidos a cada mudança importante do processo.
 7. Um assistente orienta o adotante sobre adoção responsável, com base em fontes confiáveis, e sugere animais compatíveis com a rotina dele.
 
+### O caminho feliz nas telas
+
+<p align="center">
+  <img src="docs/assets/wireframe-caminho-feliz.gif" alt="Caminho feliz da Ampara: à esquerda o painel web da ONG, à direita o app do celular da adotante. A ONG cadastra a Pipoca, a adotante a encontra na busca por raio e pede a adoção, a linha do tempo da SAGA avança, a ONG aprova vendo o perfil de quem pediu, os avisos chegam ao celular e o Assistente responde com fonte" width="960" />
+</p>
+
+À esquerda, o **App Web** da ONG, que fala com o BFF Web; à direita, o **App Mobile** da adotante, que fala com o BFF Mobile. A ONG cadastra a Pipoca, a adotante a encontra na busca por raio e pede a adoção, a SAGA reserva o animal e valida o perfil, a ONG aprova vendo o perfil de quem pediu, os avisos chegam ao celular e o Assistente responde com fonte e recomenda animais pela rotina. São as telas reais do sistema rodando, aceleradas 4 vezes. O vídeo completo, de cerca de 9 minutos, narrado pelos quatro integrantes e com o código de cada passo, é gerado por [`scripts/video/`](scripts/video/) a partir do [roteiro do vídeo](docs/apresentacao/parte-4/roteiro-video.md).
+
 ### Quem usa
 
 | Público | Cliente | Principais ações |

@@ -21,4 +21,4 @@ Utilitários de desenvolvimento e demonstração. Previstos:
 | `carga/` | teste de carga da demonstração de escalabilidade | #51 |
 | `reconstruir_projecao.py` | reconstrói o read model de Animais do zero | #56 |
 | `dlq.sh` | lista, reprocessa e descarta mensagens das DLQs pela API do RabbitMQ (roteiro em `docs/operacao/dlq.md`) | #86 |
-| `video/` | grava o vídeo do caminho feliz dos dois BFFs, com o App Web e o App Mobile lado a lado e uma legenda por etapa (`cd scripts/video && npm run gravar`; roteiro de narração em `docs/apresentacao/parte-4/roteiro-video.md`) | #74 |
+| `video/` | vídeo da Parte 4: `gravar.mjs` grava as telas do caminho feliz (App Web e App Mobile lado a lado, com cenas de código e legenda), `montar.mjs` junta o vídeo de cada integrante (rosto e voz), `falas.mjs` gera os documentos de falas e `gif.mjs` o GIF do README (roteiro em `docs/apresentacao/parte-4/roteiro-video.md`) | #74 |

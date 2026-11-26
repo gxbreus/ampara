@@ -1,6 +1,6 @@
 # Falas por parte, sincronizadas com o vídeo das telas
 
-Gerado a partir de `docs/apresentacao/parte-4/roteiro-video.md` e dos tempos da gravação `ampara-caminho-feliz-2026-11-26-16-39.mp4` (8:51 de vídeo). Para outra gravação: `node scripts/video/falas.mjs scripts/video/saida/marcadores-<data>.txt`. Para gravar as falas, use [`falas-para-gravar.md`](falas-para-gravar.md).
+Gerado a partir de `docs/apresentacao/parte-4/roteiro-video.md` e dos tempos da gravação `ampara-caminho-feliz-2026-11-26-17-06.mp4` (8:51 de vídeo). Para outra gravação: `node scripts/video/falas.mjs scripts/video/saida/marcadores-<data>.txt`. Para gravar as falas, use [`falas-para-gravar.md`](falas-para-gravar.md).
 
 | Parte | Quem narra | Cenas | Do minuto | Até | Fala |
 | --- | --- | --- | --- | --- | --- |

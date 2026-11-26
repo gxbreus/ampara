@@ -66,6 +66,9 @@ npm run instalar        # baixa o Chromium do Playwright (~110 MB)
    - `marcadores-<data>.txt`: o minuto em que cada cena começa e quem narra;
    - `falas-<data>.md`: as falas de cada integrante, com os minutos desta gravação.
 
+4. **GIF do README** (o caminho feliz só com as telas, acelerado): `node gif.mjs` regrava
+   `docs/assets/wireframe-caminho-feliz.gif` a partir da gravação mais recente.
+
 | Variável | Para quê |
 | --- | --- |
 | `RITMO=1.8` | todas as cenas mais longas (padrão `1.5`). Use se a fala ficar apertada |
