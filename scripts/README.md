@@ -21,3 +21,4 @@ Utilitários de desenvolvimento e demonstração. Previstos:
 | `carga/` | teste de carga da demonstração de escalabilidade | #51 |
 | `reconstruir_projecao.py` | reconstrói o read model de Animais do zero | #56 |
 | `dlq.sh` | lista, reprocessa e descarta mensagens das DLQs pela API do RabbitMQ (roteiro em `docs/operacao/dlq.md`) | #86 |
+| `video/` | grava o vídeo do caminho feliz dos dois BFFs, com o App Web e o App Mobile lado a lado e uma legenda por etapa (`cd scripts/video && npm run gravar`; roteiro de narração em `docs/apresentacao/parte-4/roteiro-video.md`) | #74 |

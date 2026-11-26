@@ -1,0 +1,13 @@
+{
+  "name": "ampara-video",
+  "private": true,
+  "description": "Grava o caminho feliz dos dois BFFs (App Web + App Mobile) para o vídeo da apresentação.",
+  "type": "module",
+  "scripts": {
+    "gravar": "node gravar.mjs",
+    "instalar": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}
