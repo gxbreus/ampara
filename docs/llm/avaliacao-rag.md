@@ -1,7 +1,8 @@
 # Avaliação do RAG — protocolo, runner e medições
 
 Protocolo e perguntas preparados em 2026-11-17; runner e primeiras medições em
-2026-11-25; referências e preços oficiais em 2026-11-26. As perguntas estão em
+2026-11-25; referências, preços oficiais, execução completa e avaliação humana cega em
+2026-11-26. As perguntas estão em
 `services/assistente/avaliacao/perguntas.yaml`, cada uma com a referência resumida do
 texto da fonte esperada em `services/assistente/kb/` (nunca de resposta do LLM). Os
 avaliadores conferem a referência na fonte antes de dar as notas.
@@ -44,7 +45,8 @@ Por pergunta e modo, calcular média de correção e fundamentação entre os do
 avaliadores. Para alucinação, preservar ambos os votos e registrar proporção
 de votos positivos e concordância; não converter discordância em um "não".
 Divulgar identificação dos avaliadores, data e versão das saídas avaliadas
-apenas depois da realização. Nenhuma avaliação humana foi feita aqui.
+apenas depois da realização. Realizada em 26/11 por Gabriel Soares e Gabriel Cantanhede,
+sobre as saídas de `resultados/20261126T131551Z/` (seção "Avaliação humana cega").
 
 ## Latência, tokens e custo
 
@@ -269,11 +271,55 @@ pergunta com RAG sobe para ~US$ 0,0004 (3,5 flash-lite). Também se consultou a 
 (<https://console.groq.com/docs/models>, 26/11): `openai/gpt-oss-120b` a US$ 0,15 de
 entrada e US$ 0,60 de saída por 1M; sem tokens medidos nela, não há custo calculado.
 
+## Avaliação humana cega (26/11/2026)
+
+Dois avaliadores, **Gabriel Soares** e **Gabriel Cantanhede**, preencheram a planilha cega
+de forma independente, sem o gabarito A/B, seguindo `avaliacao/COMO-AVALIAR.md`. As notas
+originais estão em `resultados/20261126T131551Z/notas-gabriel-soares.csv` e
+`notas-gabriel-cantanhede.csv`; o modo de cada resposta vem de `gabarito-ab.json`. As
+três gerações que falharam no provedor (P02 e P04 sem RAG, P08 com RAG) ficaram sem nota,
+como manda o protocolo: 9 respostas com RAG e 8 sem RAG foram avaliadas.
+
+| ID | Pergunta | Sem RAG: correção | Sem RAG: fundamentação | Sem RAG: alucinou? | Com RAG: correção | Com RAG: fundamentação | Com RAG: alucinou? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P01 | vacinação de filhote | 1,5 | 1,0 | 0/2 | 2,0 | 1,0 | 0/2 |
+| P02 | janelas e gatos | erro do provedor | — | — | 2,0 | 2,0 | 0/2 |
+| P03 | porte e rotina | 1,5 | 1,0 | 0/2 | **0,0** | **0,0** | **2/2** |
+| P04 | apresentar a outros animais | erro do provedor | — | — | 2,0 | 1,0 | 0/2 |
+| P05 | cão abandonado | 1,5 | 1,0 | 0/2 | 2,0 | 2,0 | 0/2 |
+| P06 | Lei 14.064 | 1,0 | 1,0 | 0/2 | 2,0 | 1,0 | 0/2 |
+| P07 | aceite ≠ adoção concluída | 1,0 | 0,5 | **2/2** | 2,0 | 1,5 | 0/2 |
+| P08 | viagens | 1,0 | 1,0 | 0/2 | erro do provedor | — | — |
+| P09 | capital da França (fora do domínio) | **0,0** | **0,0** | 0/2 | 2,0 | 2,0 | 0/2 |
+| P10 | horário das clínicas (sem cobertura) | 2,0 | 2,0 | 0/2 | 2,0 | 2,0 | 0/2 |
+
+Notas de 0 a 2, média dos dois avaliadores; alucinação em votos "sim" sobre 2.
+
+| Modo | Respostas | Correção | Fundamentação | Votos de alucinação |
+| --- | --- | --- | --- | --- |
+| **Com RAG** | 9 | **1,78** | **1,39** | 2 de 18 (P03) |
+| **Sem RAG** | 8 | 1,19 | 0,94 | 2 de 16 (P07) |
+| Com RAG, só as 7 perguntas com os dois modos | 7 | 1,71 | 1,36 | 2 de 14 |
+| Sem RAG, só as 7 perguntas com os dois modos | 7 | 1,21 | 0,93 | 2 de 14 |
+
+| Avaliador | Com RAG (correção / fundamentação) | Sem RAG (correção / fundamentação) |
+| --- | --- | --- |
+| Gabriel Soares | 1,78 / 1,44 | 1,38 / 1,00 |
+| Gabriel Cantanhede | 1,78 / 1,33 | 1,00 / 0,88 |
+
+**Concordância entre os avaliadores (17 respostas):** alucinação igual em 17 de 17; nota de
+correção idêntica em 14 e de fundamentação em 15; nenhuma divergência maior que 1 ponto.
+As três divergências de correção são todas sem RAG (P01, P03, P05: 2 contra 1), com o
+Gabriel Cantanhede mais rigoroso com respostas de conhecimento geral que omitem pontos da
+referência.
+
 ## Conclusão
 
-Análise das respostas de 26/11, conferidas nas fontes da base. As notas cegas dos dois
-avaliadores (planilha em `resultados/20261126T131551Z/`) confirmam ou corrigem esta
-leitura; as médias entram na tabela de avaliação quando as duas planilhas voltarem.
+Análise das respostas de 26/11, conferidas nas fontes da base e confirmada pela avaliação
+humana cega acima. **Com RAG, a correção média subiu de 1,19 para 1,78 e a fundamentação
+de 0,94 para 1,39**, com o mesmo número de alucinações (uma resposta em cada modo), mas de
+naturezas diferentes: sem RAG o modelo inventou regras da Ampara; com RAG, a falha veio da
+recuperação.
 
 **Onde o RAG ajudou**
 
@@ -292,9 +338,12 @@ leitura; as médias entram na tabela de avaliação quando as duas planilhas vol
 
 **Onde não ajudou**
 
-- **Recuperação errada vira omissão (P03).** A busca não trouxe `03-planejamento.md`, e a
-  resposta com RAG declarou "sem cobertura"; sem RAG, a resposta geral estava correta. O
-  erro é seguro (não inventa), mas o usuário fica sem resposta para algo que a base cobre.
+- **Recuperação errada vira afirmação falsa (P03).** A busca não trouxe
+  `03-planejamento.md`, e a resposta com RAG declarou que as fontes não cobrem o assunto;
+  sem RAG, a resposta geral estava correta (1,5). A leitura inicial era de um erro "seguro",
+  por omissão, mas **os dois avaliadores deram 0 e marcaram alucinação**: afirmar que a
+  base não cobre algo que ela cobre é uma informação falsa ao usuário. É a pior nota com
+  RAG e o principal ponto a corrigir.
 - **Sem cobertura (P10).** As duas versões se comportaram bem: com RAG pelo marcador
   `SEM_COBERTURA`, sem RAG por instrução do prompt. Aqui o RAG não fez diferença.
 - **Extrapolação leve (P04).** A resposta com RAG puxou "aproximação com segurança, pois
@@ -306,29 +355,32 @@ leitura; as médias entram na tabela de avaliação quando as duas planilhas vol
 
 **O que melhorar**
 
-1. **Recuperação de P03:** reescrever o trecho de planejamento com o vocabulário de quem
-   pergunta ("rotina", "casa", "combina") ou testar um modelo de embeddings maior.
+1. **Recuperação de P03 (prioridade):** reescrever o trecho de planejamento com o
+   vocabulário de quem pergunta ("rotina", "casa", "combina") ou testar um modelo de
+   embeddings maior. Rever também o texto do marcador `SEM_COBERTURA` para "não encontrei
+   nas fontes recuperadas" em vez de afirmar que a base não cobre.
 2. **Repetir as três chamadas que falharam** (P02 e P04 sem RAG, P08 com RAG) num dia com
    cota e sem 503, para fechar as 20 comparações.
 3. **Cache semântico:** o cache exato só acerta perguntas idênticas; reaproveitar a
-   resposta de perguntas equivalentes (embedding muito parecido, mesma base e mesmo
-   modelo) aumenta a taxa de acerto e reduz custo e latência.
+   resposta de perguntas equivalentes aumenta a taxa de acerto e reduz custo e latência
+   (implementado no PR #216, com as travas medidas em `docs/llm/cache-semantico.md`).
 4. **Checagem além da citação:** hoje ela só garante que [n] existe; P04 mostra que a
    citação pode estar fora de contexto.
 
 ## Registro pendente e critérios de conclusão
 
-| Item | Estado verificado em 2026-11-25 |
+| Item | Estado verificado em 2026-11-26 |
 | --- | --- |
-| Dez perguntas e categorias | Preparadas, com referência resumida da fonte (26/11); conferência pelos avaliadores |
+| Dez perguntas e categorias | Prontas, com referência resumida da fonte, conferida pelos dois avaliadores |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
 | Execução com e sem RAG | Completa em 26/11 com `gemini-2.5-flash-lite`: 17 de 20 gerações; 3 erros do provedor registrados |
 | Cache, recuperação e falhas observáveis | Implementados (#69): `GET /v1/estado` mostra circuito, falhas, fallbacks e cache hits |
-| Dois avaliadores e médias | Planilha cega e instruções enviadas em 26/11; aguardando as notas |
+| Dois avaliadores e médias | Feito em 26/11 (Gabriel Soares e Gabriel Cantanhede); médias, votos e concordância acima |
 | p50/p95 e tokens | Medidos em 26/11 por etapa, com cache frio e quente |
 | Preços oficiais e custo | Gemini consultado em 26/11; custo e projeção calculados com tokens medidos |
 | Resultados brutos e conclusão qualitativa | `resultados/20261126T131551Z/` e seção "Conclusão" |
 
-A issue fecha quando as duas planilhas de notas estiverem em `resultados/` e as médias
-na tabela de avaliação. Nenhum número deste doc é ilustrativo: todos saem dos arquivos
-brutos.
+Todos os critérios de aceite da #70 estão atendidos. Limitação registrada: três das 20
+gerações falharam no provedor (503 e tempo esgotado) e ficaram sem nota; repetir essas
+chamadas fecharia as 10 comparações pareadas. Nenhum número deste doc é ilustrativo:
+todos saem dos arquivos brutos em `resultados/20261126T131551Z/`.
