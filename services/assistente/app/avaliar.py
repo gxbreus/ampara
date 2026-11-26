@@ -2,7 +2,8 @@
 
     python -m app.avaliar                      # perguntas com e sem RAG + planilha cega
     python -m app.avaliar --latencia 50        # também mede p50/p95 com cache frio e quente
-    python -m app.avaliar --preco-entrada 0.15 --preco-saida 0.75 --preco-data 2026-11-25
+    python -m app.avaliar --preco-entrada 0.15 --preco-saida 0.60 --preco-data 2026-11-26 \
+        --taxa-cache 0.3
 
 Roda dentro do container do Assistente (que já tem a base, as perguntas e o modelo de
 embeddings): `kubectl exec -it deploy/assistente -n ampara -- python -m app.avaliar`.
@@ -97,6 +98,7 @@ def gravar_saidas(saida: Path, execucao: dict, registros: list, perguntas: list,
             [
                 "id",
                 "pergunta",
+                "referencia",
                 "resposta_A",
                 "resposta_B",
                 "avaliador",
@@ -117,6 +119,7 @@ def gravar_saidas(saida: Path, execucao: dict, registros: list, perguntas: list,
                 [
                     p["id"],
                     p["pergunta"],
+                    p.get("referencia") or p.get("comportamento_esperado") or "",
                     par[0].get("resposta", par[0].get("erro")),
                     par[1].get("resposta", par[1].get("erro")),
                 ]
@@ -239,10 +242,17 @@ async def avaliar(args) -> None:
                     / 1e6
                 )
                 media = custo / len(validos)
+                # custo mensal = custo por pergunta × volume × (1 − taxa de acerto do cache);
+                # os embeddings rodam em CPU local e não têm custo de API
+                fator = 1 - args.taxa_cache
+                projecao = ", ".join(
+                    f"{n:,} = US$ {media * n * fator:.2f}".replace(",", ".")
+                    for n in (1_000, 10_000, 100_000)
+                )
                 print(
-                    f"\nCusto {modo} (preço de {args.preco_data or 'data não informada'}): "
-                    f"US$ {media:.6f} por pergunta; 1 mil = US$ {media * 1e3:.2f}, "
-                    f"10 mil = US$ {media * 1e4:.2f}, 100 mil = US$ {media * 1e5:.2f} (sem cache)."
+                    f"\nCusto {modo} (preço de {args.preco_data or 'data não informada'}, "
+                    f"{len(validos)} chamadas com tokens): US$ {media:.6f} por pergunta; "
+                    f"por mês com {args.taxa_cache:.0%} de acerto do cache: {projecao}."
                 )
 
     if args.latencia and llm is not None:
@@ -300,6 +310,9 @@ def main() -> None:
     parser.add_argument("--preco-entrada", type=float, help="US$ por milhão de tokens de entrada")
     parser.add_argument("--preco-saida", type=float, help="US$ por milhão de tokens de saída")
     parser.add_argument("--preco-data", help="data em que o preço oficial foi consultado")
+    parser.add_argument(
+        "--taxa-cache", type=float, default=0.0, help="taxa de acerto do cache na projeção (0 a 1)"
+    )
     parser.add_argument("--semente", type=int, default=70)
     parser.add_argument(
         "--pausa", type=float, default=0, help="segundos entre chamadas (limite do plano gratuito)"
