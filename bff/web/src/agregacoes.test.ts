@@ -12,6 +12,8 @@ import type { Config } from "./config.js";
 
 // Testes das rotas da #61. Os serviços são falsos, com respostas tiradas dos contratos, e
 // toda resposta 2xx do BFF é validada contra o schema de docs/contratos/bff-web.v1.yaml.
+// As respostas falsas de Animais também são validadas contra animais.v1.yaml, para o
+// teste não passar com um formato que o serviço real não devolve.
 
 const config: Config = {
   porta: 3010,
@@ -22,10 +24,26 @@ const config: Config = {
 
 // --- contrato
 
-const contrato = parse(readFileSync(new URL("../../../docs/contratos/bff-web.v1.yaml", import.meta.url), "utf8")) as object;
+interface Contrato {
+  components: { examples: Record<string, { value: unknown }> };
+}
+const ler = (arquivo: string) =>
+  parse(readFileSync(new URL(`../../../docs/contratos/${arquivo}`, import.meta.url), "utf8")) as Contrato;
+const contrato = ler("bff-web.v1.yaml");
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats.default(ajv);
 ajv.addSchema(contrato, "bff");
+ajv.addSchema(ler("animais.v1.yaml"), "animais");
+
+// o exemplo Thor do contrato: a resposta real do detalhe tem de ser igual a ele
+const exemploThor = contrato.components.examples.Thor.value;
+
+function deAnimais<T>(schema: string, corpo: T): T {
+  const validar = ajv.getSchema(`animais#/components/schemas/${schema}`);
+  assert.ok(validar, `schema ${schema} não existe em animais.v1.yaml`);
+  assert.ok(validar(corpo), `Animais ${schema}: ${ajv.errorsText(validar.errors)}`);
+  return corpo;
+}
 
 function seguirContrato(schema: string, corpo: unknown) {
   const validar = ajv.getSchema(`bff#/components/schemas/${schema}`);
@@ -139,7 +157,33 @@ const contaComPerfil = {
   perfil: { tipoMoradia: "CASA", temQuintal: true, outrosAnimais: false, horasForaDeCasa: 4, completo: true },
 };
 
-const animalCompleto = { id: idAnimal, nome: "Thor", fotoCapa: "https://exemplo.ampara.dev/fotos/thor-1.jpg", status: "RESERVADO" };
+// O Thor como Animais devolve (AnimalCompleto): GeoJSON em [lng, lat], endereço completo e
+// histórico com o UUID de quem mudou ou "SAGA".
+const animalCompleto = deAnimais("AnimalCompleto", {
+  id: idAnimal,
+  responsavelId: responsavel,
+  nome: "Thor",
+  especie: "CAO",
+  porte: "MEDIO",
+  sexo: "MACHO",
+  idadeMeses: 36,
+  temperamento: ["dócil", "brincalhão"],
+  descricao: "Resgatado no Centro, vacinado e castrado.",
+  fotos: ["https://exemplo.ampara.dev/fotos/thor-1.jpg", "https://exemplo.ampara.dev/fotos/thor-2.jpg"],
+  status: "RESERVADO",
+  localizacao: { type: "Point" as const, coordinates: [-44.9998, -21.2453] as [number, number] },
+  endereco: { rua: "Rua Santana", numero: "120", bairro: "Centro", cidade: "Lavras", uf: "MG", cep: "37200-000" },
+  historicoStatus: [
+    { status: "DISPONIVEL", alteradoEm: "2026-11-10T13:00:00Z", alteradoPor: responsavel },
+    { status: "RESERVADO", alteradoEm: "2026-11-12T10:00:01Z", alteradoPor: "SAGA" },
+    { status: "DISPONIVEL", alteradoEm: "2026-11-13T09:30:01Z", alteradoPor: "SAGA" },
+    { status: "RESERVADO", alteradoEm: "2026-11-17T15:00:01Z", alteradoPor: "SAGA" },
+  ],
+  version: 4,
+  criadoEm: "2026-11-10T13:00:00Z",
+  atualizadoEm: "2026-11-17T15:00:01Z",
+});
+const loteDeAnimais = deAnimais("PaginaAnimaisEscrita", { itens: [animalCompleto] });
 
 const historico = {
   itens: [
@@ -171,14 +215,14 @@ describe("GET /web/v1/solicitacoes", () => {
     const { instancia, chamadas } = await app({
       [urls.lista]: { corpo: pagina, tipo: "application/hal+json" },
       [urls.contas]: { corpo: [contaComPerfil] },
-      [urls.animais]: { corpo: [animalCompleto] },
+      [urls.animais]: { corpo: loteDeAnimais },
     });
     const r = await instancia.inject({ url: "/web/v1/solicitacoes", headers: await auth() });
 
     assert.equal(r.statusCode, 200);
     const corpo = r.json<{ itens: Record<string, unknown>[]; proximoCursor: string; avisos: unknown[] }>();
     seguirContrato("PaginaSolicitacoes", corpo);
-    assert.deepEqual(corpo.itens[0].animal, { id: idAnimal, nome: "Thor", fotoCapa: animalCompleto.fotoCapa });
+    assert.deepEqual(corpo.itens[0].animal, { id: idAnimal, nome: "Thor", fotoCapa: animalCompleto.fotos[0] });
     assert.deepEqual(corpo.itens[0].adotante, { id: idAdotante, nome: "Bruna Silva", cidade: "Lavras", perfil: contaComPerfil.perfil });
     assert.deepEqual(corpo.itens[0]._links, linksTraduzidos);
     assert.equal(corpo.proximoCursor, "abc123");
@@ -271,7 +315,7 @@ describe("GET /web/v1/solicitacoes/{id}", () => {
       [urls.detalhe]: { corpo: solicitacao },
       [urls.historico]: { corpo: historico },
       [urls.contas]: { corpo: [contaComPerfil] },
-      [urls.animais]: { corpo: [animalCompleto] },
+      [urls.animais]: { corpo: loteDeAnimais },
     });
     const r = await instancia.inject({ url: `/web/v1/solicitacoes/${idSolicitacao}`, headers: await auth() });
 
@@ -304,9 +348,11 @@ describe("GET /web/v1/solicitacoes/{id}", () => {
 // --- decisões
 
 describe("aprovação e recusa", () => {
+  // Desde o Orquestrador (ADR-008), a Adoção responde com a decisão registrada e o estado
+  // ainda em AGUARDANDO_APROVACAO, sem links de ação.
   const aprovada = {
     ...solicitacao,
-    estado: "APROVADA",
+    decisao: "APROVADA",
     _links: { self: solicitacao._links.self, animal: solicitacao._links.animal, historico: solicitacao._links.historico },
   };
 
@@ -319,8 +365,9 @@ describe("aprovação e recusa", () => {
     seguirContrato("SolicitacaoAcao", r.json());
     assert.deepEqual(r.json(), {
       id: idSolicitacao,
-      estado: "APROVADA",
+      estado: "AGUARDANDO_APROVACAO",
       desfecho: null,
+      decisao: "APROVADA",
       _links: { self: linksTraduzidos.self, animal: linksTraduzidos.animal },
     });
     assert.equal(chamadas[0].metodo, "POST");
@@ -328,8 +375,8 @@ describe("aprovação e recusa", () => {
   });
 
   it("recusa repassa o motivo", async () => {
-    const compensando = { ...aprovada, estado: "COMPENSANDO", desfecho: "RECUSADA", motivo: "Sem tela nas janelas." };
-    const { instancia, chamadas } = await app({ [`POST ${urls.detalhe}/recusa`]: { status: 202, corpo: compensando } });
+    const recusada = { ...aprovada, decisao: "RECUSADA" };
+    const { instancia, chamadas } = await app({ [`POST ${urls.detalhe}/recusa`]: { status: 202, corpo: recusada } });
     const r = await instancia.inject({
       method: "POST",
       url: `/web/v1/solicitacoes/${idSolicitacao}/recusa`,
@@ -339,6 +386,7 @@ describe("aprovação e recusa", () => {
     assert.equal(r.statusCode, 202);
     seguirContrato("SolicitacaoAcao", r.json());
     assert.deepEqual(chamadas[0].corpo, { motivo: "Sem tela nas janelas." });
+    assert.equal(r.json<{ decisao: string }>().decisao, "RECUSADA");
   });
 
   it("recusa sem corpo também vale", async () => {
@@ -432,5 +480,293 @@ describe("verificação de contas (só ADMIN)", () => {
     const r = await instancia.inject({ url: "/web/v1/admin/contas", headers: await auth("ADMIN") });
     assert.equal(r.statusCode, 503);
     assert.equal(r.json<{ detail: string }>().detail, "Identidade não respondeu.");
+  });
+});
+
+// --- painel e animais (#61)
+
+const sub = responsavel;
+const animaisUrl = "http://animais:8001/v1/animais";
+const resumoUrl = `http://adocao:8080/v1/solicitacoes/resumo?responsavelId=${sub}`;
+const resumoAdocao = {
+  porEstado: { AGUARDANDO_APROVACAO: 1, CONCLUIDA: 1, RECUSADA: 1 },
+  ativasPorAnimal: { [idAnimal]: 1 },
+  concluidasNoMes: 1,
+};
+
+function outroAnimal(id: string, status: string) {
+  return deAnimais("AnimalCompleto", { ...animalCompleto, id, nome: `Animal ${id.slice(-2)}`, status, historicoStatus: [] });
+}
+
+describe("GET /web/v1/painel", () => {
+  const pagina1 = `${animaisUrl}?responsavelId=${sub}&limite=100`;
+  const pagina2 = `${animaisUrl}?responsavelId=${sub}&limite=100&cursor=c2`;
+
+  it("soma os animais de todas as páginas e resume as solicitações", async () => {
+    const { instancia, chamadas } = await app({
+      [pagina1]: { corpo: deAnimais("PaginaAnimaisEscrita", {
+        itens: [animalCompleto, outroAnimal("65a2f1c4e8b9d3a7f0c1b2d4", "DISPONIVEL")], proximoCursor: "c2" }) },
+      [pagina2]: { corpo: deAnimais("PaginaAnimaisEscrita", {
+        itens: [outroAnimal("65a2f1c4e8b9d3a7f0c1b2d5", "DISPONIVEL"), outroAnimal("65a2f1c4e8b9d3a7f0c1b2d6", "ADOTADO")] }) },
+      [resumoUrl]: { corpo: resumoAdocao },
+    });
+    const r = await instancia.inject({ url: "/web/v1/painel", headers: await auth() });
+
+    assert.equal(r.statusCode, 200);
+    seguirContrato("Painel", r.json());
+    assert.deepEqual(r.json(), {
+      animais: { total: 4, porStatus: { RESERVADO: 1, DISPONIVEL: 2, ADOTADO: 1 } },
+      solicitacoes: { aguardandoAprovacao: 1, porEstado: resumoAdocao.porEstado, concluidasNoMes: 1 },
+      avisos: [],
+    });
+    assert.equal(chamadas.filter((c) => c.url.startsWith(animaisUrl)).length, 2);
+  });
+
+  it("sem a Adoção, os contadores de animais vêm e as solicitações ficam null", async () => {
+    const { instancia } = await app({
+      [pagina1]: { corpo: loteDeAnimais },
+      [resumoUrl]: timeout(),
+    });
+    const r = await instancia.inject({ url: "/web/v1/painel", headers: await auth() });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("Painel", r.json());
+    assert.equal(r.json<{ solicitacoes: unknown }>().solicitacoes, null);
+    assert.deepEqual(r.json<{ avisos: unknown }>().avisos, [{ servico: "adocao", motivo: "TIMEOUT" }]);
+  });
+
+  it("503 quando Animais e Adoção falham juntos", async () => {
+    const { instancia } = await app({ [pagina1]: { status: 503 }, [resumoUrl]: new Error("conexão recusada") });
+    const r = await instancia.inject({ url: "/web/v1/painel", headers: await auth() });
+    assert.equal(r.statusCode, 503);
+    assert.equal(r.headers["content-type"], "application/problem+json; charset=utf-8");
+  });
+
+  it("403 para ADOTANTE", async () => {
+    const { instancia, chamadas } = await app({});
+    const r = await instancia.inject({ url: "/web/v1/painel", headers: await auth("ADOTANTE") });
+    assert.equal(r.statusCode, 403);
+    assert.equal(chamadas.length, 0);
+  });
+});
+
+describe("GET /web/v1/animais", () => {
+  const lista = `${animaisUrl}?responsavelId=${sub}`;
+
+  it("lista os animais do responsável com as solicitações ativas de cada um", async () => {
+    const pipoca = outroAnimal("65a2f1c4e8b9d3a7f0c1b2d4", "DISPONIVEL");
+    const { instancia } = await app({
+      [lista]: { corpo: deAnimais("PaginaAnimaisEscrita", { itens: [animalCompleto, pipoca], proximoCursor: "c2" }) },
+      [resumoUrl]: { corpo: resumoAdocao },
+    });
+    const r = await instancia.inject({ url: "/web/v1/animais", headers: await auth() });
+
+    assert.equal(r.statusCode, 200);
+    seguirContrato("PaginaAnimais", r.json());
+    const corpo = r.json<{ itens: { id: string; solicitacoesAtivas: number; fotoCapa: string }[]; proximoCursor: string }>();
+    assert.deepEqual(corpo.itens.map((a) => [a.id, a.solicitacoesAtivas]), [[idAnimal, 1], [pipoca.id, 0]]);
+    assert.equal(corpo.itens[0].fotoCapa, animalCompleto.fotos[0]);
+    assert.equal(corpo.proximoCursor, "c2");
+  });
+
+  it("repassa status e cursor para Animais", async () => {
+    const url = `${lista}&status=DISPONIVEL&cursor=c2`;
+    const { instancia, chamadas } = await app({ [url]: { corpo: { itens: [] } }, [resumoUrl]: { corpo: resumoAdocao } });
+    const r = await instancia.inject({ url: "/web/v1/animais?status=DISPONIVEL&cursor=c2", headers: await auth() });
+    assert.equal(r.statusCode, 200);
+    assert.ok(chamadas.some((c) => c.url === url));
+  });
+
+  it("sem a Adoção, solicitacoesAtivas vem null com aviso", async () => {
+    const { instancia } = await app({ [lista]: { corpo: loteDeAnimais }, [resumoUrl]: { status: 500 } });
+    const r = await instancia.inject({ url: "/web/v1/animais", headers: await auth() });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("PaginaAnimais", r.json());
+    const corpo = r.json<{ itens: { solicitacoesAtivas: unknown }[]; avisos: unknown[] }>();
+    assert.equal(corpo.itens[0].solicitacoesAtivas, null);
+    assert.deepEqual(corpo.avisos, [{ servico: "adocao", motivo: "INDISPONIVEL" }]);
+  });
+
+  it("503 quando Animais, que é essencial, não responde", async () => {
+    const { instancia } = await app({ [lista]: timeout(), [resumoUrl]: { corpo: resumoAdocao } });
+    const r = await instancia.inject({ url: "/web/v1/animais", headers: await auth() });
+    assert.equal(r.statusCode, 503);
+  });
+
+  it("422 com status fora do enum, sem chamar Animais", async () => {
+    const { instancia, chamadas } = await app({});
+    const r = await instancia.inject({ url: "/web/v1/animais?status=PERDIDO", headers: await auth() });
+    assert.equal(r.statusCode, 422);
+    assert.equal(chamadas.length, 0);
+  });
+});
+
+describe("GET /web/v1/animais/{id}", () => {
+  const detalhe = `${animaisUrl}/${idAnimal}`;
+  const solicitacoesDoAnimal = `http://adocao:8080/v1/solicitacoes?animalId=${idAnimal}&responsavelId=${sub}&limite=100`;
+  const idCarlos = "9b2d4f6a-1c3e-4a5b-8d7f-0e1a2b3c4d5e";
+  const idRecusada = "3c9e5b1d-8a2f-4d7c-b6e0-9f1a2c3d4e5f";
+  const recusada = {
+    ...solicitacao,
+    id: idRecusada,
+    estado: "RECUSADA",
+    desfecho: "RECUSADA",
+    adotanteId: idCarlos,
+    expiraEm: "2026-11-15T10:00:00Z",
+    criadoEm: "2026-11-12T10:00:00Z",
+    _links: { self: { href: `/v1/solicitacoes/${idRecusada}` } },
+  };
+  const carlos = {
+    id: idCarlos,
+    nome: "Carlos Souza",
+    role: "ADOTANTE",
+    cidade: "Lavras",
+    statusVerificacao: "VERIFICADA",
+    perfil: { tipoMoradia: "APARTAMENTO", temQuintal: false, outrosAnimais: true, horasForaDeCasa: 10, completo: true },
+  };
+  // a recusada vem primeiro da Adoção; o BFF põe a ativa na frente
+  const paginaDoAnimal = { _embedded: { solicitacoes: [recusada, solicitacao] }, _links: { self: { href: "/v1/solicitacoes" } } };
+  // os ids vão na ordem das solicitações já ordenadas (a ativa, da Bruna, primeiro)
+  const contas = `http://identidade:3001/v1/contas?ids=${idAdotante}%2C${idCarlos}&incluir=perfil`;
+
+  it("monta o detalhe igual ao exemplo Thor do contrato, com uma chamada por serviço", async () => {
+    const { instancia, chamadas } = await app({
+      [detalhe]: { corpo: animalCompleto },
+      [solicitacoesDoAnimal]: { corpo: paginaDoAnimal, tipo: "application/hal+json" },
+      [contas]: { corpo: [carlos, contaComPerfil] },
+    });
+    const r = await instancia.inject({ url: `/web/v1/animais/${idAnimal}`, headers: await auth() });
+
+    assert.equal(r.statusCode, 200);
+    seguirContrato("AnimalPainel", r.json());
+    // o exemplo do contrato não traz `decisao`, que é opcional; a resposta traz null
+    const corpo = r.json<{ solicitacoes: Record<string, unknown>[] }>();
+    for (const s of corpo.solicitacoes) {
+      assert.equal(s.decisao, null);
+      delete s.decisao;
+    }
+    assert.deepEqual(corpo, exemploThor);
+    assert.deepEqual(chamadas.map((c) => c.url.split("?")[0]).sort(), [
+      "http://adocao:8080/v1/solicitacoes", detalhe, "http://identidade:3001/v1/contas"].sort());
+  });
+
+  it("sem a Identidade, os adotantes vêm null com aviso", async () => {
+    const { instancia } = await app({
+      [detalhe]: { corpo: animalCompleto },
+      [solicitacoesDoAnimal]: { corpo: paginaDoAnimal },
+      [contas]: timeout(),
+    });
+    const r = await instancia.inject({ url: `/web/v1/animais/${idAnimal}`, headers: await auth() });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("AnimalPainel", r.json());
+    const corpo = r.json<{ solicitacoes: { adotante: unknown }[]; avisos: unknown[] }>();
+    assert.ok(corpo.solicitacoes.every((s) => s.adotante === null));
+    assert.deepEqual(corpo.avisos, [{ servico: "identidade", motivo: "TIMEOUT" }]);
+  });
+
+  it("sem a Adoção, as solicitações vêm vazias e a Identidade nem é chamada", async () => {
+    const { instancia, chamadas } = await app({ [detalhe]: { corpo: animalCompleto }, [solicitacoesDoAnimal]: { status: 503 } });
+    const r = await instancia.inject({ url: `/web/v1/animais/${idAnimal}`, headers: await auth() });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("AnimalPainel", r.json());
+    assert.deepEqual(r.json<{ solicitacoes: unknown[] }>().solicitacoes, []);
+    assert.ok(!chamadas.some((c) => c.url.includes("identidade")));
+  });
+
+  it("repassa o 404 de Animais", async () => {
+    const { instancia } = await app({
+      [detalhe]: { status: 404, corpo: { title: "Animal não encontrado" }, tipo: "application/problem+json" },
+      [solicitacoesDoAnimal]: { corpo: paginaDoAnimal },
+    });
+    const r = await instancia.inject({ url: `/web/v1/animais/${idAnimal}`, headers: await auth() });
+    assert.equal(r.statusCode, 404);
+  });
+
+  it("422 com id que não é ObjectId", async () => {
+    const { instancia, chamadas } = await app({});
+    const r = await instancia.inject({ url: "/web/v1/animais/thor", headers: await auth() });
+    assert.equal(r.statusCode, 422);
+    assert.equal(chamadas.length, 0);
+  });
+});
+
+describe("escrita de animais", () => {
+  const entrada = {
+    nome: "Thor",
+    especie: "CAO",
+    porte: "MEDIO",
+    sexo: "MACHO",
+    idadeMeses: 36,
+    temperamento: ["dócil", "brincalhão"],
+    fotos: ["https://exemplo.ampara.dev/fotos/thor-1.jpg"],
+    localizacao: { lat: -21.2453, lng: -44.9998 },
+    endereco: { rua: "Rua Santana", numero: "120", bairro: "Centro", cidade: "Lavras", uf: "MG", cep: "37200-000" },
+  };
+
+  it("cadastro converte a localização para GeoJSON e responde 201 com o Location do BFF", async () => {
+    const novo = deAnimais("AnimalCompleto", { ...animalCompleto, status: "DISPONIVEL", historicoStatus: [] });
+    const { instancia, chamadas } = await app({ [`POST ${animaisUrl}`]: { status: 201, corpo: novo } });
+    const r = await instancia.inject({ method: "POST", url: "/web/v1/animais", headers: await auth(), payload: entrada });
+
+    assert.equal(r.statusCode, 201);
+    assert.equal(r.headers.location, `/web/v1/animais/${idAnimal}`);
+    seguirContrato("AnimalResumo", r.json());
+    assert.equal(r.json<{ solicitacoesAtivas: number }>().solicitacoesAtivas, 0);
+    const enviado = deAnimais("NovoAnimalEntrada", chamadas[0].corpo as object) as Record<string, unknown>;
+    assert.deepEqual(enviado.localizacao, { type: "Point", coordinates: [-44.9998, -21.2453] });
+  });
+
+  it("repassa o 403 de Animais quando o responsável não foi verificado", async () => {
+    const { instancia } = await app({
+      [`POST ${animaisUrl}`]: { status: 403, corpo: { title: "Sem permissão" }, tipo: "application/problem+json" },
+    });
+    const r = await instancia.inject({ method: "POST", url: "/web/v1/animais", headers: await auth(), payload: entrada });
+    assert.equal(r.statusCode, 403);
+  });
+
+  it("422 sem endereço, sem chamar Animais", async () => {
+    const { instancia, chamadas } = await app({});
+    const semEndereco: Partial<typeof entrada> = { ...entrada };
+    delete semEndereco.endereco;
+    const r = await instancia.inject({ method: "POST", url: "/web/v1/animais", headers: await auth(), payload: semEndereco });
+    assert.equal(r.statusCode, 422);
+    assert.equal(chamadas.length, 0);
+  });
+
+  it("edição repassa para Animais e devolve solicitacoesAtivas null", async () => {
+    const { instancia, chamadas } = await app({ [`PUT ${animaisUrl}/${idAnimal}`]: { corpo: animalCompleto } });
+    const r = await instancia.inject({ method: "PUT", url: `/web/v1/animais/${idAnimal}`, headers: await auth(), payload: entrada });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("AnimalResumo", r.json());
+    assert.equal(r.json<{ solicitacoesAtivas: unknown }>().solicitacoesAtivas, null);
+    deAnimais("AtualizarAnimalEntrada", chamadas[0].corpo as object);
+  });
+
+  it("troca de status repassa o motivo", async () => {
+    const tratamento = deAnimais("AnimalCompleto", { ...animalCompleto, status: "EM_TRATAMENTO" });
+    const { instancia, chamadas } = await app({ [`PATCH ${animaisUrl}/${idAnimal}/status`]: { corpo: tratamento } });
+    const payload = { status: "EM_TRATAMENTO", motivo: "Castração" };
+    const r = await instancia.inject({ method: "PATCH", url: `/web/v1/animais/${idAnimal}/status`, headers: await auth(), payload });
+    assert.equal(r.statusCode, 200);
+    seguirContrato("AnimalResumo", r.json());
+    assert.deepEqual(deAnimais("AtualizarStatusEntrada", chamadas[0].corpo as object), payload);
+  });
+
+  it("repassa o 409 quando o animal está reservado pela SAGA", async () => {
+    const { instancia } = await app({
+      [`PATCH ${animaisUrl}/${idAnimal}/status`]: { status: 409, corpo: { title: "Status exclusivo da SAGA" }, tipo: "application/problem+json" },
+    });
+    const r = await instancia.inject({
+      method: "PATCH", url: `/web/v1/animais/${idAnimal}/status`, headers: await auth(), payload: { status: "INDISPONIVEL" },
+    });
+    assert.equal(r.statusCode, 409);
+  });
+
+  it("422 para RESERVADO, que só a SAGA muda", async () => {
+    const { instancia, chamadas } = await app({});
+    const r = await instancia.inject({
+      method: "PATCH", url: `/web/v1/animais/${idAnimal}/status`, headers: await auth(), payload: { status: "RESERVADO" },
+    });
+    assert.equal(r.statusCode, 422);
+    assert.equal(chamadas.length, 0);
   });
 });

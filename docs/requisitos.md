@@ -178,7 +178,7 @@ Legenda: ✅ atendido · 🟡 parcial · ❌ pendente
 | **Assistente** (novo) | Python + LangChain | Qdrant + cache em `redis-assistente` | RAG, tool de busca de animais, resiliência do LLM |
 | Broker | RabbitMQ | — | comandos e eventos, DLQ |
 | App Web | React + Vite | — | protetores e ONGs |
-| App Mobile | Expo (React Native) | — | adotantes |
+| App Mobile | React + Vite, web responsiva (mobile-first) | — | adotantes |
 
 **Por que o Assistente é um serviço próprio:** o LLM é uma dependência remota lenta, cara e falível. Isolado, ele tem a própria política de escala, circuit breaker e cache, e uma queda não afeta a busca nem a SAGA.
 
@@ -288,7 +288,7 @@ Requisitos do orquestrador:
 - **Resiliência:** retries com backoff entre serviços, DLQ no RabbitMQ, consumidores idempotentes, health e readiness probes em todos os serviços.
 - **Observabilidade:** logs JSON com `correlationId`; endpoint ou log que mostre o estado da SAGA; Prometheus/Grafana/Jaeger *(Could)*.
 - **Reprodutibilidade:** `docker compose up` em uma máquina limpa; seed de demonstração (ONGs, animais e adotantes, um deles com perfil incompleto para provocar a falha); README passo a passo.
-- **Compatibilidade:** web nos navegadores atuais; mobile em Android via Expo Go ou emulador.
+- **Compatibilidade:** web nos navegadores atuais; App Mobile como web responsiva, testada na largura de celular (navegador do Android ou DevTools).
 - **Acessibilidade:** contraste e rótulos básicos (*Should*).
 - **Qualidade:** testes unitários das regras de transição de estado e um teste de integração da SAGA (*Should*); CI no GitHub Actions com lint e build (*Should*, e ainda reforça o histórico de PRs).
 
@@ -326,7 +326,7 @@ Votadas de forma assíncrona; o grupo aprovou todas as recomendações.
 | 3 | Framework dos BFFs | Node 22 + TypeScript + Fastify |
 | 4 | Base vetorial do Assistente | Qdrant + cache de respostas em `redis-assistente` |
 | 5 | App Web | React + Vite |
-| 6 | App Mobile | Expo (React Native) |
+| 6 | App Mobile | web responsiva com React + Vite, revista em 25/11: o Expo foi trocado para caber no prazo. Os dois clientes continuam separados, cada um com o próprio BFF (`/web/v1` × `/mobile/v1`), então RA-10 e RA-11 não mudam |
 | 7 | LLM e orçamento | custo zero: free tier da Groq como modelo principal (ex.: `gpt-oss-120b`, com suporte a tools), Ollama local como fallback e embeddings locais multilíngues (ex.: `bge-m3`); a troca de provedor depende só de variáveis de ambiente (#67) |
 | 8 | Cluster local | kind |
 | 9 | Fotos dos animais | URL no MVP |

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: mongo-animais }
+spec:
+  serviceName: mongo-animais
+  replicas: 1
+  selector: { matchLabels: { app: mongo-animais } }
+  template:
+    metadata: { labels: { app: mongo-animais } }
+    spec:
+      containers:
+        - name: mongo
+          image: ampara/mongo:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: mongo, containerPort: 27017 }]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom: { secretKeyRef: { name: animais-secret, key: MONGO_INITDB_ROOT_USERNAME } }
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: animais-secret, key: MONGO_INITDB_ROOT_PASSWORD } }
+          volumeMounts: [{ name: dados, mountPath: /data/db }]
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - >-
+                  mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD"
+                  --eval "try { if (rs.status().ok !== 1) quit(1); } catch(e) {
+                  const r = rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo-animais:27017'}]});
+                  if (r.ok !== 1) quit(1); }"
+            # o mongosh leva cerca de 1,5 s só para subir: com o timeout padrão de 1 s, a probe
+            # sempre estoura e o pod nunca fica pronto depois de reiniciar
+            timeoutSeconds: 10
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --eval "if (!db.hello().isWritablePrimary) quit(1)"']
+            timeoutSeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: mongo }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+  volumeClaimTemplates:
+    - metadata: { name: dados }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mongo-animais }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: mongo-animais }
+  ports: [{ name: mongo, port: 27017, targetPort: mongo }]

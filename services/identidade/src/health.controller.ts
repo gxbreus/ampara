@@ -23,7 +23,7 @@ export class HealthController {
       await client.query('SELECT 1');
       return { status: 'ok' };
     } catch {
-      throw new ServiceUnavailableException({ status: 'error', database: 'unavailable' });
+      throw new ServiceUnavailableException('O banco de dados está indisponível.');
     } finally {
       await client.end().catch(() => undefined);
     }
