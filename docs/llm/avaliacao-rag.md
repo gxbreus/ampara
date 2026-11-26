@@ -190,29 +190,131 @@ sem novas tentativas. Para a demo e a gravação, a alternativa sem limite apert
 faturamento do projeto no Google AI Studio (o flash-lite custa frações de centavo por
 pergunta).
 
-## Preços oficiais (consulta em 2026-11-26)
+## Execução completa (26/11/2026, `gemini-2.5-flash-lite`)
 
-Provedor padrão do serviço: Groq (`LLM_PROVIDER=groq`). Valores da tabela "Production
-Models" de <https://console.groq.com/docs/models> e da página do modelo
-<https://console.groq.com/docs/model/openai/gpt-oss-120b>, consultadas em 2026-11-26
-(as páginas não mostram data de atualização).
+Execução real do runner (`--latencia 10 --pausa 8`), dentro da imagem do Assistente no
+Compose, com o código desta branch; base `ae06f1c860d3` (15 trechos), 4 trechos por
+resposta, limiar 0,30, temperatura 0,2. Máquina: notebook do grupo, Linux, CPU, sem
+GPU, rede doméstica. Saídas brutas em
+`services/assistente/avaliacao/resultados/20261126T131551Z/`.
 
-| Modelo | Entrada (US$/1M tokens) | Entrada em cache (US$/1M) | Saída (US$/1M tokens) |
+**17 de 20 gerações concluídas.** Três falharam no provedor e estão registradas como erro,
+não descartadas: P02 e P04 sem RAG (HTTP 503 do Gemini) e P08 com RAG (tempo esgotado).
+
+| Pergunta | Com RAG: checagem de citação | Fontes citadas | Geração com RAG (ms) | Tokens com RAG | Geração sem RAG (ms) | Tokens sem RAG |
+| --- | --- | --- | --- | --- | --- | --- |
+| P01 vacinação de filhote | ok | 06, 13, 03 | 937 | 592/123 | 921 | 86/114 |
+| P02 janelas e gatos | ok | 10, 04, 11 | 883 | 621/94 | erro 503 | — |
+| P03 porte e rotina | sem cobertura | — | 1.363 | 608/85 | 872 | 83/89 |
+| P04 apresentar a outros animais | ok | 05, 04 | 906 | 581/81 | erro 503 | — |
+| P05 cão abandonado | ok | 04 | 1.099 | 603/84 | 821 | 87/79 |
+| P06 Lei 14.064 | ok | 02, 01 | 6.773 | 669/126 | 5.160 | 98/114 |
+| P07 aceite ≠ adoção concluída | ok | 14 | 1.345 | 614/66 | 8.015 | 87/86 |
+| P08 viagens | tempo esgotado | — | — | — | 1.036 | 79/88 |
+| P09 capital da França | recusa sem LLM (similaridade 0,10) | — | 0 | — | 644 | 73/27 |
+| P10 horário das clínicas | sem cobertura | — | 604 | 608/47 | 788 | 81/60 |
+
+Recuperação: fonte esperada em 1º lugar em 6 de 8 perguntas e entre as 3 primeiras em
+7 de 8 (a falha continua sendo P03), igual à medição de 25/11.
+
+**Tokens medidos (média das chamadas concluídas):** com RAG, 612 de entrada e 88 de saída;
+sem RAG, 84 de entrada e 82 de saída. O contexto multiplica a entrada por ~7 e não muda
+a saída.
+
+### Latência
+
+| Etapa | p50 | p95 | Observação |
 | --- | --- | --- | --- |
-| `openai/gpt-oss-120b` (principal) | 0,15 | 0,075 | 0,60 |
-| `llama-3.1-8b-instant` (reserva) | sem preço publicado ("Contact Sales") | — | — |
+| Recuperação (embedding + Qdrant) | 40 ms | 184 ms | 10 perguntas |
+| Geração com RAG | 937 ms | 6.773 ms | 8 chamadas; o p95 é P06, com novas tentativas |
+| Geração sem RAG | 872 ms | 8.015 ms | 8 chamadas; o p95 é P07, com novas tentativas |
+| Total, cache frio (10 chamadas inéditas) | 2.209 ms | 9.541 ms | 10 normais, 0 fallback, 0 erro |
+| Total, cache quente (10 repetições) | 23 ms | 2.803 ms | 9 do cache; o p95 é a 1ª chamada, que ainda não estava no cache |
+
+A geração responde por quase todo o tempo: a recuperação fica abaixo de 200 ms. A cauda
+(p95 de 7 a 9 s) vem dos 503 do plano gratuito: a resiliência (#69) tenta de novo com
+backoff e o tempo das tentativas entra na conta. Uma chamada sem erro leva ~0,9 s.
+Percentil por posto mais próximo, chamadas sequenciais, sem warm-up excluído.
+
+### Custo
+
+No plano gratuito do Gemini, que é o usado pelo grupo, o custo é **US$ 0**; o limite é de
+20 requisições por dia por modelo, contornado com a lista de reservas
+(`LLM_FALLBACK_MODEL`). Para a projeção em escala, usamos o preço do plano pago.
+
+Preços oficiais de <https://aistudio.google.com/docs/pricing> (antes
+`ai.google.dev/gemini-api/docs/pricing`), consultados em 2026-11-26; a página não mostra
+data de atualização:
+
+| Modelo | Entrada (US$/1M tokens) | Saída (US$/1M tokens) | Cache de contexto (US$/1M) |
+| --- | --- | --- | --- |
+| `gemini-2.5-flash-lite` (principal) | 0,10 | 0,40 | 0,01 + 1,00 por 1M tokens/hora |
+| `gemini-3.5-flash-lite` (1ª reserva) | 0,30 | 2,50 | 0,03 + 1,00 por 1M tokens/hora |
 
 Os embeddings rodam em CPU no próprio container (fastembed) e não têm custo de API.
-O custo por pergunta e a projeção para 1 mil, 10 mil e 100 mil perguntas por mês saem
-dos tokens **medidos** na execução com a chave da Groq:
 
-```bash
-python -m app.avaliar --latencia 50 --pausa 2 \
-  --preco-entrada 0.15 --preco-saida 0.60 --preco-data 2026-11-26 --taxa-cache 0.3
-```
+Custo por pergunta = tokens de entrada × 0,10/1M + tokens de saída × 0,40/1M, com os
+tokens medidos acima. Custo mensal = custo por pergunta × volume × (1 − taxa de acerto do
+cache).
 
-Os tokens da execução de 25/11 vieram do `gemini-2.5-flash-lite` e não servem para
-o custo com a tabela da Groq: misturar os dois daria um número que não foi medido.
+| Modo | Por pergunta | 1 mil/mês | 10 mil/mês | 100 mil/mês |
+| --- | --- | --- | --- | --- |
+| Com RAG, sem cache | US$ 0,000097 | US$ 0,10 | US$ 0,96 | US$ 9,64 |
+| Com RAG, 30% de acerto do cache | — | US$ 0,07 | US$ 0,68 | US$ 6,75 |
+| Sem RAG, sem cache | US$ 0,000041 | US$ 0,04 | US$ 0,41 | US$ 4,13 |
+
+A taxa de 30% é uma hipótese, não uma medição: o cache exato só acerta perguntas
+idênticas. Se o modelo de reserva assumir (cota do principal esgotada), o custo por
+pergunta com RAG sobe para ~US$ 0,0004 (3,5 flash-lite). Também se consultou a Groq
+(<https://console.groq.com/docs/models>, 26/11): `openai/gpt-oss-120b` a US$ 0,15 de
+entrada e US$ 0,60 de saída por 1M; sem tokens medidos nela, não há custo calculado.
+
+## Conclusão
+
+Análise das respostas de 26/11, conferidas nas fontes da base. As notas cegas dos dois
+avaliadores (planilha em `resultados/20261126T131551Z/`) confirmam ou corrigem esta
+leitura; as médias entram na tabela de avaliação quando as duas planilhas voltarem.
+
+**Onde o RAG ajudou**
+
+- **Regras da própria Ampara (P07).** Sem RAG, o modelo inventou etapas que a Ampara não
+  tem ("visita ao lar, entrevista com a equipe e assinatura do termo"). Com RAG, descreveu o
+  fluxo real: processo assíncrono, avaliação pelo responsável, liberação da reserva. É o
+  caso mais claro: sem a base, o modelo não tem como saber as regras do sistema e preenche
+  com o que é comum em ONGs.
+- **Fora do domínio (P09).** Com RAG, a pergunta foi recusada antes do LLM (similaridade
+  0,10), sem custo. Sem RAG, o modelo respondeu "Paris", fora do papel do assistente.
+- **Precisão e rastreabilidade (P05, P06).** Com RAG, a resposta da Lei 14.064 cita o
+  parágrafo 1º-A do artigo 32 e a pena exata, conferíveis em `02-lei-14064.md`; sem RAG o
+  conteúdo central também estava certo, mas genérico ("outras sanções") e sem fonte.
+- **Não prescrever (P01).** Com RAG, a resposta deixou o esquema vacinal ao veterinário,
+  como a fonte; sem RAG, deu um calendário ("entre 6 e 8 semanas") que a base não traz.
+
+**Onde não ajudou**
+
+- **Recuperação errada vira omissão (P03).** A busca não trouxe `03-planejamento.md`, e a
+  resposta com RAG declarou "sem cobertura"; sem RAG, a resposta geral estava correta. O
+  erro é seguro (não inventa), mas o usuário fica sem resposta para algo que a base cobre.
+- **Sem cobertura (P10).** As duas versões se comportaram bem: com RAG pelo marcador
+  `SEM_COBERTURA`, sem RAG por instrução do prompt. Aqui o RAG não fez diferença.
+- **Extrapolação leve (P04).** A resposta com RAG puxou "aproximação com segurança, pois
+  ele pode estar ferido" do texto de resgate para a apresentação a outros animais. A
+  citação existe, mas o contexto é outro; a checagem de citação não pega esse tipo de erro.
+- **Custo e cauda de latência.** O RAG multiplica os tokens de entrada por ~7 (US$ 0,000097
+  contra US$ 0,000041 por pergunta), ainda irrelevante em valor absoluto. A latência é
+  dominada pelo provedor, não pela recuperação.
+
+**O que melhorar**
+
+1. **Recuperação de P03:** reescrever o trecho de planejamento com o vocabulário de quem
+   pergunta ("rotina", "casa", "combina") ou testar um modelo de embeddings maior.
+2. **Repetir as três chamadas que falharam** (P02 e P04 sem RAG, P08 com RAG) num dia com
+   cota e sem 503, para fechar as 20 comparações.
+3. **Cache semântico:** o cache exato só acerta perguntas idênticas; reaproveitar a
+   resposta de perguntas equivalentes (embedding muito parecido, mesma base e mesmo
+   modelo) aumenta a taxa de acerto e reduz custo e latência.
+4. **Checagem além da citação:** hoje ela só garante que [n] existe; P04 mostra que a
+   citação pode estar fora de contexto.
 
 ## Registro pendente e critérios de conclusão
 
@@ -220,13 +322,13 @@ o custo com a tabela da Groq: misturar os dois daria um número que não foi med
 | --- | --- |
 | Dez perguntas e categorias | Preparadas, com referência resumida da fonte (26/11); conferência pelos avaliadores |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
-| Execução com e sem RAG | Executada em 25/11 com `gemini-2.5-flash-lite`: 7 de 10 com RAG e 3 sem RAG (o resto parou na cota diária); repetir completa com cota |
+| Execução com e sem RAG | Completa em 26/11 com `gemini-2.5-flash-lite`: 17 de 20 gerações; 3 erros do provedor registrados |
 | Cache, recuperação e falhas observáveis | Implementados (#69): `GET /v1/estado` mostra circuito, falhas, fallbacks e cache hits |
-| Dois avaliadores e médias | Não realizadas |
-| p50/p95 e tokens | Tokens medidos; latência medida mas inflada pelo limite de requisições do plano gratuito |
-| Preços oficiais | Consultados e datados em 26/11 (Groq); custo calculado na próxima execução |
-| Resultados brutos e conclusão qualitativa | Pasta `avaliacao/resultados/` criada; preenchida na execução com a chave |
+| Dois avaliadores e médias | Planilha cega e instruções enviadas em 26/11; aguardando as notas |
+| p50/p95 e tokens | Medidos em 26/11 por etapa, com cache frio e quente |
+| Preços oficiais e custo | Gemini consultado em 26/11; custo e projeção calculados com tokens medidos |
+| Resultados brutos e conclusão qualitativa | `resultados/20261126T131551Z/` e seção "Conclusão" |
 
-Só escrever onde o RAG ajudou, falhou e precisa melhorar após analisar os
-resultados reais. Não preencher tabelas com números ilustrativos. Esta
-contribuição usa `Refs #70`; a issue permanece aberta.
+A issue fecha quando as duas planilhas de notas estiverem em `resultados/` e as médias
+na tabela de avaliação. Nenhum número deste doc é ilustrativo: todos saem dos arquivos
+brutos.
