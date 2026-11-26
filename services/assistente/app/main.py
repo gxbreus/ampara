@@ -23,10 +23,21 @@ logger = logging.getLogger(__name__)
 
 
 def criar_llms(settings) -> list:
-    """Modelo principal e de reserva na Groq. Sem chave: lista vazia (modo degradado)."""
+    """Modelos na ordem em que são tentados: o principal, as reservas do mesmo provedor e,
+    por último, o Claude (se houver ANTHROPIC_API_KEY). Sem nenhuma chave: lista vazia
+    (modo degradado)."""
+    llms = criar_llms_provedor(settings)
+    claude = criar_claude(settings)
+    if claude is not None:
+        llms.append(claude)
+    if not llms:
+        logger.warning("sem chave de LLM: o assistente responde em modo degradado")
+    return llms
+
+
+def criar_llms_provedor(settings) -> list:
     chave = settings.llm_api_key.get_secret_value()
     if not chave:
-        logger.warning("LLM_API_KEY vazia: o assistente responde em modo degradado")
         return []
     modelos = list(dict.fromkeys([settings.modelo, *settings.modelos_reserva]))
     # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
@@ -44,6 +55,28 @@ def criar_llms(settings) -> list:
     from langchain_groq import ChatGroq
 
     return [ChatGroq(model=m, **comum) for m in modelos]
+
+
+def criar_claude(settings):
+    """Claude como última reserva, pela API da Anthropic.
+
+    Sem temperature: os modelos Claude atuais rejeitam parâmetros de amostragem. O Haiku 5.5
+    pensa de forma adaptativa por padrão; com effort "low" as respostas curtas do Assistente
+    saem rápidas e baratas. max_tokens cobre o pensamento e a resposta de até 5 frases.
+    """
+    chave = settings.anthropic_api_key.get_secret_value()
+    if not chave:
+        return None
+    from langchain_anthropic import ChatAnthropic
+
+    return ChatAnthropic(
+        model=settings.anthropic_model,
+        api_key=chave,
+        max_tokens=4096,
+        output_config={"effort": "low"},
+        max_retries=0,
+        default_request_timeout=settings.timeout_llm_s,
+    )
 
 
 async def indexar(app: FastAPI, trechos) -> None:

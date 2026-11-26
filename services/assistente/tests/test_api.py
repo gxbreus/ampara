@@ -140,3 +140,33 @@ def test_sem_chave_nao_cria_llm():
     from app.main import criar_llms
 
     assert criar_llms(Settings(qdrant_url="http://q", ASSISTENTE_REDIS_URL="redis://r")) == []
+
+
+def test_claude_entra_como_ultima_reserva():
+    from langchain_anthropic import ChatAnthropic
+
+    from app.main import criar_llms
+
+    s = Settings(
+        qdrant_url="http://q",
+        ASSISTENTE_REDIS_URL="redis://r",
+        llm_provider="openai",
+        llm_api_key="x",
+        anthropic_api_key="y",
+    )
+    *gemini, claude = criar_llms(s)
+    assert len(gemini) == 5 and isinstance(claude, ChatAnthropic)
+    assert claude.model == "claude-haiku-5-5"
+    # os modelos Claude atuais rejeitam temperature; o esforço é o controle
+    assert claude.temperature is None and claude.output_config == {"effort": "low"}
+    assert claude.max_retries == 0
+
+
+def test_so_a_chave_da_anthropic_ainda_responde_com_llm():
+    from langchain_anthropic import ChatAnthropic
+
+    from app.main import criar_llms
+
+    s = Settings(qdrant_url="http://q", ASSISTENTE_REDIS_URL="redis://r", anthropic_api_key="y")
+    (claude,) = criar_llms(s)
+    assert isinstance(claude, ChatAnthropic)

@@ -8,6 +8,8 @@ langchain-qdrant==1.0.0
 langchain-groq==1.2.0
 # provedores compatíveis com a API da OpenAI (Gemini, GitHub Models, OpenRouter…)
 langchain-openai==1.8.5
+# última reserva: Claude pela API da Anthropic
+langchain-anthropic==1.7.13
 qdrant-client==1.12.2
 redis==5.2.1
 httpx==0.28.1

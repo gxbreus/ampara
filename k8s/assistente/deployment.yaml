@@ -37,6 +37,9 @@ spec:
               valueFrom: { secretKeyRef: { name: assistente-secret, key: ASSISTENTE_REDIS_URL } }
             - name: LLM_API_KEY
               valueFrom: { secretKeyRef: { name: assistente-secret, key: LLM_API_KEY } }
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: assistente-secret, key: ANTHROPIC_API_KEY, optional: true }
             - name: JWT_PUBLIC_KEY
               valueFrom: { configMapKeyRef: { name: assistente-jwt, key: JWT_PUBLIC_KEY } }
           # readiness: Qdrant e Redis no ar. O provedor de LLM nunca entra em probe: fora do

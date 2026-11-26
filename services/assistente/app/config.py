@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_fallback_model: str = ""
+    # última reserva, depois de todos os modelos do provedor principal: Claude pela API da
+    # Anthropic (chave do Console). Vazia = sem essa reserva.
+    anthropic_api_key: SecretStr = SecretStr("")
+    anthropic_model: str = "claude-haiku-5-5"
     # embeddings locais, multilíngues e leves (fastembed, ONNX em CPU): o modelo vem na
     # imagem, então funciona sem internet; o bge-m3 via Ollama não cabia na máquina da demo
     embeddings_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
