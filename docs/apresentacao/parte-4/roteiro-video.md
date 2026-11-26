@@ -61,7 +61,8 @@ npm run instalar        # baixa o Chromium do Playwright (~110 MB)
 
    - `ampara-caminho-feliz-<data>.mp4`: o vídeo em 1920×1080, pronto para o editor;
    - o mesmo em `.webm` (o original do navegador);
-   - `marcadores-<data>.txt`: o minuto em que cada cena começa e quem narra.
+   - `marcadores-<data>.txt`: o minuto em que cada cena começa e quem narra;
+   - `falas-<data>.md`: as falas de cada integrante, com os minutos desta gravação.
 
 | Variável | Para quê |
 | --- | --- |
@@ -76,6 +77,16 @@ qual âncora sumiu; ajuste em `CODIGOS`, no começo do script) e o Assistente se
 (confira `docs/llm/provedores.md`; para a demo, `LLM_ORDEM=groq,principal,openrouter` no `.env`).
 
 ## 2. Narrar por cima
+
+**Cada integrante recebe as próprias falas nos minutos do vídeo em
+[`falas-video.md`](falas-video.md)**: a ordem de entrada, a deixa (as últimas palavras de quem
+fala antes), o que aparece na tela e a fala. Ele é gerado a partir deste roteiro e dos tempos da
+gravação; cada nova gravação gera o seu em `scripts/video/saida/falas-<data>.md`, e para
+atualizar o do repositório:
+
+```bash
+node scripts/video/falas.mjs scripts/video/saida/marcadores-<data>.txt docs/apresentacao/parte-4/falas-video.md
+```
 
 **O jeito mais fácil:** abrir o `.mp4` num editor com gravação de narração (CapCut, Clipchamp,
 Kdenlive, ou o OBS tocando o vídeo como fonte de mídia) e gravar a voz **cena a cena**. A

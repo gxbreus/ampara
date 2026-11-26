@@ -12,7 +12,8 @@
 // O tempo de cada cena vem do roteiro: o tamanho da fala dela a ~2,3 palavras por segundo,
 // mais uma folga. Os trechos de código são lidos do repositório na hora, achados por uma
 // linha-âncora (CODIGOS, abaixo). Cada gravação cria um animal e uma adotante novos, então
-// pode ser repetida sem mexer nos dados da demo. Saída em scripts/video/saida/.
+// pode ser repetida sem mexer nos dados da demo. Saída em scripts/video/saida/: o vídeo, os
+// marcadores (início de cada cena) e as falas de cada integrante com esses tempos (falas.mjs).
 //
 // Opções (variáveis de ambiente):
 //   RITMO=1.8        cenas mais longas (padrão 1.5, a base das durações do roteiro)
@@ -26,6 +27,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gerarFalas } from "./falas.mjs";
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.resolve(AQUI, "../..");
@@ -534,8 +536,11 @@ async function main() {
   const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const linhas = marcadores.map((m) => `${mmss(m.t)}  ${m.id.padEnd(3)} ${m.titulo}  (narra: ${m.quem})`);
   linhas.push(`${mmss(duracao)}  fim`);
-  fs.writeFileSync(path.join(SAIDA, `marcadores-${carimbo}.txt`), linhas.join("\n") + "\n");
-  console.log(`\nvídeo: ${fs.existsSync(mp4) ? mp4 : webm}\nmarcadores:\n${linhas.join("\n")}`);
+  const arquivoMarcadores = path.join(SAIDA, `marcadores-${carimbo}.txt`);
+  fs.writeFileSync(arquivoMarcadores, linhas.join("\n") + "\n");
+  // as falas de cada integrante com os tempos desta gravação
+  const falas = gerarFalas(arquivoMarcadores, path.join(SAIDA, `falas-${carimbo}.md`));
+  console.log(`\nvídeo: ${fs.existsSync(mp4) ? mp4 : webm}\nfalas por integrante: ${falas}\nmarcadores:\n${linhas.join("\n")}`);
 }
 
 main().catch((erro) => {
