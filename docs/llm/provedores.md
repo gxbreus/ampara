@@ -6,12 +6,15 @@ os próprios trechos da base (`degradado: true`).
 
 | Ordem | Provedor | Modelos (padrão) | Chave | Custo |
 | --- | --- | --- | --- | --- |
-| 1 | Principal (`LLM_PROVIDER`) | Gemini: `gemini-2.5-flash-lite` e as reservas de `LLM_FALLBACK_MODEL` | `LLM_API_KEY` | plano gratuito |
+| 1 | Principal (`LLM_PROVIDER`) | Gemini: `gemini-2.5-flash-lite` e `gemini-2.5-flash` (`LLM_FALLBACK_MODEL`) | `LLM_API_KEY` | plano gratuito |
 | 2 | Groq | `qwen/qwen3.8-27b`, `openai/gpt-oss-120b` (`GROQ_MODELS`) | `GROQ_API_KEY` | plano gratuito |
 | 3 | OpenRouter | `nvidia/nemotron-3.5-super-vl:free`, `nvidia/nemotron-3.5-lightning:free`, `google/gemma-4-31b-it:free` (`OPENROUTER_MODELS`) | `OPENROUTER_API_KEY` | US$ 0 (modelos `:free`) |
 
 As chaves de Groq e OpenRouter são opcionais: vazias, o provedor fica fora da lista. O
-mesmo modelo no mesmo provedor só entra uma vez.
+mesmo modelo no mesmo provedor só entra uma vez. `LLM_ORDEM` muda a ordem dos grupos
+(`principal`, `groq`, `openrouter`); para a demo, `LLM_ORDEM=groq,principal,openrouter`
+põe a Groq na frente, porque no plano gratuito do Gemini o 2.5-flash chegou a passar de
+12 s e a recomendação estourava os 20 s do BFF.
 
 ## Onde pegar as chaves
 
@@ -50,3 +53,23 @@ substituído pelo `qwen/qwen3.8-27b`.
 Nos três cenários, o modelo que respondeu também chamou a ferramenta da recomendação
 (`buscar_animais_disponiveis`). O OpenRouter é a última linha antes da contingência: lento,
 mas sem custo.
+
+## Conversa com ferramenta (recomendação), 26/11/2026
+
+A recomendação é uma conversa em várias etapas: o modelo pede `buscar_animais_disponiveis`,
+recebe o resultado e responde com o JSON. Ciclo completo testado em cada modelo:
+
+| Modelo | Resultado |
+| --- | --- |
+| `gemini-2.5-flash` | completou (4,5 s) |
+| `gemini-3.5-flash-lite`, `gemini-flash-lite-latest` | 400 na segunda etapa |
+| `gemini-3.5-flash` | 503 / tempo esgotado |
+| `openai/gpt-oss-120b` (Groq) | completou (1,7 s) |
+| `qwen/qwen3.8-27b` (Groq) | pediu a ferramenta três vezes sem concluir; o agente força a conclusão na 4ª chamada |
+| `nemotron-3.5-super-vl:free`, `nemotron-3.5-lightning:free` | completaram (~10 s) |
+
+Os Gemini 3.x respondem à pergunta simples, mas pela API compatível com a OpenAI recusam a
+segunda etapa da conversa com ferramenta, porque exigem de volta a assinatura de pensamento
+que essa API não repassa. Com eles na lista, a recomendação gastava os 20 s do BFF passando
+por modelos que não podiam concluir e caía no modo degradado. Por isso a lista padrão do
+Gemini ficou só com modelos 2.x.

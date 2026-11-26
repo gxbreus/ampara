@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     groq_models: str = ""
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_models: str = ""
+    # ordem dos grupos de modelos (principal, groq, openrouter); vazio = nessa ordem. Ex.:
+    # LLM_ORDEM=groq,principal,openrouter põe a Groq na frente (mais rápida nos testes)
+    llm_ordem: str = ""
     # embeddings locais, multilíngues e leves (fastembed, ONNX em CPU): o modelo vem na
     # imagem, então funciona sem internet; o bge-m3 via Ollama não cabia na máquina da demo
     embeddings_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -75,19 +78,22 @@ class Settings(BaseSettings):
     def modelos_reserva(self) -> list[str]:
         """Reservas na ordem, separadas por vírgula em LLM_FALLBACK_MODEL.
 
-        No plano gratuito do Gemini a cota diária é por modelo (20 requisições por dia no
-        flash-lite): encadear modelos multiplica a cota sem custo.
+        Só modelos Gemini 2.x: os 3.x (3.5-flash-lite, flash-lite-latest, 3.5-flash)
+        respondem à pergunta simples, mas pela API compatível com a OpenAI recusam com 400 a
+        segunda etapa de uma conversa com ferramenta (a recomendação), porque exigem a
+        assinatura de pensamento de volta. Teste de 26/11 em docs/llm/provedores.md. A cota
+        extra vem das reservas da Groq e do OpenRouter.
         """
         if self.llm_fallback_model:
             return [m.strip() for m in self.llm_fallback_model.split(",") if m.strip()]
         if self.llm_provider == "openai":
-            return [
-                "gemini-3.5-flash-lite",
-                "gemini-flash-lite-latest",
-                "gemini-3.5-flash",
-                "gemini-2.5-flash",
-            ]
+            return ["gemini-2.5-flash"]
         return ["qwen/qwen3.8-27b"]
+
+    @property
+    def ordem_provedores(self) -> list[str]:
+        validos = {"principal", "groq", "openrouter"}
+        return [g for g in separar(self.llm_ordem.lower()) if g in validos]
 
     @property
     def groq_modelos(self) -> list[str]:
