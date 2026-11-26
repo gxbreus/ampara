@@ -294,7 +294,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}            # vazia: o serviço sobe em modo degradado (#69)
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
-      # reservas gratuitas de outros provedores (opcionais)
+      # reservas gratuitas de outros provedores (opcionais) e a ordem dos grupos
+      LLM_ORDEM: ${LLM_ORDEM:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODELS: ${GROQ_MODELS:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}

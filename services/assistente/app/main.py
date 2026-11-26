@@ -28,24 +28,29 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 
 def criar_llms(settings) -> list:
-    """Modelos na ordem em que são tentados, cada um com o seu circuito (#69):
+    """Modelos na ordem em que são tentados, cada um com o seu circuito (#69). Os grupos:
 
-    1. o provedor principal (LLM_PROVIDER, LLM_MODEL e LLM_FALLBACK_MODEL, com LLM_API_KEY);
-    2. a Groq (GROQ_API_KEY), se preenchida;
-    3. os modelos gratuitos do OpenRouter (OPENROUTER_API_KEY), se preenchida.
+    - principal: LLM_PROVIDER, LLM_MODEL e LLM_FALLBACK_MODEL, com LLM_API_KEY;
+    - groq: os modelos de GROQ_MODELS, com GROQ_API_KEY;
+    - openrouter: os modelos gratuitos de OPENROUTER_MODELS, com OPENROUTER_API_KEY.
 
-    Quando um modelo estoura a cota ou cai, o próximo assume. Sem nenhuma chave: lista
-    vazia (modo degradado, com a resposta de contingência).
+    LLM_ORDEM define a ordem dos grupos (padrão: principal,groq,openrouter); grupo sem
+    chave fica de fora. Quando um modelo estoura a cota ou cai, o próximo assume. Sem
+    nenhuma chave: lista vazia (modo degradado, com a resposta de contingência).
     """
-    pedidos: list[tuple[str, str, str]] = []  # (url ou "groq", modelo, chave)
-    principal = settings.llm_api_key.get_secret_value()
-    if principal:
+    grupos: dict[str, list[tuple[str, str, str]]] = {}  # (url ou "groq", modelo, chave)
+    if principal := settings.llm_api_key.get_secret_value():
         url = "groq" if settings.llm_provider == "groq" else settings.llm_base_url or GEMINI_URL
-        pedidos += [(url, m, principal) for m in [settings.modelo, *settings.modelos_reserva]]
+        modelos = [settings.modelo, *settings.modelos_reserva]
+        grupos["principal"] = [(url, m, principal) for m in modelos]
     if groq := settings.groq_api_key.get_secret_value():
-        pedidos += [("groq", m, groq) for m in settings.groq_modelos]
+        grupos["groq"] = [("groq", m, groq) for m in settings.groq_modelos]
     if openrouter := settings.openrouter_api_key.get_secret_value():
-        pedidos += [(OPENROUTER_URL, m, openrouter) for m in settings.openrouter_modelos]
+        grupos["openrouter"] = [
+            (OPENROUTER_URL, m, openrouter) for m in settings.openrouter_modelos
+        ]
+    ordem = list(dict.fromkeys([*settings.ordem_provedores, "principal", "groq", "openrouter"]))
+    pedidos = [pedido for nome in ordem for pedido in grupos.get(nome, [])]
 
     # o mesmo modelo no mesmo provedor só entra uma vez (ex.: LLM_PROVIDER=groq + GROQ_API_KEY)
     unicos = {(url, modelo): chave for url, modelo, chave in pedidos}

@@ -128,12 +128,8 @@ def test_provedor_compativel_com_openai_usa_o_gemini_por_padrao():
     principal, *reservas = criar_llms(s)
     assert isinstance(principal, ChatOpenAI) and principal.model_name == "gemini-2.5-flash-lite"
     # cota diária por modelo no plano gratuito: várias reservas multiplicam a cota
-    assert [r.model_name for r in reservas] == [
-        "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.5-flash",
-        "gemini-2.5-flash",
-    ]
+    # só Gemini 2.x: os 3.x recusam a segunda etapa da conversa com ferramenta
+    assert [r.model_name for r in reservas] == ["gemini-2.5-flash"]
     assert "generativelanguage.googleapis.com" in str(principal.openai_api_base)
 
 
@@ -159,18 +155,12 @@ def test_reservas_gratuitas_entram_depois_do_principal_na_ordem():
     )
     llms = criar_llms(s)
     nomes = [m.model_name for m in llms]
-    assert nomes[:5] == [
-        "gemini-2.5-flash-lite",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.5-flash",
-        "gemini-2.5-flash",
-    ]
-    assert nomes[5:7] == ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
-    assert all(isinstance(m, ChatGroq) for m in llms[5:7])
-    assert all(n.endswith(":free") for n in nomes[7:]) and len(nomes) == 10
-    assert all(isinstance(m, ChatOpenAI) for m in llms[7:])
-    assert "openrouter.ai" in str(llms[7].openai_api_base)
+    assert nomes[:2] == ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    assert nomes[2:4] == ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    assert all(isinstance(m, ChatGroq) for m in llms[2:4])
+    assert all(n.endswith(":free") for n in nomes[4:]) and len(nomes) == 7
+    assert all(isinstance(m, ChatOpenAI) for m in llms[4:])
+    assert "openrouter.ai" in str(llms[4].openai_api_base)
 
 
 def test_so_a_chave_da_groq_ainda_responde_com_llm():
@@ -192,3 +182,26 @@ def test_mesmo_modelo_da_groq_nao_entra_duas_vezes():
     )
     nomes = [m.model_name for m in criar_llms(s)]
     assert nomes == ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+
+
+def test_llm_ordem_poe_a_groq_na_frente_sem_perder_os_outros_grupos():
+    from app.main import criar_llms
+
+    s = Settings(
+        qdrant_url="http://q",
+        ASSISTENTE_REDIS_URL="redis://r",
+        llm_provider="openai",
+        llm_api_key="g",
+        groq_api_key="q",
+        openrouter_api_key="o",
+        llm_ordem="groq, principal",
+    )
+    nomes = [m.model_name for m in criar_llms(s)]
+    assert nomes[:4] == [
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+    ]
+    # o grupo não citado vem depois, na ordem padrão
+    assert all(n.endswith(":free") for n in nomes[4:])
