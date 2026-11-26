@@ -15,14 +15,16 @@ a lado, abre os painéis de código e escreve uma legenda por cena. **Vocês só
 - **Os trechos de código são lidos do repositório na hora da gravação**, achados por uma
   linha-âncora, então o vídeo mostra sempre o código atual.
 - **Repetível:** cada gravação cria o seu animal e a sua adotante, sem mexer nos dados da demo.
-- **Narração:** cada integrante fala sobre a parte de que é dono (`docs/planejamento.md` §4):
+- **Narração em quatro partes seguidas:** cada integrante narra um bloco contínuo, na ordem
+  do caminho feliz, e grava **um vídeo só** com a parte dele. As partes seguem as áreas de
+  cada um (`docs/planejamento.md` §4):
 
-| Integrante | Fala sobre |
-| --- | --- |
-| **Mateus Vitor** | arquitetura, BFF Web, SAGA (Orquestrador e Adoção), HATEOAS |
-| **Gabriel Soares** | Identidade, API Gateway (Kong) e App Web |
-| **Gabriel Cantanhede** | Animais (outbox e CQRS), BFF Mobile e App Mobile |
-| **Gabriel Nakazato** | Notificações e Assistente (RAG e ferramenta) |
+| Parte | Quem narra | Cenas | Assuntos | Tempo |
+| --- | --- | --- | --- | --- |
+| 1 | **Gabriel Soares** | 0a a 1c | abertura, arquitetura, login na Identidade, Kong e o papel no BFF Web | ~2 min |
+| 2 | **Gabriel Cantanhede** | 2a a 4a | cadastro, outbox, CQRS, o cartão do BFF Mobile e as duas fichas | ~2min30 |
+| 3 | **Mateus Vitor** | 5a a 6c | a SAGA, a máquina de estados, o pedido no painel, HATEOAS e a aprovação | ~2 min |
+| 4 | **Gabriel Nakazato** | 7a a 9 | avisos e Notificações, o Assistente (RAG e ferramenta) e o encerramento | ~2min30 |
 
 ## 1. Gerar o vídeo
 
@@ -76,174 +78,154 @@ do ar (ele confere antes de começar), um trecho de código que mudou de lugar (
 qual âncora sumiu; ajuste em `CODIGOS`, no começo do script) e o Assistente sem chave de LLM
 (confira `docs/llm/provedores.md`; para a demo, `LLM_ORDEM=groq,principal,openrouter` no `.env`).
 
-## 2. Narrar por cima
+## 2. Gravar as falas e montar o vídeo final
 
-**Cada integrante recebe as próprias falas nos minutos do vídeo em
-[`falas-video.md`](falas-video.md)**: a ordem de entrada, a deixa (as últimas palavras de quem
-fala antes), o que aparece na tela e a fala. Ele é gerado a partir deste roteiro e dos tempos da
-gravação; cada nova gravação gera o seu em `scripts/video/saida/falas-<data>.md`, e para
-atualizar o do repositório:
+Cada integrante grava **um vídeo no celular com a parte inteira dele**, lendo as falas das
+cenas em sequência, e o vídeo final é montado por script, com o rosto de quem fala num
+círculo na faixa de legenda e a voz como narração.
 
-```bash
-node scripts/video/falas.mjs scripts/video/saida/marcadores-<data>.txt docs/apresentacao/parte-4/falas-video.md
-```
+**As falas de cada um, prontas para gravar, estão em
+[`falas-para-gravar.md`](falas-para-gravar.md)** (também no Google Doc do grupo): como
+gravar, como nomear o arquivo e o texto de cada parte. [`falas-video.md`](falas-video.md)
+traz as mesmas falas com os minutos do vídeo das telas.
 
-**O jeito mais fácil:** abrir o `.mp4` num editor com gravação de narração (CapCut, Clipchamp,
-Kdenlive, ou o OBS tocando o vídeo como fonte de mídia) e gravar a voz **cena a cena**. A
-legenda na tela traz o número da cena; o `marcadores-<data>.txt` diz o minuto e quem narra.
-Se não estiverem juntos, cada um grava o próprio áudio seguindo os marcadores e quem edita
-encaixa no tempo.
+1. **Gravar:** celular em pé, câmera da frente, rosto no centro. Ler as cenas na ordem, com uma
+   pausa curta (1 segundo) entre elas.
+2. **Nomear pelo número da parte:** `1.mp4`, `2-gabriel-cantanhede.mov`, `3.mp4`, `4.mp4`.
+   Quem errar um trecho pode, em vez de regravar tudo, mandar só aquela cena com o número
+   dela (`5b.mp4`): o montador usa o clipe da cena no lugar do trecho da parte.
+3. **Montar:** com os arquivos em `scripts/video/clipes/`,
 
-- **A legenda é o seu sinal:** comece a falar quando o número da cena trocar.
-- **Nas cenas de código, aponte para o destaque:** as linhas marcadas em laranja são as que a
-  fala explica.
-- **Sobrou fala?** Grave de novo com `RITMO=1.8`. **Sobrou vídeo?** Corte a pausa no editor.
+   ```bash
+   cd scripts/video && node montar.mjs
+   ```
+
+   Sai `saida/ampara-video-final-<data>.mp4`. Em cada parte, a velocidade das telas é ajustada
+   para acompanhar o ritmo de quem fala (de 0,75× a 1,4×), então a tela não fica adiantada nem
+   atrasada em relação à fala; o volume das quatro vozes é igualado no fim.
 
 ## 3. Roteiro
 
 Cada cena tem um número (o mesmo da legenda), quem narra, o que aparece e a fala. As cenas
-marcadas **Código** mostram o painel de código sobre os dois apps.
+marcadas **Código** mostram o painel de código sobre os dois apps. As cenas de cada parte são
+seguidas: a parte 1 vai de 0a a 1c, a 2 de 2a a 4a, a 3 de 5a a 6c e a 4 de 7a a 9.
 
-### 0a. Abertura · *Mateus*
-
+### 0a. Abertura · *Gabriel Soares*
 **Na tela:** capa laranja "ampara", que se abre nos dois apps lado a lado.
 
 > "Esta é a Ampara, uma plataforma de adoção responsável de animais. Nos próximos minutos, vamos seguir um animal do cadastro até a adoção, por dois clientes diferentes: à esquerda, o painel da ONG; à direita, o app de quem quer adotar."
 
-### 0b. Arquitetura · *Mateus*
-
+### 0b. Arquitetura · *Gabriel Soares*
 **Na tela:** o diagrama de componentes (`docs/assets/arquitetura.svg`).
 
 > "Por trás das duas telas, cada cliente tem o seu Backend for Frontend: o painel fala com o BFF Web, e o celular, com o BFF Mobile. Os dois ficam atrás do Kong, o API Gateway. Atrás deles estão os serviços de domínio: Identidade, Animais, Adoção, o Orquestrador da SAGA, Notificações e o Assistente com IA. Cada serviço tem o próprio banco, e eles conversam por eventos no RabbitMQ."
 
 ### 1a. A ONG entra no painel · *Gabriel Soares*
-
 **Na tela:** login da `ong@ampara.dev` no App Web e a visão geral do painel.
 
 > "A ONG entra no painel. O login vai para a Identidade, que confere a senha e devolve um token JWT assinado com RS256. Esse token acompanha toda chamada que o painel faz daqui em diante."
 
 ### 1b. Código: o gateway separa os dois clientes · *Gabriel Soares*
-
 **Na tela:** `gateway/kong.template.yml`, com as rotas `/web/v1` e `/mobile/v1`.
 
 > "Esta é a configuração do Kong. Cada cliente tem a sua rota: /web/v1 vai para o BFF Web, e /mobile/v1, para o BFF Mobile. No painel, o plugin jwt exige o token em tudo, e o rate limit é de trezentas requisições por minuto. No celular, a busca de animais é pública, sem token, e o limite é maior, porque são muito mais usuários."
 
-### 1c. Código: o BFF Web confere o papel · *Mateus*
-
+### 1c. Código: o BFF Web confere o papel · *Gabriel Soares*
 **Na tela:** `bff/web/src/auth.ts`, a função `exigirRoles`.
 
 > "O Kong confere a assinatura; o BFF confere quem é a pessoa. Aqui, o BFF Web lê o papel que vem dentro do token e só deixa passar protetor, ONG e administrador. Um adotante com token válido recebe quatrocentos e três aqui, com a mensagem no formato problem mais json."
 
-### 2a. A ONG cadastra a Pipoca · *Gabriel Soares*
-
+### 2a. A ONG cadastra a Pipoca · *Gabriel Cantanhede*
 **Na tela:** o formulário de cadastro sendo preenchido: nome, espécie, porte, foto, endereço do abrigo e ponto no mapa.
 
 > "A ONG cadastra a Pipoca, uma filhote resgatada. O formulário pede o endereço do abrigo e o ponto no mapa, que mais tarde vai permitir a busca por distância no celular."
 
 ### 2b. Código: o animal e o evento na mesma transação · *Gabriel Cantanhede*
-
 **Na tela:** `services/animais/app/repositorio/animais.py`, o fim de `cadastrar_animal`.
 
 > "No serviço de Animais, o cadastro grava duas coisas na mesma transação do MongoDB: o animal e o evento animal criado, na coleção outbox. Ou as duas gravações acontecem, ou nenhuma. Depois, um relay lê a outbox e publica o evento no RabbitMQ. Assim nunca existe um animal salvo sem o evento, nem um evento de um animal que não existe."
 
-### 2c. A ficha completa no painel · *Gabriel Soares*
-
+### 2c. A ficha completa no painel · *Gabriel Cantanhede*
 **Na tela:** a ficha da Pipoca no painel: rua, número, CEP, histórico de status e pedidos.
 
 > "Cadastrada, a Pipoca aparece com a ficha completa: o endereço exato do abrigo, o histórico de status e, mais tarde, a lista de quem pediu a adoção. É tudo o que a ONG precisa para decidir."
 
 ### 3a. A adotante busca por raio · *Gabriel Cantanhede*
-
 **Na tela:** login da Ana Souza no App Mobile e a busca "Quem está esperando por você?", com o cartão da Pipoca em destaque.
 
 > "Do outro lado, a Ana entra no app do celular. A busca mostra os animais a até dez quilômetros, do mais perto para o mais longe. E a Pipoca, cadastrada há poucos segundos, já está aqui."
 
 ### 3b. Código: o modelo de leitura (CQRS) · *Gabriel Cantanhede*
-
 **Na tela:** `services/animais/app/projetor.py`, o projetor da busca.
 
 > "Ela chegou aqui pelo CQRS. O evento animal criado é consumido por este projetor, que monta um documento só para a busca, numa coleção separada da escrita. Repare em duas coisas: a coordenada é arredondada, para o celular nunca saber o ponto exato do abrigo; e a atualização só vale se a versão for mais nova, então um evento repetido ou atrasado não estraga o documento."
 
 ### 3c. Código: o cartão do BFF Mobile · *Gabriel Cantanhede*
-
 **Na tela:** `bff/mobile/src/rotas.ts`, o schema do cartão da busca.
 
 > "Este é o cartão que o BFF Mobile devolve: oito campos fixos e additional properties falso. O Fastify corta qualquer campo que não esteja aqui. Uma página com vinte animais fica em torno de seis kilobytes, o que importa no celular."
 
 ### 4a. A mesma ficha, outra visão · *Gabriel Cantanhede*
-
 **Na tela:** a ficha da Pipoca no celular, ao lado da ficha do painel; depois, o toque em "Quero adotar Pipoca".
 
 > "Agora compare as duas fichas da Pipoca. O painel mostra rua e número; o celular, só o bairro, a cidade e a distância. É o mesmo animal, mas cada BFF entrega o que o seu cliente precisa, e nada além disso. A Ana gostou e toca em Quero adotar."
 
 ### 5a. A SAGA em andamento · *Mateus*
-
 **Na tela:** o pedido da Ana com a linha do tempo: "Pedido enviado", "Animal reservado" e "Com a ONG".
 
 > "Esse toque abre uma SAGA de adoção. Em poucos segundos, o animal é reservado, o perfil da Ana é validado e o pedido fica esperando a ONG. Cada passo vira um carimbo nessa linha do tempo, sem a Ana recarregar a tela."
 
 ### 5b. Código: a máquina de estados da SAGA · *Mateus*
-
 **Na tela:** `services/orquestrador/internal/saga/maquina.go`, as transições 2 e 5.
 
 > "Quem conduz a SAGA é o Orquestrador, em Go. A lógica é uma máquina de estados pura: recebe o estado atual e o evento, e devolve o novo estado e as mensagens a enviar. Na transição dois, o animal foi reservado, então ele pede ao serviço de Identidade para validar o perfil. Na cinco, o perfil foi validado: o pedido vai para aguardando aprovação, ganha um prazo, e o evento é publicado para o resto do sistema. Se algum passo falhar, a SAGA compensa e desfaz a reserva."
 
-### 6a. O pedido chega ao painel · *Gabriel Soares*
-
+### 6a. O pedido chega ao painel · *Mateus*
 **Na tela:** a lista de solicitações do painel e a página do pedido da Ana, com "Quem pediu": moradia, quintal, horas fora de casa.
 
 > "No painel, o pedido da Ana já aparece. A ONG abre e vê o perfil de adoção que a Ana preencheu na Identidade: tipo de moradia, se tem quintal, quantas horas passa fora de casa. É com isso que ela decide."
 
 ### 6b. Código: os botões vêm da API (HATEOAS) · *Mateus*
-
 **Na tela:** `services/adocao/internal/httpapi/solicitacoes.go`, a função `Links`.
 
 > "Os botões Aprovar e Recusar não são decididos pelo front. O serviço de Adoção só inclui os links aprovar e recusar na resposta quando o pedido está aguardando aprovação, ninguém decidiu ainda e quem pergunta é o responsável pelo animal. O BFF Web traduz esses links para /web/v1, e a tela só desenha o botão se o link veio. Isso é HATEOAS."
 
 ### 6c. A ONG aprova · *Mateus*
-
 **Na tela:** o clique em "Aprovar adoção" e o pedido mudando para "Adoção concluída".
 
 > "A ONG aprova. A SAGA confirma a adoção no serviço de Animais e conclui o pedido."
 
 ### 7a. A adotante recebe os avisos · *Gabriel Nakazato*
-
 **Na tela:** o celular com "Parabéns, a adoção está concluída!" e a tela de Avisos com "Adoção concluída", "Adoção aprovada" e "Solicitação enviada".
 
 > "No celular, a Ana vê a adoção concluída, sem recarregar nada. E na aba Avisos estão as notificações de cada etapa: pedido enviado, adoção aprovada e adoção concluída."
 
 ### 7b. Código: avisos sem duplicar · *Gabriel Nakazato*
-
 **Na tela:** `services/notificacoes/app/caixa.py`, o script Lua que grava o aviso.
 
 > "O serviço de Notificações escuta os eventos da SAGA pelo RabbitMQ e grava cada aviso no Redis com este script Lua, que roda de forma atômica. Ele confere se aquele evento já foi gravado para aquela pessoa; se já foi, não faz nada. Como o RabbitMQ pode entregar a mesma mensagem duas vezes, isso garante um aviso só. E a mensagem só é confirmada depois de gravada: se o serviço cair, os eventos esperam na fila."
 
 ### 8a. Assistente: dúvida com fonte · *Gabriel Nakazato*
-
 **Na tela:** o Assistente respondendo "Dá para ter cachorro em apartamento?", com a fonte citada.
 
 > "Por último, o Assistente. A Ana pergunta se dá para ter cachorro em apartamento. A resposta vem com a fonte: um guia de adaptação da base de conhecimento da Ampara."
 
 ### 8b. Código: a resposta só passa com fonte válida · *Gabriel Nakazato*
-
 **Na tela:** `services/assistente/app/rag.py`, a função `verificar_citacoes`.
 
 > "É RAG: a pergunta busca os trechos mais parecidos na base, e o modelo responde usando só esses trechos, citando cada um pelo número. E o serviço não confia cegamente: esta função confere as citações. Resposta sem citação, ou citando uma fonte que não existe, é recusada, e o próximo modelo tenta. Se a base não cobre o assunto, ele diz isso, em vez de inventar."
 
 ### 8c. Assistente: quem combina comigo · *Gabriel Nakazato*
-
 **Na tela:** a aba "Quem combina comigo", a rotina "Moro em apartamento pequeno e trabalho 8 horas fora de casa" e as sugestões, cada uma com o motivo.
 
 > "Na aba Quem combina comigo, a Ana descreve a rotina dela: apartamento pequeno e oito horas fora de casa. O Assistente sugere animais adultos e de porte pequeno ou médio, e explica cada escolha."
 
 ### 8d. Código: a ferramenta do agente · *Gabriel Nakazato*
-
 **Na tela:** `services/assistente/app/recomendacao.py`, a ferramenta `buscar_animais_disponiveis`.
 
 > "Para isso, o modelo usa uma ferramenta: buscar animais disponíveis. Ele decide os filtros, mas quem busca é o servidor, perto da Ana e só entre os disponíveis. Assim o modelo não inventa animal: só sugere o que a busca devolveu. E se o provedor de IA cair, a recomendação continua, por regras simples."
 
-### 9. Encerramento · *Mateus*
-
+### 9. Encerramento · *Gabriel Nakazato*
 **Na tela:** capa laranja "Um animal, dois clientes, dois BFFs, uma SAGA."
 
 > "Foi isso: um animal, dois clientes com dois BFFs, uma SAGA coordenando os serviços, e avisos e inteligência artificial em volta. Obrigado!"

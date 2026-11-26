@@ -27,7 +27,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { gerarFalas } from "./falas.mjs";
+import { gerarFalas, NOMES } from "./falas.mjs";
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.resolve(AQUI, "../..");
@@ -43,6 +43,8 @@ const ANIMAL = process.env.ANIMAL ?? "Pipoca";
 const COM_LEGENDA = process.env.LEGENDA !== "nao";
 const PORTA_PALCO = 5199;
 const PALAVRAS_POR_SEGUNDO = 2.3;
+// Espaço reservado para a câmera de quem narra (o montar.mjs põe o rosto exatamente aqui).
+export const CAMERA = { x: 44, y: 876, diametro: 176 };
 const FOTO =
   "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Brown-white_mixed-breed_puppy_2.JPG/960px-Brown-white_mixed-breed_puppy_2.JPG";
 
@@ -143,8 +145,8 @@ function trecho(id) {
       .join("");
   });
   const total = partes.reduce((n, parte) => n + parte.linhas, 0) + partes.length - 1;
-  // ~770 px úteis no painel; 19,5 px é o tamanho confortável, 16 px o mínimo legível
-  const fonte = Math.max(16, Math.min(19.5, 770 / (total * 1.42)));
+  // ~690 px úteis no painel; 19,5 px é o tamanho confortável, 16 px o mínimo legível
+  const fonte = Math.max(16, Math.min(19.5, 690 / (total * 1.42)));
   return { arquivo: c.arquivo, html: blocos.join('<div class="l sep"><i></i>⋮</div>'), fonte };
 }
 
@@ -210,23 +212,26 @@ const PALCO = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><ti
   .chip { padding: 6px 14px; border-radius: 999px; border: 2px solid #4a4560; color: #b9b3cc;
           font: 600 15px ui-monospace, "JetBrains Mono", monospace; transition: all .3s; }
   .chip.ativo { background: #ff6a3d; border-color: #ff6a3d; color: #1e1b2e; }
-  main { display: flex; gap: 36px; padding: 0 32px; height: 872px; align-items: flex-start; }
-  .web { width: 1360px; height: 860px; border-radius: 14px; overflow: hidden; border: 3px solid #4a4560;
+  main { display: flex; gap: 36px; padding: 0 32px; height: 790px; align-items: flex-start; }
+  .web { width: 1360px; height: 784px; border-radius: 14px; overflow: hidden; border: 3px solid #4a4560;
          background: #fff9f1; transition: border-color .3s; }
-  .web iframe { width: 1360px; height: 860px; border: 0; }
-  .cel { width: 420px; height: 860px; border-radius: 46px; background: #0f0d18; padding: 14px;
+  .web iframe { width: 1360px; height: 784px; border: 0; }
+  .cel { width: 420px; height: 784px; border-radius: 46px; background: #0f0d18; padding: 14px;
          border: 3px solid #4a4560; transition: border-color .3s; }
-  .cel iframe { width: 386px; height: 826px; border: 0; border-radius: 34px; background: #fff9f1; }
+  .cel iframe { width: 386px; height: 750px; border: 0; border-radius: 34px; background: #fff9f1; }
   .ativo-borda { border-color: #ff6a3d !important; }
-  footer { position: absolute; left: 32px; right: 32px; bottom: 22px; min-height: 108px; display: flex;
-           gap: 22px; align-items: center; padding: 14px 26px; border-radius: 16px; background: #fff9f1;
+  footer { position: absolute; left: 32px; right: 32px; bottom: 16px; height: 200px; display: flex;
+           gap: 26px; align-items: center; padding: 12px 30px 12px 12px; border-radius: 16px; background: #fff9f1;
            color: #1e1b2e; border: 3px solid #1e1b2e; box-shadow: 6px 6px 0 #ff6a3d; z-index: 4; }
   footer.oculto { display: none; }
+  footer .cam { width: ${CAMERA.diametro}px; height: ${CAMERA.diametro}px; flex: none; border-radius: 50%;
+                background: #1e1b2e; color: #ff6a3d; display: grid; place-items: center;
+                font: 800 54px "Bricolage Grotesque", system-ui; border: 4px solid #ff6a3d; }
   footer .n { font: 800 40px "Bricolage Grotesque", system-ui; color: #ff6a3d; min-width: 72px; text-align: center; }
   footer h2 { margin: 0 0 4px; font-size: 27px; }
   footer p { margin: 0; font-size: 20px; color: #4a4560; }
   footer .quem { margin-left: auto; font: 600 17px ui-monospace, monospace; color: #4a4560; white-space: nowrap; }
-  .sobre { position: absolute; left: 32px; right: 32px; top: 64px; height: 860px; border-radius: 16px;
+  .sobre { position: absolute; left: 32px; right: 32px; top: 64px; height: 784px; border-radius: 16px;
            z-index: 3; opacity: 0; pointer-events: none; transition: opacity .45s; }
   .sobre.visivel { opacity: 1; }
   #codigo { background: #15131f; border: 3px solid #ff6a3d; padding: 26px 34px; overflow: hidden; }
@@ -255,7 +260,7 @@ const PALCO = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><ti
 </main>
 <div class="sobre" id="codigo"><div class="arq" id="codigo-arq"></div><pre id="codigo-pre"></pre></div>
 <div class="sobre" id="diagrama"><img src="/arquitetura.svg" alt="Arquitetura"></div>
-<footer id="legenda" class="oculto"><div class="n" id="leg-n"></div><div><h2 id="leg-t"></h2><p id="leg-s"></p></div><div class="quem" id="leg-q"></div></footer>
+<footer id="legenda" class="oculto"><div class="cam" id="leg-cam"></div><div class="n" id="leg-n"></div><div><h2 id="leg-t"></h2><p id="leg-s"></p></div><div class="quem" id="leg-q"></div></footer>
 <script>
   window.legenda = (n, titulo, texto, lado, quem) => {
     const f = document.getElementById("legenda");
@@ -264,6 +269,8 @@ const PALCO = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><ti
     document.getElementById("leg-t").textContent = titulo || "";
     document.getElementById("leg-s").textContent = texto || "";
     document.getElementById("leg-q").textContent = quem ? "narra: " + quem : "";
+    // iniciais de quem narra no espaço da câmera, até o montar.mjs pôr o rosto
+    document.getElementById("leg-cam").textContent = (quem || "").split(" ").map((p) => p[0]).join("").slice(0, 2);
     for (const l of ["web", "mobile"]) {
       const ativo = lado === l || lado === "ambos";
       document.getElementById("chip-" + l).classList.toggle("ativo", ativo);
@@ -374,7 +381,7 @@ async function main() {
     marcadores.push({ t: (Date.now() - inicio) / 1000, id, titulo: r?.titulo ?? id, quem: r?.quem ?? "" });
     const titulo = r?.titulo ?? id;
     await p.evaluate(([n, t, s, l, q]) => window.legenda(n, t, s, l, q),
-      COM_LEGENDA ? [id, titulo, legenda, lado, r?.quem] : [null, "", "", lado, ""]);
+      COM_LEGENDA ? [id, titulo, legenda, lado, NOMES[r?.quem] ?? r?.quem] : [null, "", "", lado, ""]);
   };
   const cenaCodigo = async (id, legenda) => {
     const t = trecho(id);
@@ -543,7 +550,9 @@ async function main() {
   console.log(`\nvídeo: ${fs.existsSync(mp4) ? mp4 : webm}\nfalas por integrante: ${falas}\nmarcadores:\n${linhas.join("\n")}`);
 }
 
-main().catch((erro) => {
-  console.error(`\nfalhou: ${erro.message}`);
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((erro) => {
+    console.error(`\nfalhou: ${erro.message}`);
+    process.exit(1);
+  });
+}
