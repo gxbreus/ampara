@@ -13,17 +13,17 @@ info:
 
     | Evento | Destinatário | Texto |
     | --- | --- | --- |
-    | adocao.aguardando_aprovacao | responsável (responsavelId) | Nova solicitação para {animalNome} |
-    | adocao.aprovada | adotante (adotanteId) | Sua adoção de {animalNome} foi aprovada |
+    | adocao.aguardando_aprovacao | adotante e responsável | Sua solicitação para {animalNome} foi enviada / Nova solicitação para {animalNome} |
+    | adocao.aprovada | adotante e responsável | A adoção de {animalNome} foi aprovada |
     | adocao.concluida | adotante e responsável | Adoção de {animalNome} concluída |
     | adocao.recusada | adotante | Solicitação de {animalNome} recusada |
-    | adocao.cancelada | adotante | Solicitação de {animalNome} cancelada |
+    | adocao.cancelada | adotante e responsável | Solicitação de {animalNome} cancelada |
     | adocao.expirada | adotante | Solicitação de {animalNome} expirada |
     | adocao.falhou | adotante | Não foi possível seguir com a solicitação de {animalNome}: {motivo} |
     | conta.verificada | protetor ou ONG (contaId) | Sua conta foi verificada |
 
     Encerramentos com compensação são publicados após sua conclusão. O texto
-    de falha usa motivo e estadoFinal do catálogo, inclusive quando o animal
+    de falha traduz o motivo do catálogo, inclusive quando o animal
     está indisponível. Eventos repetidos não duplicam itens nem contadores.
 
     Todas as operações exigem JWT RS256 válido. O usuário vem exclusivamente
@@ -82,10 +82,10 @@ paths:
                 comItens:
                   value:
                     itens:
-                      - id: 0b8f6c2e-91d4-4a7b-8e13-5c2f9a0d4e61
+                      - id: 0b8f6c2e-91d4-4a7b-8e13-5c2f9a0d4e61:5aa91cf0-3811-4fe5-bb4f-4fdbef3e1d55
                         tipo: adocao.aprovada
                         titulo: Adoção aprovada
-                        mensagem: Sua adoção de Thor foi aprovada
+                        mensagem: A adoção de Thor foi aprovada.
                         lida: false
                         criadaEm: '2026-11-17T15:00:00Z'
                         link: /solicitacoes/7f1c2a9e-4b3d-4e8a-9c61-2d5f8e0b3a17

@@ -1,0 +1,55 @@
+# Perguntas da #70. As referências foram resumidas do texto de services/assistente/kb/
+# (fonte_esperada), nunca de resposta do LLM; os avaliadores conferem cada uma na
+# fonte antes de dar as notas.
+- id: P01
+  categoria: cuidados_caes
+  pergunta: Quais cuidados devo tomar com a vacinação de um filhote de cão adotado?
+  referencia: "A vacinação do filhote precisa de médico-veterinário e planejamento técnico; vacinas polivalentes protegem contra agentes como cinomose e parvovirose; uma dose isolada não é proteção completa; esquema e reforços são definidos pelo profissional (a base não prescreve doses nem calendário)."
+  fonte_esperada: 06-vacinacao.md
+- id: P02
+  categoria: cuidados_gatos
+  pergunta: Como deixar janelas e varandas seguras antes de adotar um gato?
+  referencia: "Prever telas fixas adequadas e cuidar dos pontos de fuga, priorizando um lar seguro e sem acesso à rua; as condições da ONG Adote um Gatinho valem para as adoções dela, não como regra universal nem da Ampara."
+  fonte_esperada: 11-adote-gatinho.md
+- id: P03
+  categoria: porte_rotina
+  pergunta: Só o porte do cão determina se ele combina com minha casa e rotina?
+  referencia: "Não. O porte é um dos fatores, junto com a rotina da família, o espaço, as características do animal, as necessidades de saúde física e mental e o orçamento; a decisão envolve quem vai conviver com o animal."
+  fonte_esperada: 03-planejamento.md
+- id: P04
+  categoria: adaptacao
+  pergunta: Como apresentar o animal adotado aos animais que já vivem comigo?
+  referencia: "Com tempo e de forma gradual: a mudança altera território, cheiros, espaço e sons do animal, e a apresentação aos animais que já vivem na casa deve ocorrer aos poucos."
+  fonte_esperada: 05-adaptacao.md
+- id: P05
+  categoria: cuidados_resgate
+  pergunta: Encontrei um cão abandonado; por que preciso de avaliação veterinária antes da adaptação?
+  referencia: "Porque o animal resgatado precisa ter saúde, identificação e cuidados necessários verificados por médico-veterinário; ele pode estar ferido ou assustado, e mudanças de comportamento podem ter causa clínica. Depois, ambiente protegido e adaptação sem pressa."
+  fonte_esperada: 04-resgate.md
+- id: P06
+  categoria: legislacao
+  pergunta: O que a Lei 14.064 de 2020 mudou na proteção de cães e gatos contra maus-tratos?
+  referencia: "Acrescentou ao artigo 32 da Lei 9.605/1998 o parágrafo 1º-A, específico para cães e gatos, com reclusão de dois a cinco anos, multa e proibição da guarda; não substitui o texto consolidado nem orientação jurídica."
+  fonte_esperada: 02-lei-14064.md
+- id: P07
+  categoria: regras_ampara
+  pergunta: Receber o aceite de uma solicitação na Ampara significa que a adoção já foi concluída?
+  referencia: "Não. O aceite da requisição inicia um processo assíncrono: o responsável avalia o pedido e o adotante acompanha as mudanças de estado; recusa, cancelamento e expiração liberam a reserva."
+  fonte_esperada: 14-ampara-faq.md
+- id: P08
+  categoria: responsabilidade
+  pergunta: Que responsabilidades devo planejar para cuidar do animal durante viagens?
+  referencia: "Planejar quem cuidará diariamente do animal durante as viagens faz parte da responsabilidade de longo prazo, mantendo alimentação, água fresca, abrigo, higiene, atenção e exercício."
+  fonte_esperada: 08-sgpan-guarda.md
+- id: P09
+  categoria: fora_dominio
+  pergunta: Qual é a capital da França?
+  referencia: "Não responder sobre a França; dizer que o assistente trata de adoção responsável e cuidados com animais (15-ampara-limites.md)."
+  fonte_esperada: null
+  comportamento_esperado: Orientar que o assistente trata de adoção e cuidados com animais; não responder ao tema externo.
+- id: P10
+  categoria: sem_cobertura
+  pergunta: Qual o horário de funcionamento hoje de cada clínica veterinária de Lavras?
+  referencia: "Dizer que as fontes da Ampara não cobrem horários de clínicas e não inventar clínicas nem horários."
+  fonte_esperada: null
+  comportamento_esperado: Informar ausência de cobertura nas fontes da Ampara, sem inventar clínicas ou horários.

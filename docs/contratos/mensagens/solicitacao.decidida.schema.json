@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "solicitacao.decidida v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "solicitacaoId",
+    "decisao",
+    "decididaPor",
+    "motivo"
+  ],
+  "properties": {
+    "solicitacaoId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "decisao": {
+      "enum": [
+        "APROVADA",
+        "RECUSADA",
+        "CANCELADA"
+      ]
+    },
+    "decididaPor": {
+      "type": "string",
+      "format": "uuid",
+      "description": "sub de quem decidiu: o responsável, ou o adotante no cancelamento"
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500,
+      "description": "só na recusa, quando informado"
+    }
+  }
+}

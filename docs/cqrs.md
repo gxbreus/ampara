@@ -204,6 +204,47 @@ Se o worker de projeção ou o RabbitMQ caírem:
 
 ---
 
+## Defasagem medida — 25/11/2026 (#165)
+
+Medição real no Docker Desktop para Windows, engine Linux 29.9.3, 16 CPUs
+disponíveis e 10.265.415.680 bytes de RAM atribuídos ao Docker. Uma réplica de
+Animais (limite de 256 MiB) e MongoDB (512 MiB), com RabbitMQ, relay e projetor
+reais. O sistema completo permaneceu no mesmo Compose. Não foi usado mock.
+
+| Medição | Amostras | p95 | Alvo | Resultado |
+| --- | ---: | ---: | ---: | --- |
+| Cadastro até detalhe disponível no read model | 50 | 584,69 ms | ≤ 5.000 ms | passou |
+| Busca por raio com 1.000 animais criados e projetados | 200 | 19,40 ms | < 500 ms | passou |
+
+A defasagem usa `services/animais/scripts/medir_defasagem.py`: o relógio monotônico
+começa antes do POST e termina quando `GET /v1/animais/busca/{id}` retorna 200,
+com polling de 50 ms. Inclui, portanto, escrita HTTP e atraso de observação;
+não é apenas o tempo do consumidor. O p95 usa a posição `ceil(0,95 × n)`.
+
+O seed de carga cria 1.000 animais sintéticos pela API de escrita, com eventos no
+outbox; cada ID é conferido pelo detalhe de leitura antes da medição. As buscas
+usam latitude -21,2468, longitude -44,9998, raio de 10 km, limite de 20 itens,
+20 requisições de aquecimento e concorrência 1. Os 50 cadastros de defasagem são
+executados depois das 200 buscas. Os tempos foram coletados por HTTP dentro do
+container Animais, sem Kong ou BFF; não representam latência de internet ou carga
+concorrente de produção.
+
+Reprodução, somente no Compose de demonstração saudável:
+
+```bash
+python scripts/medir-cqrs-compose.py
+```
+
+O comando cria 1.050 animais de teste e instala `httpx==0.28.1` em `/tmp` do
+container, sem alterar a imagem final. As credenciais ficam em memória e não são
+registradas. A única preparação direta no banco é a ONG verificada de medição;
+nenhum animal ou documento de projeção é inserido diretamente.
+
+As amostras individuais, os filtros e o digest da imagem estão no
+[registro bruto](execucao/medicoes/cqrs-2026-11-25.json). O registro identifica o
+HEAD e que havia alterações locais no checkout medido. Esta execução não substitui
+o ensaio da equipe nem a demonstração de escalabilidade no Kubernetes.
+
 ## 5. Procedimento de Reconstrução (*Rebuild*) do Read Model
 
 Caso a base de leitura seja corrompida, sofra perda de dados ou o formato de projeção mude em novas versões, o modelo de leitura pode ser **reconstruído do zero** sem qualquer indisponibilidade no modelo de escrita:

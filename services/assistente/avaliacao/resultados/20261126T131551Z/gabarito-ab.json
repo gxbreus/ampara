@@ -1,0 +1,52 @@
+[
+  {
+    "id": "P01",
+    "A": "sem_rag",
+    "B": "com_rag"
+  },
+  {
+    "id": "P02",
+    "A": "com_rag",
+    "B": "sem_rag"
+  },
+  {
+    "id": "P03",
+    "A": "com_rag",
+    "B": "sem_rag"
+  },
+  {
+    "id": "P04",
+    "A": "com_rag",
+    "B": "sem_rag"
+  },
+  {
+    "id": "P05",
+    "A": "sem_rag",
+    "B": "com_rag"
+  },
+  {
+    "id": "P06",
+    "A": "com_rag",
+    "B": "sem_rag"
+  },
+  {
+    "id": "P07",
+    "A": "sem_rag",
+    "B": "com_rag"
+  },
+  {
+    "id": "P08",
+    "A": "sem_rag",
+    "B": "com_rag"
+  },
+  {
+    "id": "P09",
+    "A": "sem_rag",
+    "B": "com_rag"
+  },
+  {
+    "id": "P10",
+    "A": "com_rag",
+    "B": "sem_rag"
+  }
+]

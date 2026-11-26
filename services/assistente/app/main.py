@@ -1,28 +1,185 @@
 """Ponto de entrada do serviço Assistente: `uvicorn app.main:app --port 8003`."""
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import AsyncExitStack, asynccontextmanager
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from qdrant_client import AsyncQdrantClient
+from redis.asyncio import Redis
 
-from app.api import health
+from app import conhecimento
+from app.api import assistente, health
+from app.cache_semantico import CacheSemantico
+from app.config import get_settings
+from app.indice import Embeddings, Indice
+from app.observabilidade import configurar_logging, instalar_rastreabilidade
+from app.rag import Rag
+from app.resiliencia import Cache, Resiliencia
+
+logger = logging.getLogger(__name__)
+
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
+
+def criar_llms(settings) -> list:
+    """Modelos na ordem em que são tentados, cada um com o seu circuito (#69). Os grupos:
+
+    - principal: LLM_PROVIDER, LLM_MODEL e LLM_FALLBACK_MODEL, com LLM_API_KEY;
+    - groq: os modelos de GROQ_MODELS, com GROQ_API_KEY;
+    - openrouter: os modelos gratuitos de OPENROUTER_MODELS, com OPENROUTER_API_KEY.
+
+    LLM_ORDEM define a ordem dos grupos (padrão: principal,groq,openrouter); grupo sem
+    chave fica de fora. Quando um modelo estoura a cota ou cai, o próximo assume. Sem
+    nenhuma chave: lista vazia (modo degradado, com a resposta de contingência).
+    """
+    grupos: dict[str, list[tuple[str, str, str]]] = {}  # (url ou "groq", modelo, chave)
+    if principal := settings.llm_api_key.get_secret_value():
+        url = "groq" if settings.llm_provider == "groq" else settings.llm_base_url or GEMINI_URL
+        modelos = [settings.modelo, *settings.modelos_reserva]
+        grupos["principal"] = [(url, m, principal) for m in modelos]
+    if groq := settings.groq_api_key.get_secret_value():
+        grupos["groq"] = [("groq", m, groq) for m in settings.groq_modelos]
+    if openrouter := settings.openrouter_api_key.get_secret_value():
+        grupos["openrouter"] = [
+            (OPENROUTER_URL, m, openrouter) for m in settings.openrouter_modelos
+        ]
+    ordem = list(dict.fromkeys([*settings.ordem_provedores, "principal", "groq", "openrouter"]))
+    pedidos = [pedido for nome in ordem for pedido in grupos.get(nome, [])]
+
+    # o mesmo modelo no mesmo provedor só entra uma vez (ex.: LLM_PROVIDER=groq + GROQ_API_KEY)
+    unicos = {(url, modelo): chave for url, modelo, chave in pedidos}
+    if not unicos:
+        logger.warning("sem chave de LLM: o assistente responde em modo degradado")
+    return [criar_chat(url, modelo, chave, settings) for (url, modelo), chave in unicos.items()]
+
+
+def criar_chat(url: str, modelo: str, chave: str, settings):
+    # max_retries=0: quem tenta de novo é a nossa resiliência, com backoff e circuito
+    comum = {
+        "model": modelo,
+        "api_key": chave,
+        "temperature": 0.2,
+        "max_retries": 0,
+        "timeout": settings.timeout_llm_s,
+    }
+    if url == "groq":
+        from langchain_groq import ChatGroq
+
+        return ChatGroq(**comum)
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(base_url=url, **comum)
+
+
+async def indexar(app: FastAPI, trechos) -> None:
+    """Indexa a base em segundo plano, tentando de novo até o Qdrant responder."""
+    for tentativa in range(30):
+        try:
+            novos = await app.state.rag.indice.garantir(trechos)
+            app.state.indice_pronto = True
+            logger.info(
+                "índice pronto",
+                extra={"trechosNovos": novos, "versao": app.state.rag.indice.versao},
+            )
+            return
+        except Exception as erro:  # noqa: BLE001
+            logger.warning(
+                "Qdrant indisponível para indexar",
+                extra={"tentativa": tentativa + 1, "erro": str(erro)},
+            )
+            await asyncio.sleep(min(2 * (tentativa + 1), 10))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Único lugar que abre conexões.
-    # TODO(#42): abrir o Qdrant (AsyncQdrantClient), o Redis (redis.asyncio) e um
-    # httpx.AsyncClient para o Animais, e guardar os três em app.state.
-    # O cliente do LLM não é criado aqui: com LLM_API_KEY vazia o serviço sobe em modo
-    # degradado, e alguns clientes recusam chave vazia já no construtor (#69).
-    yield
-    # Feche aqui, na ordem inversa da abertura.
+    configurar_logging()
+    settings = get_settings()
+    async with AsyncExitStack() as stack:
+        qdrant = AsyncQdrantClient(url=settings.qdrant_url, timeout=5, trust_env=False)
+        stack.push_async_callback(qdrant.close)
+        app.state.qdrant = qdrant
+        redis = Redis.from_url(
+            settings.redis_url.get_secret_value(),
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        stack.push_async_callback(redis.aclose)
+        app.state.redis = redis
+        animais = await stack.enter_async_context(
+            httpx.AsyncClient(base_url=settings.animais_url, timeout=3, trust_env=False)
+        )
+        app.state.animais = animais
+
+        # base de conhecimento, embeddings e índice (#66)
+        trechos = conhecimento.carregar(settings.kb_dir)
+        embeddings = await asyncio.to_thread(Embeddings, settings.embeddings_model)
+        indice = Indice(qdrant, embeddings, conhecimento.versao(settings.kb_dir))
+
+        # LLM e resiliência (#67, #69): uma resiliência (com circuito) por modelo
+        app.state.llms = criar_llms(settings)
+        app.state.resiliencias = [Resiliencia(settings.timeout_llm_s) for _ in app.state.llms] or [
+            Resiliencia(settings.timeout_llm_s)
+        ]
+        app.state.resiliencias_estado = app.state.resiliencias[0].estado
+        app.state.rag = Rag(
+            indice,
+            app.state.llms,
+            app.state.resiliencias,
+            Cache(redis, settings.cache_ttl_s),
+            settings,
+            CacheSemantico(
+                qdrant,
+                embeddings.dimensao,
+                settings.cache_semantico_limiar,
+                settings.cache_ttl_s,
+            )
+            if settings.cache_semantico_limiar > 0
+            else None,
+        )
+        app.state.indice_pronto = False
+        tarefa = asyncio.create_task(indexar(app, trechos))
+        stack.callback(tarefa.cancel)
+        yield
+
+
+def problema(status: int, titulo: str, detalhe: str) -> JSONResponse:
+    return JSONResponse(
+        {"type": "about:blank", "title": titulo, "status": status, "detail": detalhe},
+        status_code=status,
+        media_type="application/problem+json",
+    )
 
 
 def create_app() -> FastAPI:
     # Não leia Settings aqui: os testes criam o app sem nenhuma variável de ambiente.
-    app = FastAPI(title="Ampara · Assistente", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Ampara · Assistente", version="1.0.0", lifespan=lifespan)
     app.include_router(health.router)
-    # TODO(#42): middleware de X-Correlation-Id e X-Served-By, e logs JSON.
+    app.include_router(assistente.router)
+    instalar_rastreabilidade(app)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validacao(_: Request, erro: RequestValidationError):
+        primeiro = erro.errors()[0] if erro.errors() else {}
+        detalhe = str(primeiro.get("msg", "Dados inválidos.")).removeprefix("Value error, ")
+        return problema(422, "Dados inválidos", detalhe)
+
+    @app.exception_handler(HTTPException)
+    async def _http(_: Request, erro: HTTPException):
+        titulos = {
+            401: "Não autenticado",
+            404: "Não encontrado",
+            429: "Limite excedido",
+            503: "Serviço indisponível",
+        }
+        return problema(erro.status_code, titulos.get(erro.status_code, "Erro"), str(erro.detail))
+
     return app
 
 

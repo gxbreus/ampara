@@ -38,6 +38,22 @@ O abandono também está ligado a problemas comportamentais, mudanças na rotina
 6. A plataforma notifica os envolvidos a cada mudança importante do processo.
 7. Um assistente orienta o adotante sobre adoção responsável, com base em fontes confiáveis, e sugere animais compatíveis com a rotina dele.
 
+### O caminho feliz nas telas
+
+<p align="center">
+  <img src="docs/assets/wireframe-caminho-feliz.gif" alt="Caminho feliz da Ampara: à esquerda o painel web da ONG, à direita o app do celular da adotante. A ONG cadastra a Pipoca, a adotante a encontra na busca por raio e pede a adoção, a linha do tempo da SAGA avança, a ONG aprova vendo o perfil de quem pediu, os avisos chegam ao celular e o Assistente responde com fonte" width="960" />
+</p>
+
+À esquerda, o **App Web** da ONG, que fala com o BFF Web; à direita, o **App Mobile** da adotante, que fala com o BFF Mobile. A ONG cadastra a Pipoca, a adotante a encontra na busca por raio e pede a adoção, a SAGA reserva o animal e valida o perfil, a ONG aprova vendo o perfil de quem pediu, os avisos chegam ao celular e o Assistente responde com fonte e recomenda animais pela rotina. São as telas reais do sistema rodando, aceleradas 4 vezes.
+
+**[Assista ao vídeo completo no YouTube](https://youtu.be/sE7LDRzYmug)** (7 minutos): o mesmo caminho narrado pelos quatro integrantes, com o código de cada passo.
+
+<p align="center">
+  <a href="https://youtu.be/sE7LDRzYmug"><img src="docs/assets/video-capa.jpg" alt="Vídeo de apresentação da Ampara no YouTube: o caminho feliz pelos dois BFFs, narrado pelos quatro integrantes" width="640" /></a>
+</p>
+
+As telas foram gravadas e montadas com as falas de cada integrante por [`scripts/video/`](scripts/video/), a partir do [roteiro do vídeo](docs/apresentacao/parte-4/roteiro-video.md).
+
 ### Quem usa
 
 | Público | Cliente | Principais ações |
@@ -235,24 +251,151 @@ As tarefas de cada etapa, com responsável e semana, estão no [board do projeto
 | Orquestrador | [`services/orquestrador`](services/orquestrador) | implementado: SAGA extraída da Adoção (#140), outbox, inbox, prazos, DLQ, Dockerfile, compose e manifests do k8s |
 | Gateway | [`gateway`](gateway) | implementado: Kong DB-less no compose com rotas, JWT e rate limit (#43); no k8s, Kong Ingress Controller com as mesmas rotas (#46, #50) |
 | BFF Mobile | [`bff/mobile`](bff/mobile) | base com busca pública, Dockerfile e manifests do k8s (#45, #47); a agregação das telas do adotante na #62 |
-| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e app Expo |
+| Apps | [`apps`](apps) | em desenvolvimento para a Parte 4: painel web e App Mobile como web responsiva, consumindo o BFF Mobile |
 
 Cada pasta tem um README com como rodar, a estrutura e o checklist do que falta. Os três serviços Python seguem o mesmo molde (`app/main.py` com `lifespan`, `config.py`, `dependencias.py` e a fixture `cliente` nos testes): quem conhece um sabe mexer nos outros.
 
-## Como rodar
+## Como executar
 
-Precisa de Docker com o Compose. Na raiz do repositório:
+Pré-requisitos: Git, Docker 24+ com Compose v2, Python 3.12+ e OpenSSL
+(incluído no Git for Windows). Reserve 8 GB de RAM para Docker. Para apps,
+use Node 22+; para Kubernetes, kind, kubectl e Helm conforme o [guia do cluster](k8s/README.md).
+
+Em uma máquina sem checkout nem `.env` anterior, são cinco comandos:
 
 ```bash
-cp .env.example .env
-./scripts/gerar-chaves-jwt.sh      # par RS256 do JWT
-# preencha as senhas no .env
-docker compose up -d --build
+git clone https://github.com/gxbreus/ampara.git
+cd ampara
+python3 scripts/preparar-demo.py
+docker compose up -d --build --wait
+docker compose ps
 ```
 
-O `compose.yaml` sobe o sistema inteiro: os bancos, o RabbitMQ, o gateway Kong, os dois BFFs e os seis serviços (Adoção, Orquestrador, Animais, Identidade, Notificações e Assistente). A entrada é `http://localhost:8000`. Para rodar só um serviço Python durante o desenvolvimento, siga o README da pasta dele. O cluster local está em [`k8s/`](k8s/README.md).
+No PowerShell do Windows, substitua apenas o terceiro comando por
+`py -3 scripts/preparar-demo.py` (Python 3.12+ instalado com o launcher).
 
-A CI roda em todo PR e push para a `develop` e a `main`: gitleaks, validação dos contratos e, para cada componente alterado, lint, testes e `docker build`. Nos serviços Python, isso é `ruff check`, `ruff format --check` e `pytest`.
+O gerador cria `.env` a partir de `.env.example`, com credenciais aleatórias locais e um par
+JWT RS256; não imprime credenciais nem sobrescreve `.env` existente.
+`LLM_API_KEY` fica vazia para configuração posterior do Assistente. Para
+configuração manual, copie `.env.example`, preencha as credenciais e use
+`scripts/gerar-chaves-jwt.sh`. Não gere novas chaves a cada reinício: os tokens
+emitidos com a chave antiga deixam de valer.
+
+O `compose.yaml` sobe os bancos, RabbitMQ, gateway Kong, dois BFFs e seis serviços
+(Adoção, Orquestrador, Animais, Identidade, Notificações e Assistente).
+Os apps React + Vite rodam separadamente, em `apps/`: `npm ci`, seguido de
+`npm run dev:web` e, em outro terminal, `npm run dev:mobile`.
+Consulte os READMEs dos apps para a seleção de rotas reais/simuladas.
+As notificações do App Mobile ainda são simuladas até a #60; as demais jornadas
+do adotante e o Assistente (#211) já usam os serviços reais. Containers saudáveis
+não comprovam uma jornada completa: rode o seed e confira pelo gateway.
+
+### Endereços de acesso
+
+| Componente | Endereço/condição |
+| --- | --- |
+| Gateway | `http://localhost:8000`; rotas `/auth/v1`, `/web/v1` e `/mobile/v1` |
+| App Web | desenvolvimento em `http://localhost:5173`; consulte `apps/web/README.md` |
+| App Mobile | web responsiva em `http://localhost:5174`; consulte `apps/mobile/README.md` |
+| RabbitMQ | `http://localhost:15672`; credenciais locais `RABBITMQ_ADMIN_USER/PASSWORD` no `.env` |
+| Qdrant | porta 6333 interna, sem publicação no Compose; dashboard no cluster por `kubectl port-forward -n ampara svc/qdrant-assistente 6333:6333` |
+
+Somente o gateway expõe APIs de domínio. Os nomes `animais:8001`,
+`adocao:8080` e demais DNS internos não são endereços do navegador do host.
+Nenhum usuário de demonstração é criado pelo gerador. O seed integrado no #208
+cria contas com IDs fixos na Identidade e animais via API:
+
+```bash
+./scripts/seed.sh
+```
+
+As contas atuais são `ong@ampara.dev`, `protetor@ampara.dev`, `admin@ampara.dev`
+e `adotante@ampara.dev`; todas usam `SEED_SENHA_DEMO`, gerada localmente pelo
+bootstrap. O seed não imprime a senha; consulte-a no `.env`. Ele também cadastra
+oito animais da ONG em Lavras (MG), entre eles Thor, Mel, Nina e Paçoca, e pode
+ser rodado de novo sem duplicar nada. O adotante pode ter uma solicitação ativa
+por vez: um segundo pedido termina em `PERFIL_INVALIDO` com o motivo
+`LIMITE_SOLICITACOES`. Para testar perfil incompleto, crie uma conta nova pelo
+App Mobile.
+
+### Notificações e Assistente
+
+Os dois serviços são acessados pelos BFFs;
+não publique suas portas ou as dos bancos. Para diagnóstico dentro dos containers:
+
+```bash
+docker compose logs --tail=100 notificacoes assistente
+docker compose exec -T notificacoes python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8002/ready').status)"
+docker compose exec -T assistente python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8003/ready').status)"
+```
+
+| Serviço | Porta interna | Configuração de conexão | Prontidão |
+| --- | --- | --- | --- |
+| Notificações | 8002 | `NOTIFICACOES_REDIS_URL`, `NOTIFICACOES_AMQP_URL`, com credenciais geradas no `.env` | Redis e RabbitMQ conectados |
+| Assistente | 8003 | `QDRANT_URL`, `ASSISTENTE_REDIS_URL`, `ANIMAIS_URL`; `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_FALLBACK_MODEL` | Qdrant, Redis e índice da base carregado; nunca o provedor LLM |
+
+`/health` confirma só que o processo responde. `/ready` retorna 503 se as
+dependências verificadas falharem; no Assistente, chave vazia/inválida não deve
+remover a prontidão. Os embeddings rodam localmente, com o modelo embutido na
+imagem, e não dependem de chave. Sem `LLM_API_KEY`, as perguntas voltam como
+"Resposta de contingência", com os trechos e as fontes da base, e a recomendação
+continua listando animais reais. Para gerar a resposta com o Gemini, use
+`LLM_PROVIDER=openai`, `LLM_BASE_URL` vazio e a chave do Google AI Studio. Não
+imprima `.env`, Secrets ou URLs com senha ao coletar diagnóstico.
+
+Redis de Notificações exige senha e usa AOF/volume; o Redis do Assistente usa
+LRU e é descartável. O Qdrant mantém `/qdrant/storage` em volume. No cluster, o
+dashboard abre em `http://localhost:6333/dashboard` após o `port-forward` acima.
+
+Os registros de runtime dos serviços estão em `docs/execucao/notificacoes-validacao.md`
+e `docs/execucao/assistente-validacao.md`. Isso não substitui o ensaio por terceiro
+em máquina limpa.
+
+### Kubernetes local
+
+Após preparar o `.env`, siga [k8s/README.md](k8s/README.md): crie o cluster kind,
+rode `scripts/k8s-prep.sh`, construa/carregue as imagens, instale o Kong conforme
+a configuração da #46 e aplique `kubectl apply -k k8s/`.
+Verifique com `kubectl get pods -n ampara -o wide` e
+`kubectl get deploy,svc,ingress -n ampara`. Compose e kind disputam a porta 8000;
+use-os em momentos separados para comparar o roteamento.
+
+### Demonstração e conferência em máquina limpa
+
+Os cenários automatizados da SAGA (#71) ainda não existem em `scripts/demo/`.
+`participantes_falsos.py` simula participantes e não é evidência de integração
+com Animais/Identidade reais. O roteiro da Parte 4 mostra como provocar cada
+cenário à mão com o seed atual. Para um serviço Python isolado, use o README dele.
+
+O [checklist de máquina limpa](docs/execucao/checklist-maquina-limpa.md) registra
+o ensaio por terceiro, tempo total, falhas e revisão dos quatro integrantes.
+Esse ensaio completo ainda não foi realizado; não há data ou resultado presumido.
+
+### Mensagem na DLQ
+
+Confira os logs com `docker compose logs orquestrador animais adocao` e liste
+a fila com `./scripts/dlq.sh listar animais.comandos.dlq`. Identifique `messageId`,
+`sagaId` e a causa, corrija o consumidor e só então use
+`./scripts/dlq.sh reprocessar animais.comandos.dlq "$MESSAGE_ID"` com o ID real.
+Confira novamente a DLQ e a linha do tempo; quando há intervenção esgotada,
+um ADMIN precisa retomar a compensação. O procedimento completo está no
+[runbook de DLQ](docs/operacao/dlq.md), incluindo acesso ao broker no Kubernetes.
+
+### Problemas comuns
+
+| Sintoma | Como conferir e corrigir |
+| --- | --- |
+| Porta 8000 ou 15672 ocupada | confira containers/processos que usam a porta; pare apenas o ambiente Ampara conflitante; não execute Compose e kind na mesma porta ao mesmo tempo |
+| Container termina ou demora a ficar healthy | confira RAM do Docker e `docker compose logs NOME`; aumente recursos ou corrija a dependência que falhou antes de tentar novamente |
+| App Mobile não alcança a API | confira gateway na porta 8000 e proxy do Vite; no celular, use `npm run dev -w mobile -- --host` e abra o IP do computador na porta 5174 |
+| Assistente mostra "Resposta de contingência" | `LLM_API_KEY` vazia ou cota do provedor esgotada (o Gemini gratuito permite 20 requisições por dia por modelo); preencha a chave e rode `docker compose up -d assistente`; a busca e as adoções não dependem do LLM |
+| JWT recebe 401 após reinício | confira relógio, expiração e se houve troca das chaves; autentique novamente; mantenha o mesmo par ao reiniciar |
+| Mongo não aceita transações | confira `replicaSet=rs0`, `authSource=admin`, estado primário e nome estável `mongo-animais:27017` |
+
+A CI roda em PRs e pushes para `develop` e `main`: gitleaks, contratos e, para
+cada componente alterado, lint, testes e build da imagem. No Python: `ruff check`,
+`ruff format --check` e `pytest`.
+
 
 ### No GitHub Codespaces (sem instalar nada)
 

@@ -2,5 +2,9 @@ apiVersion: configuration.konghq.com/v1
 kind: KongConsumer
 metadata:
   name: ampara-identidade
+  annotations:
+    # sem esta anotação o Kong Ingress Controller ignora o consumer ("Waiting for controller")
+    # e toda rota com JWT responde 401 "No credentials found for given 'iss'"
+    kubernetes.io/ingress.class: kong
 username: ampara-identidade
 credentials: [jwt-identidade]

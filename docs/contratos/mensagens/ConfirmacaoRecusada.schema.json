@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConfirmacaoRecusada v1 (payload)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "animalId",
+    "motivo"
+  ],
+  "properties": {
+    "animalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "ObjectId do animal no MongoDB"
+    },
+    "motivo": {
+      "type": "string",
+      "enum": [
+        "NAO_RESERVADO",
+        "RESERVA_DE_OUTRA_SAGA"
+      ]
+    }
+  }
+}

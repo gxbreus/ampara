@@ -30,9 +30,7 @@ info:
     animais[].motivoRecomendacao e Fonte.origem como paginaOuSecao, e compõe
     explicacao a partir do campo de mesmo nome. Não repassa metadados internos
     para schemas mobile com additionalProperties=false. Os campos lat/lng
-    precisam chegar do contexto de busca do app: o contrato mobile atual ainda
-    não os declara na recomendação. A integração #62/#65 deve acrescentá-los
-    como opcionais compatíveis e exigir sua presença para executar a busca;
+    chegam do contexto de busca do app e são obrigatórios na recomendação mobile;
     não pode inventar coordenadas nem obtê-las do texto ou do LLM.
 servers:
   - url: http://assistente:8003
@@ -212,6 +210,7 @@ paths:
                 falhas: 5
                 fallbacks: 8
                 cacheHits: 3
+                cacheSemanticoHits: 1
                 tentarNovamenteEm: '2026-11-17T15:01:00Z'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
@@ -291,7 +290,8 @@ components:
         chamadas: {type: integer, minimum: 0}
         falhas: {type: integer, minimum: 0}
         fallbacks: {type: integer, minimum: 0}
-        cacheHits: {type: integer, minimum: 0}
+        cacheHits: {type: integer, minimum: 0, description: 'Respostas do cache, exato ou semântico.'}
+        cacheSemanticoHits: {type: integer, minimum: 0, description: 'Parte de cacheHits que veio do cache semântico (pergunta equivalente, mesmos trechos).'}
         tentarNovamenteEm:
           type: [string, 'null']
           format: date-time

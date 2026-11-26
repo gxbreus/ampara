@@ -1,0 +1,18 @@
+{
+  "cache_frio": {
+    "p50": 2209,
+    "p95": 9541,
+    "normal": 10,
+    "fallback": 0,
+    "cache": 0,
+    "erro": 0
+  },
+  "cache_quente": {
+    "p50": 23,
+    "p95": 2803,
+    "normal": 1,
+    "fallback": 0,
+    "cache": 9,
+    "erro": 0
+  }
+}
