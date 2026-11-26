@@ -1,11 +1,10 @@
-# Avaliação do RAG — protocolo, runner e primeira medição
+# Avaliação do RAG — protocolo, runner e medições
 
-Preparação de 2026-11-17, branch `feature/assistente-avaliacao`. Não há respostas
-geradas, notas humanas, tokens ou latências medidas nesta entrega. As perguntas
-estão em `services/assistente/avaliacao/perguntas.yaml`; `referencia: null`
-significa trabalho a preencher a partir da fonte, não resposta vazia válida.
-As fontes indicadas estão na branch da #66, `feature/assistente-ingestao`, ainda
-não integrada. Perguntas e rubrica precisam de revisão antes da execução.
+Protocolo e perguntas preparados em 2026-11-17; runner e primeiras medições em
+2026-11-25; referências e preços oficiais em 2026-11-26. As perguntas estão em
+`services/assistente/avaliacao/perguntas.yaml`, cada uma com a referência resumida do
+texto da fonte esperada em `services/assistente/kb/` (nunca de resposta do LLM). Os
+avaliadores conferem a referência na fonte antes de dar as notas.
 
 ## Método de comparação
 
@@ -88,13 +87,15 @@ kubectl exec -it deploy/assistente -n ampara -- python -m app.avaliar \
   --preco-entrada <US$/1M tokens> --preco-saida <US$/1M tokens> --preco-data AAAA-MM-DD
 ```
 
-Saídas brutas em `/tmp/avaliacao/<data>/` dentro do container (copie com `kubectl cp`):
+Saídas brutas em `/tmp/avaliacao/<data>/` dentro do container. Para versionar, copie
+para `services/assistente/avaliacao/resultados/<data>/` (`kubectl cp` ou, no Compose,
+`docker compose cp assistente:/tmp/avaliacao/<data> services/assistente/avaliacao/resultados/`):
 
 - `execucao.json`: data, modelo, versão da base, embeddings, limiar e temperatura;
 - `respostas.jsonl`: uma linha por pergunta e modo (`com_rag` / `sem_rag`), com trechos
   recuperados e similaridade, resposta, tempos de recuperação e geração e tokens reais
   devolvidos pela API (ausentes ficam ausentes, nunca zero);
-- `planilha-cega.csv`: respostas A/B embaralhadas por pergunta, com as colunas da rubrica,
+- `planilha-cega.csv`: respostas A/B embaralhadas por pergunta, com a referência e as colunas da rubrica,
   para os dois avaliadores humanos preencherem de forma independente;
 - `gabarito-ab.json`: qual resposta é com e sem RAG, para abrir só depois das notas;
 - `latencia.json` (com `--latencia`): p50/p95 por posto mais próximo e contagem de normal,
@@ -189,17 +190,42 @@ sem novas tentativas. Para a demo e a gravação, a alternativa sem limite apert
 faturamento do projeto no Google AI Studio (o flash-lite custa frações de centavo por
 pergunta).
 
+## Preços oficiais (consulta em 2026-11-26)
+
+Provedor padrão do serviço: Groq (`LLM_PROVIDER=groq`). Valores da tabela "Production
+Models" de <https://console.groq.com/docs/models> e da página do modelo
+<https://console.groq.com/docs/model/openai/gpt-oss-120b>, consultadas em 2026-11-26
+(as páginas não mostram data de atualização).
+
+| Modelo | Entrada (US$/1M tokens) | Entrada em cache (US$/1M) | Saída (US$/1M tokens) |
+| --- | --- | --- | --- |
+| `openai/gpt-oss-120b` (principal) | 0,15 | 0,075 | 0,60 |
+| `llama-3.1-8b-instant` (reserva) | sem preço publicado ("Contact Sales") | — | — |
+
+Os embeddings rodam em CPU no próprio container (fastembed) e não têm custo de API.
+O custo por pergunta e a projeção para 1 mil, 10 mil e 100 mil perguntas por mês saem
+dos tokens **medidos** na execução com a chave da Groq:
+
+```bash
+python -m app.avaliar --latencia 50 --pausa 2 \
+  --preco-entrada 0.15 --preco-saida 0.60 --preco-data 2026-11-26 --taxa-cache 0.3
+```
+
+Os tokens da execução de 25/11 vieram do `gemini-2.5-flash-lite` e não servem para
+o custo com a tabela da Groq: misturar os dois daria um número que não foi medido.
+
 ## Registro pendente e critérios de conclusão
 
 | Item | Estado verificado em 2026-11-25 |
 | --- | --- |
-| Dez perguntas e categorias | Preparadas; gabaritos aguardam conferência nas fontes |
+| Dez perguntas e categorias | Preparadas, com referência resumida da fonte (26/11); conferência pelos avaliadores |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
 | Execução com e sem RAG | Executada em 25/11 com `gemini-2.5-flash-lite`: 7 de 10 com RAG e 3 sem RAG (o resto parou na cota diária); repetir completa com cota |
 | Cache, recuperação e falhas observáveis | Implementados (#69): `GET /v1/estado` mostra circuito, falhas, fallbacks e cache hits |
 | Dois avaliadores e médias | Não realizadas |
 | p50/p95 e tokens | Tokens medidos; latência medida mas inflada pelo limite de requisições do plano gratuito |
-| Resultados brutos e conclusão qualitativa | Não disponíveis |
+| Preços oficiais | Consultados e datados em 26/11 (Groq); custo calculado na próxima execução |
+| Resultados brutos e conclusão qualitativa | Pasta `avaliacao/resultados/` criada; preenchida na execução com a chave |
 
 Só escrever onde o RAG ajudou, falhou e precisa melhorar após analisar os
 resultados reais. Não preencher tabelas com números ilustrativos. Esta
