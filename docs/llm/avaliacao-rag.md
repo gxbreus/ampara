@@ -1,11 +1,11 @@
-# Avaliação do RAG — protocolo, runner e primeira medição
+# Avaliação do RAG — protocolo, runner e medições
 
-Preparação de 2026-11-17, branch `feature/assistente-avaliacao`. Não há respostas
-geradas, notas humanas, tokens ou latências medidas nesta entrega. As perguntas
-estão em `services/assistente/avaliacao/perguntas.yaml`; `referencia: null`
-significa trabalho a preencher a partir da fonte, não resposta vazia válida.
-As fontes indicadas estão na branch da #66, `feature/assistente-ingestao`, ainda
-não integrada. Perguntas e rubrica precisam de revisão antes da execução.
+Protocolo e perguntas preparados em 2026-11-17; runner e primeiras medições em
+2026-11-25; referências, preços oficiais, execução completa e avaliação humana cega em
+2026-11-26. As perguntas estão em
+`services/assistente/avaliacao/perguntas.yaml`, cada uma com a referência resumida do
+texto da fonte esperada em `services/assistente/kb/` (nunca de resposta do LLM). Os
+avaliadores conferem a referência na fonte antes de dar as notas.
 
 ## Método de comparação
 
@@ -45,7 +45,8 @@ Por pergunta e modo, calcular média de correção e fundamentação entre os do
 avaliadores. Para alucinação, preservar ambos os votos e registrar proporção
 de votos positivos e concordância; não converter discordância em um "não".
 Divulgar identificação dos avaliadores, data e versão das saídas avaliadas
-apenas depois da realização. Nenhuma avaliação humana foi feita aqui.
+apenas depois da realização. Realizada em 26/11 por Gabriel Soares e Gabriel Cantanhede,
+sobre as saídas de `resultados/20261126T131551Z/` (seção "Avaliação humana cega").
 
 ## Latência, tokens e custo
 
@@ -88,13 +89,15 @@ kubectl exec -it deploy/assistente -n ampara -- python -m app.avaliar \
   --preco-entrada <US$/1M tokens> --preco-saida <US$/1M tokens> --preco-data AAAA-MM-DD
 ```
 
-Saídas brutas em `/tmp/avaliacao/<data>/` dentro do container (copie com `kubectl cp`):
+Saídas brutas em `/tmp/avaliacao/<data>/` dentro do container. Para versionar, copie
+para `services/assistente/avaliacao/resultados/<data>/` (`kubectl cp` ou, no Compose,
+`docker compose cp assistente:/tmp/avaliacao/<data> services/assistente/avaliacao/resultados/`):
 
 - `execucao.json`: data, modelo, versão da base, embeddings, limiar e temperatura;
 - `respostas.jsonl`: uma linha por pergunta e modo (`com_rag` / `sem_rag`), com trechos
   recuperados e similaridade, resposta, tempos de recuperação e geração e tokens reais
   devolvidos pela API (ausentes ficam ausentes, nunca zero);
-- `planilha-cega.csv`: respostas A/B embaralhadas por pergunta, com as colunas da rubrica,
+- `planilha-cega.csv`: respostas A/B embaralhadas por pergunta, com a referência e as colunas da rubrica,
   para os dois avaliadores humanos preencherem de forma independente;
 - `gabarito-ab.json`: qual resposta é com e sem RAG, para abrir só depois das notas;
 - `latencia.json` (com `--latencia`): p50/p95 por posto mais próximo e contagem de normal,
@@ -189,18 +192,195 @@ sem novas tentativas. Para a demo e a gravação, a alternativa sem limite apert
 faturamento do projeto no Google AI Studio (o flash-lite custa frações de centavo por
 pergunta).
 
+## Execução completa (26/11/2026, `gemini-2.5-flash-lite`)
+
+Execução real do runner (`--latencia 10 --pausa 8`), dentro da imagem do Assistente no
+Compose, com o código desta branch; base `ae06f1c860d3` (15 trechos), 4 trechos por
+resposta, limiar 0,30, temperatura 0,2. Máquina: notebook do grupo, Linux, CPU, sem
+GPU, rede doméstica. Saídas brutas em
+`services/assistente/avaliacao/resultados/20261126T131551Z/`.
+
+**17 de 20 gerações concluídas.** Três falharam no provedor e estão registradas como erro,
+não descartadas: P02 e P04 sem RAG (HTTP 503 do Gemini) e P08 com RAG (tempo esgotado).
+
+| Pergunta | Com RAG: checagem de citação | Fontes citadas | Geração com RAG (ms) | Tokens com RAG | Geração sem RAG (ms) | Tokens sem RAG |
+| --- | --- | --- | --- | --- | --- | --- |
+| P01 vacinação de filhote | ok | 06, 13, 03 | 937 | 592/123 | 921 | 86/114 |
+| P02 janelas e gatos | ok | 10, 04, 11 | 883 | 621/94 | erro 503 | — |
+| P03 porte e rotina | sem cobertura | — | 1.363 | 608/85 | 872 | 83/89 |
+| P04 apresentar a outros animais | ok | 05, 04 | 906 | 581/81 | erro 503 | — |
+| P05 cão abandonado | ok | 04 | 1.099 | 603/84 | 821 | 87/79 |
+| P06 Lei 14.064 | ok | 02, 01 | 6.773 | 669/126 | 5.160 | 98/114 |
+| P07 aceite ≠ adoção concluída | ok | 14 | 1.345 | 614/66 | 8.015 | 87/86 |
+| P08 viagens | tempo esgotado | — | — | — | 1.036 | 79/88 |
+| P09 capital da França | recusa sem LLM (similaridade 0,10) | — | 0 | — | 644 | 73/27 |
+| P10 horário das clínicas | sem cobertura | — | 604 | 608/47 | 788 | 81/60 |
+
+Recuperação: fonte esperada em 1º lugar em 6 de 8 perguntas e entre as 3 primeiras em
+7 de 8 (a falha continua sendo P03), igual à medição de 25/11.
+
+**Tokens medidos (média das chamadas concluídas):** com RAG, 612 de entrada e 88 de saída;
+sem RAG, 84 de entrada e 82 de saída. O contexto multiplica a entrada por ~7 e não muda
+a saída.
+
+### Latência
+
+| Etapa | p50 | p95 | Observação |
+| --- | --- | --- | --- |
+| Recuperação (embedding + Qdrant) | 40 ms | 184 ms | 10 perguntas |
+| Geração com RAG | 937 ms | 6.773 ms | 8 chamadas; o p95 é P06, com novas tentativas |
+| Geração sem RAG | 872 ms | 8.015 ms | 8 chamadas; o p95 é P07, com novas tentativas |
+| Total, cache frio (10 chamadas inéditas) | 2.209 ms | 9.541 ms | 10 normais, 0 fallback, 0 erro |
+| Total, cache quente (10 repetições) | 23 ms | 2.803 ms | 9 do cache; o p95 é a 1ª chamada, que ainda não estava no cache |
+
+A geração responde por quase todo o tempo: a recuperação fica abaixo de 200 ms. A cauda
+(p95 de 7 a 9 s) vem dos 503 do plano gratuito: a resiliência (#69) tenta de novo com
+backoff e o tempo das tentativas entra na conta. Uma chamada sem erro leva ~0,9 s.
+Percentil por posto mais próximo, chamadas sequenciais, sem warm-up excluído.
+
+### Custo
+
+No plano gratuito do Gemini, que é o usado pelo grupo, o custo é **US$ 0**; o limite é de
+20 requisições por dia por modelo, contornado com a lista de reservas
+(`LLM_FALLBACK_MODEL`). Para a projeção em escala, usamos o preço do plano pago.
+
+Preços oficiais de <https://aistudio.google.com/docs/pricing> (antes
+`ai.google.dev/gemini-api/docs/pricing`), consultados em 2026-11-26; a página não mostra
+data de atualização:
+
+| Modelo | Entrada (US$/1M tokens) | Saída (US$/1M tokens) | Cache de contexto (US$/1M) |
+| --- | --- | --- | --- |
+| `gemini-2.5-flash-lite` (principal) | 0,10 | 0,40 | 0,01 + 1,00 por 1M tokens/hora |
+| `gemini-3.5-flash-lite` (1ª reserva) | 0,30 | 2,50 | 0,03 + 1,00 por 1M tokens/hora |
+
+Os embeddings rodam em CPU no próprio container (fastembed) e não têm custo de API.
+
+Custo por pergunta = tokens de entrada × 0,10/1M + tokens de saída × 0,40/1M, com os
+tokens medidos acima. Custo mensal = custo por pergunta × volume × (1 − taxa de acerto do
+cache).
+
+| Modo | Por pergunta | 1 mil/mês | 10 mil/mês | 100 mil/mês |
+| --- | --- | --- | --- | --- |
+| Com RAG, sem cache | US$ 0,000097 | US$ 0,10 | US$ 0,96 | US$ 9,64 |
+| Com RAG, 30% de acerto do cache | — | US$ 0,07 | US$ 0,68 | US$ 6,75 |
+| Sem RAG, sem cache | US$ 0,000041 | US$ 0,04 | US$ 0,41 | US$ 4,13 |
+
+A taxa de 30% é uma hipótese, não uma medição: o cache exato só acerta perguntas
+idênticas. Se o modelo de reserva assumir (cota do principal esgotada), o custo por
+pergunta com RAG sobe para ~US$ 0,0004 (3,5 flash-lite). Também se consultou a Groq
+(<https://console.groq.com/docs/models>, 26/11): `openai/gpt-oss-120b` a US$ 0,15 de
+entrada e US$ 0,60 de saída por 1M; sem tokens medidos nela, não há custo calculado.
+
+## Avaliação humana cega (26/11/2026)
+
+Dois avaliadores, **Gabriel Soares** e **Gabriel Cantanhede**, preencheram a planilha cega
+de forma independente, sem o gabarito A/B, seguindo `avaliacao/COMO-AVALIAR.md`. As notas
+originais estão em `resultados/20261126T131551Z/notas-gabriel-soares.csv` e
+`notas-gabriel-cantanhede.csv`; o modo de cada resposta vem de `gabarito-ab.json`. As
+três gerações que falharam no provedor (P02 e P04 sem RAG, P08 com RAG) ficaram sem nota,
+como manda o protocolo: 9 respostas com RAG e 8 sem RAG foram avaliadas.
+
+| ID | Pergunta | Sem RAG: correção | Sem RAG: fundamentação | Sem RAG: alucinou? | Com RAG: correção | Com RAG: fundamentação | Com RAG: alucinou? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P01 | vacinação de filhote | 1,5 | 1,0 | 0/2 | 2,0 | 1,0 | 0/2 |
+| P02 | janelas e gatos | erro do provedor | — | — | 2,0 | 2,0 | 0/2 |
+| P03 | porte e rotina | 1,5 | 1,0 | 0/2 | **0,0** | **0,0** | **2/2** |
+| P04 | apresentar a outros animais | erro do provedor | — | — | 2,0 | 1,0 | 0/2 |
+| P05 | cão abandonado | 1,5 | 1,0 | 0/2 | 2,0 | 2,0 | 0/2 |
+| P06 | Lei 14.064 | 1,0 | 1,0 | 0/2 | 2,0 | 1,0 | 0/2 |
+| P07 | aceite ≠ adoção concluída | 1,0 | 0,5 | **2/2** | 2,0 | 1,5 | 0/2 |
+| P08 | viagens | 1,0 | 1,0 | 0/2 | erro do provedor | — | — |
+| P09 | capital da França (fora do domínio) | **0,0** | **0,0** | 0/2 | 2,0 | 2,0 | 0/2 |
+| P10 | horário das clínicas (sem cobertura) | 2,0 | 2,0 | 0/2 | 2,0 | 2,0 | 0/2 |
+
+Notas de 0 a 2, média dos dois avaliadores; alucinação em votos "sim" sobre 2.
+
+| Modo | Respostas | Correção | Fundamentação | Votos de alucinação |
+| --- | --- | --- | --- | --- |
+| **Com RAG** | 9 | **1,78** | **1,39** | 2 de 18 (P03) |
+| **Sem RAG** | 8 | 1,19 | 0,94 | 2 de 16 (P07) |
+| Com RAG, só as 7 perguntas com os dois modos | 7 | 1,71 | 1,36 | 2 de 14 |
+| Sem RAG, só as 7 perguntas com os dois modos | 7 | 1,21 | 0,93 | 2 de 14 |
+
+| Avaliador | Com RAG (correção / fundamentação) | Sem RAG (correção / fundamentação) |
+| --- | --- | --- |
+| Gabriel Soares | 1,78 / 1,44 | 1,38 / 1,00 |
+| Gabriel Cantanhede | 1,78 / 1,33 | 1,00 / 0,88 |
+
+**Concordância entre os avaliadores (17 respostas):** alucinação igual em 17 de 17; nota de
+correção idêntica em 14 e de fundamentação em 15; nenhuma divergência maior que 1 ponto.
+As três divergências de correção são todas sem RAG (P01, P03, P05: 2 contra 1), com o
+Gabriel Cantanhede mais rigoroso com respostas de conhecimento geral que omitem pontos da
+referência.
+
+## Conclusão
+
+Análise das respostas de 26/11, conferidas nas fontes da base e confirmada pela avaliação
+humana cega acima. **Com RAG, a correção média subiu de 1,19 para 1,78 e a fundamentação
+de 0,94 para 1,39**, com o mesmo número de alucinações (uma resposta em cada modo), mas de
+naturezas diferentes: sem RAG o modelo inventou regras da Ampara; com RAG, a falha veio da
+recuperação.
+
+**Onde o RAG ajudou**
+
+- **Regras da própria Ampara (P07).** Sem RAG, o modelo inventou etapas que a Ampara não
+  tem ("visita ao lar, entrevista com a equipe e assinatura do termo"). Com RAG, descreveu o
+  fluxo real: processo assíncrono, avaliação pelo responsável, liberação da reserva. É o
+  caso mais claro: sem a base, o modelo não tem como saber as regras do sistema e preenche
+  com o que é comum em ONGs.
+- **Fora do domínio (P09).** Com RAG, a pergunta foi recusada antes do LLM (similaridade
+  0,10), sem custo. Sem RAG, o modelo respondeu "Paris", fora do papel do assistente.
+- **Precisão e rastreabilidade (P05, P06).** Com RAG, a resposta da Lei 14.064 cita o
+  parágrafo 1º-A do artigo 32 e a pena exata, conferíveis em `02-lei-14064.md`; sem RAG o
+  conteúdo central também estava certo, mas genérico ("outras sanções") e sem fonte.
+- **Não prescrever (P01).** Com RAG, a resposta deixou o esquema vacinal ao veterinário,
+  como a fonte; sem RAG, deu um calendário ("entre 6 e 8 semanas") que a base não traz.
+
+**Onde não ajudou**
+
+- **Recuperação errada vira afirmação falsa (P03).** A busca não trouxe
+  `03-planejamento.md`, e a resposta com RAG declarou que as fontes não cobrem o assunto;
+  sem RAG, a resposta geral estava correta (1,5). A leitura inicial era de um erro "seguro",
+  por omissão, mas **os dois avaliadores deram 0 e marcaram alucinação**: afirmar que a
+  base não cobre algo que ela cobre é uma informação falsa ao usuário. É a pior nota com
+  RAG e o principal ponto a corrigir.
+- **Sem cobertura (P10).** As duas versões se comportaram bem: com RAG pelo marcador
+  `SEM_COBERTURA`, sem RAG por instrução do prompt. Aqui o RAG não fez diferença.
+- **Extrapolação leve (P04).** A resposta com RAG puxou "aproximação com segurança, pois
+  ele pode estar ferido" do texto de resgate para a apresentação a outros animais. A
+  citação existe, mas o contexto é outro; a checagem de citação não pega esse tipo de erro.
+- **Custo e cauda de latência.** O RAG multiplica os tokens de entrada por ~7 (US$ 0,000097
+  contra US$ 0,000041 por pergunta), ainda irrelevante em valor absoluto. A latência é
+  dominada pelo provedor, não pela recuperação.
+
+**O que melhorar**
+
+1. **Recuperação de P03 (prioridade):** reescrever o trecho de planejamento com o
+   vocabulário de quem pergunta ("rotina", "casa", "combina") ou testar um modelo de
+   embeddings maior. Rever também o texto do marcador `SEM_COBERTURA` para "não encontrei
+   nas fontes recuperadas" em vez de afirmar que a base não cobre.
+2. **Repetir as três chamadas que falharam** (P02 e P04 sem RAG, P08 com RAG) num dia com
+   cota e sem 503, para fechar as 20 comparações.
+3. **Cache semântico:** o cache exato só acerta perguntas idênticas; reaproveitar a
+   resposta de perguntas equivalentes aumenta a taxa de acerto e reduz custo e latência
+   (implementado no PR #216, com as travas medidas em `docs/llm/cache-semantico.md`).
+4. **Checagem além da citação:** hoje ela só garante que [n] existe; P04 mostra que a
+   citação pode estar fora de contexto.
+
 ## Registro pendente e critérios de conclusão
 
-| Item | Estado verificado em 2026-11-25 |
+| Item | Estado verificado em 2026-11-26 |
 | --- | --- |
-| Dez perguntas e categorias | Preparadas; gabaritos aguardam conferência nas fontes |
+| Dez perguntas e categorias | Prontas, com referência resumida da fonte, conferida pelos dois avaliadores |
 | Base e duas ingestões reais | Ingestão implementada (fastembed + Qdrant); 15 trechos indexados no cluster em 25/11 |
-| Execução com e sem RAG | Executada em 25/11 com `gemini-2.5-flash-lite`: 7 de 10 com RAG e 3 sem RAG (o resto parou na cota diária); repetir completa com cota |
+| Execução com e sem RAG | Completa em 26/11 com `gemini-2.5-flash-lite`: 17 de 20 gerações; 3 erros do provedor registrados |
 | Cache, recuperação e falhas observáveis | Implementados (#69): `GET /v1/estado` mostra circuito, falhas, fallbacks e cache hits |
-| Dois avaliadores e médias | Não realizadas |
-| p50/p95 e tokens | Tokens medidos; latência medida mas inflada pelo limite de requisições do plano gratuito |
-| Resultados brutos e conclusão qualitativa | Não disponíveis |
+| Dois avaliadores e médias | Feito em 26/11 (Gabriel Soares e Gabriel Cantanhede); médias, votos e concordância acima |
+| p50/p95 e tokens | Medidos em 26/11 por etapa, com cache frio e quente |
+| Preços oficiais e custo | Gemini consultado em 26/11; custo e projeção calculados com tokens medidos |
+| Resultados brutos e conclusão qualitativa | `resultados/20261126T131551Z/` e seção "Conclusão" |
 
-Só escrever onde o RAG ajudou, falhou e precisa melhorar após analisar os
-resultados reais. Não preencher tabelas com números ilustrativos. Esta
-contribuição usa `Refs #70`; a issue permanece aberta.
+Todos os critérios de aceite da #70 estão atendidos. Limitação registrada: três das 20
+gerações falharam no provedor (503 e tempo esgotado) e ficaram sem nota; repetir essas
+chamadas fecharia as 10 comparações pareadas. Nenhum número deste doc é ilustrativo:
+todos saem dos arquivos brutos em `resultados/20261126T131551Z/`.

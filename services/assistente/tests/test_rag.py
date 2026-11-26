@@ -26,7 +26,10 @@ class IndiceFake:
         trechos = conhecimento.carregar(KB_PADRAO)
         self.resultados = [Resultado(t, s) for t, s in zip(trechos, scores, strict=False)]
 
-    async def buscar(self, pergunta, k):
+    async def vetor(self, pergunta):
+        return [1.0, 0.0, 0.0]
+
+    async def buscar(self, pergunta, k, vetor=None):
         return self.resultados[:k]
 
 
@@ -100,6 +103,14 @@ async def test_segunda_vez_vem_do_cache_sem_chamar_o_llm():
     servico = rag(llms=[llm], redis=redis)
     await servico.responder("Como apresentar o gato?")
     r = await servico.responder("  como APRESENTAR o gato? ")
+    assert r["cache"] is True and llm.chamadas == 1
+
+
+async def test_cache_exato_ignora_pontuacao():
+    redis, llm = RedisFake(), LlmFake(["ok"])
+    servico = rag(llms=[llm], redis=redis)
+    await servico.responder("Quais vacinas o filhote precisa?")
+    r = await servico.responder("quais vacinas, o filhote precisa")
     assert r["cache"] is True and llm.chamadas == 1
 
 

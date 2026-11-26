@@ -83,7 +83,7 @@ O `k8s-prep.sh` grava a chave **privada** só em `k8s/identidade/jwt.key`, porqu
 | `bff-web/` | Deployment (2 réplicas), Service 3010 e ConfigMaps | a chave pública do JWT vem do `jwt.pub` gerado pelo `k8s-prep.sh` |
 | `identidade/` | Deployment (2 réplicas), Service 3001, ConfigMap e StatefulSet `postgres-identidade` (PVC 1 Gi) | só a chave privada chega à Identidade; o serviço cria e assina JWTs RS256 |
 | `kong/` | plugins globais, rate limits e consumidor JWT | o controlador é instalado pelo chart `kong/ingress`; o Secret da credencial recebe apenas a chave pública |
-| `notificacoes/` | Deployment (2 réplicas), Service 8002 e StatefulSet `redis-notificacoes` (AOF, PVC 1 Gi) | o pod do serviço recebe só `NOTIFICACOES_REDIS_URL` e `NOTIFICACOES_AMQP_URL`; a senha do Redis fica com o banco. Sem ConfigMap por enquanto: as duas variáveis levam senha |
+| `notificacoes/` | Deployment (2 réplicas), Service 8002 e StatefulSet `redis-notificacoes` (AOF, PVC 1 Gi) | Secret com `NOTIFICACOES_REDIS_URL` e `NOTIFICACOES_AMQP_URL` e ConfigMap com a chave pública `JWT_PUBLIC_KEY` gerada por `scripts/k8s-prep.sh` |
 | `assistente/` | Deployment (2 réplicas), Service 8003, ConfigMap, StatefulSet `qdrant-assistente` (PVC 1 Gi) e Deployment `redis-assistente` | o Redis é só cache do LLM, por isso é Deployment sem volume. `LLM_API_KEY` pode ficar vazia (modo degradado, #69). Modelo e provedor ficam no ConfigMap |
 
 O BFF Web usa `/web/v1/health` também como readiness. O `/web/v1/ready` dele checa os serviços chamados: como readiness, um serviço fora do ar tiraria o BFF inteiro do balanceamento, quando o contrato prevê resposta parcial com `avisos[]` (#29).

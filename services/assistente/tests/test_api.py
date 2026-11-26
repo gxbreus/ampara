@@ -109,6 +109,7 @@ def test_estado_do_circuito():
         "falhas",
         "fallbacks",
         "cacheHits",
+        "cacheSemanticoHits",
         "tentarNovamenteEm",
     } <= corpo.keys()
 

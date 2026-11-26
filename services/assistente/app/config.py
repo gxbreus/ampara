@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     limiar_rotina: float = 0.45
     timeout_llm_s: float = 12.0
     cache_ttl_s: int = 24 * 3600
+    # cache semântico (docs/llm/cache-semantico.md): similaridade mínima para reaproveitar
+    # a resposta de uma pergunta equivalente; 0 desliga
+    cache_semantico_limiar: float = 0.97
 
     @property
     def modelo(self) -> str:

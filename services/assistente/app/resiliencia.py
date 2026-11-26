@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import random
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ class Metricas:
     falhas: int = 0
     fallbacks: int = 0
     cache_hits: int = 0
+    cache_semantico_hits: int = 0
     citacoes_invalidas: int = 0
 
 
@@ -164,6 +166,7 @@ class Resiliencia:
             "falhas": self.metricas.falhas,
             "fallbacks": self.metricas.fallbacks,
             "cacheHits": self.metricas.cache_hits,
+            "cacheSemanticoHits": self.metricas.cache_semantico_hits,
             "citacoesInvalidas": self.metricas.citacoes_invalidas,
             "tentarNovamenteEm": self.circuito.tentar_novamente_em(),
         }
@@ -177,7 +180,8 @@ class Cache:
 
     @staticmethod
     def chave(tipo: str, versao_base: str, modelo: str, texto: str) -> str:
-        normalizado = " ".join(texto.lower().split())
+        # sem caixa, pontuação nem espaços extras: "Quais vacinas?" e "quais vacinas" batem
+        normalizado = " ".join(re.sub(r"[^\w\s]", " ", texto.lower()).split())
         resumo = hashlib.sha256(normalizado.encode()).hexdigest()[:32]
         return f"assistente:{tipo}:{versao_base}:{modelo}:{resumo}"
 
