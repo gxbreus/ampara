@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 
 from app import conhecimento
 from app.api import assistente, health
+from app.cache_semantico import CacheSemantico
 from app.config import get_settings
 from app.indice import Embeddings, Indice
 from app.observabilidade import configurar_logging, instalar_rastreabilidade
@@ -103,6 +104,14 @@ async def lifespan(app: FastAPI):
             app.state.resiliencias,
             Cache(redis, settings.cache_ttl_s),
             settings,
+            CacheSemantico(
+                qdrant,
+                embeddings.dimensao,
+                settings.cache_semantico_limiar,
+                settings.cache_ttl_s,
+            )
+            if settings.cache_semantico_limiar > 0
+            else None,
         )
         app.state.indice_pronto = False
         tarefa = asyncio.create_task(indexar(app, trechos))
