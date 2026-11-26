@@ -5,13 +5,12 @@ Regras:
   um módulo nem em create_app(): importar o app não pode exigir variável de ambiente.
 - URL com senha e chave são SecretStr e não têm valor padrão. Assim não aparecem em
   log nem em repr, e o serviço não sobe sem elas.
-- Variável compartilhada, sem o prefixo, usa validation_alias. Exemplo (#60):
-      jwt_public_key: str = Field(validation_alias="JWT_PUBLIC_KEY")
+- A chave pública de Identidade é compartilhada com os outros serviços.
 """
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +19,7 @@ class Settings(BaseSettings):
 
     redis_url: SecretStr
     amqp_url: SecretStr
+    jwt_public_key: str = Field(min_length=1, validation_alias="JWT_PUBLIC_KEY")
 
 
 @lru_cache

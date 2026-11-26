@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
@@ -41,10 +41,11 @@ def test_headers_e_log_sem_texto_ou_credenciais(cliente, caplog):
 async def test_lifespan_fecha_recursos_apos_falha_parcial(cliente, monkeypatch):
     from app import main
 
-    redis = SimpleNamespace(aclose=AsyncMock())
+    redis = SimpleNamespace(aclose=AsyncMock(), register_script=MagicMock())
     monkeypatch.setattr(main, "configurar_logging", lambda: None)
     monkeypatch.setenv("NOTIFICACOES_REDIS_URL", "redis://localhost/0")
     monkeypatch.setenv("NOTIFICACOES_AMQP_URL", "amqp://localhost/")
+    monkeypatch.setenv("JWT_PUBLIC_KEY", "chave-de-teste")
     main.get_settings.cache_clear()
     monkeypatch.setattr(main.Redis, "from_url", lambda *_a, **_kw: redis)
     monkeypatch.setattr(main.aio_pika, "connect_robust", AsyncMock(side_effect=OSError()))
@@ -60,11 +61,16 @@ async def test_lifespan_fecha_recursos_apos_falha_parcial(cliente, monkeypatch):
 async def test_lifespan_abre_no_inicio_e_fecha_no_fim(cliente, monkeypatch):
     from app import main
 
-    redis = SimpleNamespace(aclose=AsyncMock())
-    rabbit = SimpleNamespace(close=AsyncMock())
+    redis = SimpleNamespace(aclose=AsyncMock(), register_script=MagicMock())
+    canal = MagicMock()
+    rabbit = SimpleNamespace(close=AsyncMock(), channel=lambda: canal)
+    iniciar = AsyncMock()
+    monkeypatch.setattr(main.consumidor, "iniciar", iniciar)
+    monkeypatch.setattr(main.consumidor, "alertar_dlq", AsyncMock())
     monkeypatch.setattr(main, "configurar_logging", lambda: None)
     monkeypatch.setenv("NOTIFICACOES_REDIS_URL", "redis://localhost/0")
     monkeypatch.setenv("NOTIFICACOES_AMQP_URL", "amqp://localhost/")
+    monkeypatch.setenv("JWT_PUBLIC_KEY", "chave-de-teste")
     main.get_settings.cache_clear()
     monkeypatch.setattr(main.Redis, "from_url", lambda *_a, **_kw: redis)
     conectar = AsyncMock(return_value=rabbit)
@@ -74,6 +80,8 @@ async def test_lifespan_abre_no_inicio_e_fecha_no_fim(cliente, monkeypatch):
             assert cliente.app.state.redis is redis
             assert cliente.app.state.rabbit is rabbit
             rabbit.close.assert_not_awaited()
+            iniciar.assert_awaited_once_with(canal.__aenter__.return_value, cliente.app.state.caixa)
+        canal.__aexit__.assert_awaited_once()
         rabbit.close.assert_awaited_once()
         redis.aclose.assert_awaited_once()
     finally:

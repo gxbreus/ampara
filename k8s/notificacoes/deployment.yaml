@@ -28,16 +28,15 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8002 }
-          # só as duas chaves do serviço; REDIS_PASSWORD fica com o banco
           env:
             - name: NOTIFICACOES_REDIS_URL
               valueFrom: { secretKeyRef: { name: notificacoes-secret, key: NOTIFICACOES_REDIS_URL } }
             - name: NOTIFICACOES_AMQP_URL
               valueFrom: { secretKeyRef: { name: notificacoes-secret, key: NOTIFICACOES_AMQP_URL } }
-          # TODO(#41): trocar a readiness para /ready (PING no Redis e conexão com o RabbitMQ)
-          # quando ele existir. A liveness continua em /health.
+            - name: JWT_PUBLIC_KEY
+              valueFrom: { configMapKeyRef: { name: notificacoes-jwt, key: JWT_PUBLIC_KEY } }
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /ready, port: http }
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /health, port: http }

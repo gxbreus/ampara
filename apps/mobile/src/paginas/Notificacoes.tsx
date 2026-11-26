@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativo } from "@c/api";
+import { useSessao } from "@c/sessao";
 import { Carregando, Erro, Origem, Vazio } from "@c/ui";
 import { marcarLida, marcarTodas, notificacoes, rotas } from "../api/servicos";
+import type { MinhaConta } from "../api/tipos";
 import { Topo } from "../componentes/Casca";
 
 export function Notificacoes() {
   const consultas = useQueryClient();
-  const q = useQuery({ queryKey: ["notificacoes"], queryFn: notificacoes, refetchInterval: 4_000 });
-  const atualizar = () => consultas.invalidateQueries({ queryKey: ["notificacoes"] });
+  const { conta } = useSessao<MinhaConta>();
+  const queryKey = ["notificacoes", conta?.id];
+  const q = useQuery({ queryKey, queryFn: notificacoes, enabled: !!conta, refetchInterval: 4_000 });
+  const atualizar = () => consultas.invalidateQueries({ queryKey });
   const ler = useMutation({ mutationFn: marcarLida, onSuccess: atualizar });
   const lerTodas = useMutation({ mutationFn: marcarTodas, onSuccess: atualizar });
   const temNova = q.data?.itens.some((n) => !n.lida);
